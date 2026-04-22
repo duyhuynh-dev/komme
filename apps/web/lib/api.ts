@@ -1,21 +1,35 @@
 import type {
   ArchiveResponse,
+  AuthViewer,
   FeedbackReason,
   InterestTopic,
   LocationAnchorPayload,
   RecommendationsMapResponse,
   UserConstraint
 } from "@/lib/types";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  headers.set("Content-Type", "application/json");
+
+  if (typeof window !== "undefined") {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.set("Authorization", `Bearer ${session.access_token}`);
+      }
+    }
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    },
+    headers,
     cache: "no-store"
   });
 
@@ -74,3 +88,12 @@ export function saveConstraints(payload: UserConstraint) {
   });
 }
 
+export function getAuthViewer() {
+  return request<AuthViewer>("/v1/auth/me");
+}
+
+export function startRedditConnection() {
+  return request<{ authorizeUrl: string }>("/v1/reddit/connect/start", {
+    method: "POST"
+  });
+}

@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./pulse.db"
     default_user_email: str = "beta@pulse.local"
     api_base_url: str = "http://localhost:8000"
+    web_app_url: str = "http://localhost:3000"
+
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    oauth_state_secret: str = ""
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
@@ -32,4 +37,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

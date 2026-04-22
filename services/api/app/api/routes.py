@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -11,12 +10,19 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
+from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse
 from app.schemas.common import OkResponse
 from app.schemas.maps import MapTokenResponse
 from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
 from app.schemas.recommendations import ArchiveResponse, FeedbackPayload, RecommendationsMapResponse
 from app.services.apple_maps import build_mapkit_token
-from app.services.auth import get_or_create_user
+from app.services.auth import (
+    get_or_create_user,
+    build_oauth_state,
+    parse_oauth_state,
+    require_authenticated_user,
+    resolve_user,
+)
 from app.services.profile import list_interests, update_interests
 from app.services.recommendations import get_archive, get_map_recommendations
 from app.services.reddit_oauth import build_reddit_authorize_url
@@ -24,35 +30,87 @@ from app.services.reddit_oauth import build_reddit_authorize_url
 router = APIRouter(prefix="/v1")
 
 
-async def current_user(
+async def current_identity(
     session: AsyncSession = Depends(get_db),
+    authorization: Annotated[str | None, Header()] = None,
     x_pulse_user_email: Annotated[str | None, Header()] = None,
 ):
-    return await get_or_create_user(session, x_pulse_user_email)
+    return await resolve_user(session, authorization, x_pulse_user_email)
 
 
-@router.get("/reddit/connect/start")
-async def reddit_connect_start() -> RedirectResponse:
-    state = str(uuid4())
+async def authenticated_identity(
+    session: AsyncSession = Depends(get_db),
+    authorization: Annotated[str | None, Header()] = None,
+    x_pulse_user_email: Annotated[str | None, Header()] = None,
+):
+    return await require_authenticated_user(session, authorization, x_pulse_user_email)
+
+
+async def current_user(identity=Depends(current_identity)):
+    return identity.user
+
+
+@router.get("/auth/me", response_model=AuthViewerResponse)
+async def auth_me(
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(current_identity),
+) -> AuthViewerResponse:
+    reddit_connection = await session.scalar(
+        select(OAuthConnection).where(
+            OAuthConnection.user_id == identity.user.id,
+            OAuthConnection.provider == "reddit",
+        )
+    )
+    return AuthViewerResponse(
+        email=identity.user.email,
+        displayName=identity.user.display_name,
+        isAuthenticated=identity.is_authenticated,
+        isDemo=identity.is_demo,
+        redditConnected=reddit_connection is not None,
+    )
+
+
+@router.post("/reddit/connect/start", response_model=RedditConnectStartResponse)
+async def reddit_connect_start(
+    identity=Depends(authenticated_identity),
+) -> RedditConnectStartResponse:
+    settings = get_settings()
+    if not settings.oauth_state_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth state secret is not configured.",
+        )
+
+    state = build_oauth_state(identity.user.email, settings.oauth_state_secret)
     try:
         authorize_url = build_reddit_authorize_url(state)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
-    return RedirectResponse(authorize_url, status_code=status.HTTP_302_FOUND)
+    return RedditConnectStartResponse(authorizeUrl=authorize_url)
 
 
 @router.get("/reddit/connect/callback")
 async def reddit_connect_callback(
     code: str | None = None,
     error: str | None = None,
+    state: str | None = None,
     session: AsyncSession = Depends(get_db),
-    user=Depends(current_user),
 ):
     settings = get_settings()
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     if not code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Reddit authorization code.")
+    if not state:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing OAuth state.")
+    if not settings.oauth_state_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth state secret is not configured.",
+        )
+
+    email = parse_oauth_state(state, settings.oauth_state_secret)
+    user = await get_or_create_user(session, email=email)
 
     token_payload = {
         "access_token": code,
@@ -101,7 +159,7 @@ async def reddit_connect_callback(
     connection.refresh_token_encrypted = token_payload.get("refresh_token")
     connection.scope_csv = token_payload.get("scope")
     await session.commit()
-    return RedirectResponse(f"{settings.apple_maps_origin}/?reddit=connected", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(f"{settings.web_app_url}/?reddit=connected", status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/profile/interests", response_model=InterestListResponse)

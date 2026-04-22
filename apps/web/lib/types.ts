@@ -71,6 +71,14 @@ export interface FeedbackReason {
   label: string;
 }
 
+export interface AuthViewer {
+  email: string;
+  displayName?: string | null;
+  isAuthenticated: boolean;
+  isDemo: boolean;
+  redditConnected: boolean;
+}
+
 export interface RecommendationsMapResponse {
   viewport: MapViewport;
   pins: MapVenuePin[];
@@ -90,4 +98,3 @@ export interface LocationAnchorPayload {
   longitude?: number;
   source: "live" | "zip" | "neighborhood";
 }
-

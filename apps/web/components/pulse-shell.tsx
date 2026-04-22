@@ -5,28 +5,37 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPinned, Sparkles, Compass, CalendarDays } from "lucide-react";
 import {
+  getAuthViewer,
   getInterests,
   getMapRecommendations,
   patchInterests,
   submitFeedback
 } from "@/lib/api";
 import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
+import { useAuth } from "@/components/auth-provider";
 import { MagicLinkCard } from "@/components/sign-in-card";
 import { LocationOnboardingCard } from "@/components/location-onboarding-card";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
 
 export function PulseShell() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const identityKey = user?.id ?? "demo";
+
+  const viewerQuery = useQuery({
+    queryKey: ["auth-viewer", identityKey],
+    queryFn: getAuthViewer
+  });
 
   const mapQuery = useQuery({
-    queryKey: ["map-recommendations"],
+    queryKey: ["map-recommendations", identityKey],
     queryFn: getMapRecommendations
   });
 
   const interestsQuery = useQuery({
-    queryKey: ["interests"],
+    queryKey: ["interests", identityKey],
     queryFn: getInterests
   });
 
@@ -89,7 +98,7 @@ export function PulseShell() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent">
-                  Private Beta
+                  {viewerQuery.data?.isAuthenticated ? "Signed-In Beta" : "Private Beta Demo"}
                 </span>
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">
                   Your Reddit taste, turned into a city map.
@@ -97,6 +106,11 @@ export function PulseShell() {
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
                   Pulse ranks NYC venues by how well their upcoming events match your current interests, then
                   highlights the best places directly on the map.
+                </p>
+                <p className="mt-3 text-sm text-slate-500">
+                  {viewerQuery.data?.isAuthenticated
+                    ? `Personalized for ${viewerQuery.data.email}.`
+                    : "Demo mode is active until you sign in with Supabase magic link."}
                 </p>
               </div>
               <Link
@@ -209,4 +223,3 @@ function StatCard({
     </div>
   );
 }
-

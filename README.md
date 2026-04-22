@@ -54,3 +54,4 @@ cd ../worker && .venv/bin/pytest
 - The implementation uses coarse user anchors by default. Exact browser location is session-only.
 - Gemini is wrapped behind a provider abstraction to make a later Anthropic migration low-risk.
 - Travel time in MVP is heuristic, not route API based.
+- Live auth now expects `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `OAUTH_STATE_SECRET`.
