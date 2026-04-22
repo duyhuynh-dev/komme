@@ -1,0 +1,208 @@
+from typing import Annotated
+from uuid import uuid4
+
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.db.session import get_db
+from app.models.recommendation import FeedbackEvent
+from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
+from app.schemas.common import OkResponse
+from app.schemas.maps import MapTokenResponse
+from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
+from app.schemas.recommendations import ArchiveResponse, FeedbackPayload, RecommendationsMapResponse
+from app.services.apple_maps import build_mapkit_token
+from app.services.auth import get_or_create_user
+from app.services.profile import list_interests, update_interests
+from app.services.recommendations import get_archive, get_map_recommendations
+from app.services.reddit_oauth import build_reddit_authorize_url
+
+router = APIRouter(prefix="/v1")
+
+
+async def current_user(
+    session: AsyncSession = Depends(get_db),
+    x_pulse_user_email: Annotated[str | None, Header()] = None,
+):
+    return await get_or_create_user(session, x_pulse_user_email)
+
+
+@router.get("/reddit/connect/start")
+async def reddit_connect_start() -> RedirectResponse:
+    state = str(uuid4())
+    try:
+        authorize_url = build_reddit_authorize_url(state)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    return RedirectResponse(authorize_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/reddit/connect/callback")
+async def reddit_connect_callback(
+    code: str | None = None,
+    error: str | None = None,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+):
+    settings = get_settings()
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if not code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Reddit authorization code.")
+
+    token_payload = {
+        "access_token": code,
+        "refresh_token": code,
+        "scope": "identity history mysubreddits",
+        "name": "reddit-demo-user",
+    }
+
+    if settings.reddit_client_id and settings.reddit_client_secret:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_response = await client.post(
+                "https://www.reddit.com/api/v1/access_token",
+                auth=(settings.reddit_client_id, settings.reddit_client_secret),
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": settings.reddit_redirect_uri,
+                },
+                headers={"User-Agent": "PulseMVP/0.1"},
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+
+            me_response = await client.get(
+                "https://oauth.reddit.com/api/v1/me",
+                headers={
+                    "Authorization": f"bearer {token_payload['access_token']}",
+                    "User-Agent": "PulseMVP/0.1",
+                },
+            )
+            me_response.raise_for_status()
+            token_payload["name"] = me_response.json().get("name", "reddit-user")
+
+    connection = await session.scalar(
+        select(OAuthConnection).where(
+            OAuthConnection.user_id == user.id,
+            OAuthConnection.provider == "reddit",
+        )
+    )
+    if connection is None:
+        connection = OAuthConnection(user_id=user.id, provider="reddit")
+        session.add(connection)
+
+    connection.provider_user_id = token_payload.get("name")
+    connection.access_token_encrypted = token_payload.get("access_token")
+    connection.refresh_token_encrypted = token_payload.get("refresh_token")
+    connection.scope_csv = token_payload.get("scope")
+    await session.commit()
+    return RedirectResponse(f"{settings.apple_maps_origin}/?reddit=connected", status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/profile/interests", response_model=InterestListResponse)
+async def profile_interests(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> InterestListResponse:
+    return InterestListResponse(topics=await list_interests(session, user))
+
+
+@router.patch("/profile/interests", response_model=InterestListResponse)
+async def profile_interests_update(
+    payload: InterestListUpdate,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> InterestListResponse:
+    topics = await update_interests(session, user, payload.topics)
+    return InterestListResponse(topics=topics)
+
+
+@router.post("/profile/anchor", response_model=OkResponse)
+async def profile_anchor(
+    payload: AnchorPayload,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> OkResponse:
+    session.add(
+        UserAnchorLocation(
+            user_id=user.id,
+            source=payload.source,
+            neighborhood=payload.neighborhood,
+            zip_code=payload.zipCode,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            is_session_only=payload.source == "live",
+        )
+    )
+    await session.commit()
+    return OkResponse()
+
+
+@router.post("/profile/constraints", response_model=OkResponse)
+async def profile_constraints(
+    payload: UserConstraintPayload,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> OkResponse:
+    constraint = await session.scalar(select(UserConstraint).where(UserConstraint.user_id == user.id))
+    if constraint is None:
+        constraint = UserConstraint(user_id=user.id)
+        session.add(constraint)
+
+    constraint.city = payload.city
+    constraint.neighborhood = payload.neighborhood
+    constraint.zip_code = payload.zipCode
+    constraint.radius_miles = payload.radiusMiles
+    constraint.budget_level = payload.budgetLevel
+    constraint.preferred_days_csv = ",".join(payload.preferredDays)
+    constraint.social_mode = payload.socialMode
+    await session.commit()
+    return OkResponse()
+
+
+@router.get("/recommendations/map", response_model=RecommendationsMapResponse)
+async def recommendations_map(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> RecommendationsMapResponse:
+    return await get_map_recommendations(session, user)
+
+
+@router.get("/recommendations/archive", response_model=ArchiveResponse)
+async def recommendations_archive(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> ArchiveResponse:
+    return await get_archive(session, user)
+
+
+@router.post("/recommendations/{recommendation_id}/feedback", response_model=OkResponse)
+async def recommendation_feedback(
+    recommendation_id: str,
+    payload: FeedbackPayload,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> OkResponse:
+    session.add(
+        FeedbackEvent(
+            user_id=user.id,
+            recommendation_id=recommendation_id,
+            action=payload.action,
+            reasons_json=[reason.model_dump() for reason in payload.reasons],
+        )
+    )
+    await session.commit()
+    return OkResponse()
+
+
+@router.get("/maps/token", response_model=MapTokenResponse)
+async def maps_token() -> MapTokenResponse:
+    try:
+        return MapTokenResponse(token=build_mapkit_token())
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error

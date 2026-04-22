@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 30%),
+    linear-gradient(180deg, #f6f1e8 0%, #efe6d8 100%);
+  color: #111827;
+}
+
+body {
+  font-family: "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.map-surface {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.18)),
+    radial-gradient(circle at 20% 20%, rgba(15, 118, 110, 0.14), transparent 24%),
+    #ffffff;
+  backdrop-filter: blur(10px);
+}
+

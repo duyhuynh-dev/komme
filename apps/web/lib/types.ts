@@ -1,0 +1,93 @@
+export type ScoreBand = "high" | "medium" | "low";
+
+export interface InterestTopic {
+  id: string;
+  label: string;
+  confidence: number;
+  sourceSignals: string[];
+  boosted: boolean;
+  muted: boolean;
+}
+
+export interface UserConstraint {
+  city: string;
+  neighborhood?: string | null;
+  zipCode?: string | null;
+  radiusMiles: number;
+  budgetLevel: "free" | "under_30" | "under_75" | "flexible";
+  preferredDays: string[];
+  socialMode: "solo" | "group" | "either";
+}
+
+export interface RecommendationReason {
+  title: string;
+  detail: string;
+}
+
+export interface TravelEstimate {
+  mode: "walk" | "transit";
+  label: string;
+  minutes: number;
+}
+
+export interface VenueRecommendationCard {
+  venueId: string;
+  venueName: string;
+  neighborhood: string;
+  address: string;
+  eventTitle: string;
+  eventId: string;
+  startsAt: string;
+  priceLabel: string;
+  scoreBand: ScoreBand;
+  score: number;
+  travel: TravelEstimate[];
+  reasons: RecommendationReason[];
+  secondaryEvents: Array<{
+    eventId: string;
+    title: string;
+    startsAt: string;
+  }>;
+}
+
+export interface MapVenuePin {
+  venueId: string;
+  venueName: string;
+  latitude: number;
+  longitude: number;
+  scoreBand: ScoreBand;
+  selected: boolean;
+}
+
+export interface MapViewport {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
+
+export interface FeedbackReason {
+  key: string;
+  label: string;
+}
+
+export interface RecommendationsMapResponse {
+  viewport: MapViewport;
+  pins: MapVenuePin[];
+  cards: Record<string, VenueRecommendationCard>;
+  generatedAt: string;
+  userConstraint: UserConstraint;
+}
+
+export interface ArchiveResponse {
+  items: VenueRecommendationCard[];
+}
+
+export interface LocationAnchorPayload {
+  neighborhood?: string;
+  zipCode?: string;
+  latitude?: number;
+  longitude?: number;
+  source: "live" | "zip" | "neighborhood";
+}
+
