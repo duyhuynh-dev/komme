@@ -1,0 +1,46 @@
+import pytest
+
+from app.models.contracts import CandidateEvent, RetrievalQuery
+from app.services.supply_sync import build_daily_supply_queries, collect_supply_candidates
+
+
+def test_daily_supply_queries_cover_api_and_curated_sources() -> None:
+    queries = build_daily_supply_queries()
+
+    assert len(queries) >= 4
+    assert {query.source for query in queries} == {"ticketmaster", "curated_venues"}
+
+
+@pytest.mark.asyncio
+async def test_collect_supply_candidates_dedupes_by_source_event_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeConnector:
+        def __init__(self, source_name: str) -> None:
+            self.source_name = source_name
+
+        async def search(self, query: RetrievalQuery) -> list[CandidateEvent]:
+            return [
+                CandidateEvent(
+                    source=self.source_name,
+                    source_event_key="shared-event",
+                    venue_name="Elsewhere",
+                    neighborhood="Bushwick",
+                    address="599 Johnson Ave, Brooklyn, NY",
+                    title=f"{query.query} result",
+                    starts_at="2026-04-25T23:30:00+00:00",
+                    latitude=40.7063,
+                    longitude=-73.9232,
+                )
+            ]
+
+    monkeypatch.setattr(
+        "app.services.supply_sync.TicketmasterConnector",
+        lambda: FakeConnector("ticketmaster"),
+    )
+    monkeypatch.setattr(
+        "app.services.supply_sync.CuratedVenueConnector",
+        lambda: FakeConnector("curated_venues"),
+    )
+
+    candidates = await collect_supply_candidates()
+    assert len(candidates) == 1
+    assert candidates[0].source_event_key == "shared-event"

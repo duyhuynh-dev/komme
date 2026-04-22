@@ -12,6 +12,7 @@ from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
 from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse
 from app.schemas.common import OkResponse
+from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
 from app.schemas.maps import MapTokenResponse
 from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
 from app.schemas.recommendations import ArchiveResponse, FeedbackPayload, RecommendationsMapResponse
@@ -23,8 +24,9 @@ from app.services.auth import (
     require_authenticated_user,
     resolve_user,
 )
+from app.services.ingestion import upsert_ingested_candidates
 from app.services.profile import list_interests, update_interests
-from app.services.recommendations import get_archive, get_map_recommendations
+from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
 
@@ -49,6 +51,14 @@ async def authenticated_identity(
 
 async def current_user(identity=Depends(current_identity)):
     return identity.user
+
+
+async def verify_internal_ingest(
+    x_pulse_ingest_secret: Annotated[str | None, Header()] = None,
+) -> None:
+    settings = get_settings()
+    if settings.internal_ingest_secret and x_pulse_ingest_secret != settings.internal_ingest_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ingest secret.")
 
 
 @router.get("/auth/me", response_model=AuthViewerResponse)
@@ -180,6 +190,15 @@ async def reddit_mock_connect(
     return OkResponse()
 
 
+@router.post("/internal/ingest/candidates", response_model=CandidateIngestResponse)
+async def internal_ingest_candidates(
+    payload: CandidateIngestPayload,
+    _: None = Depends(verify_internal_ingest),
+    session: AsyncSession = Depends(get_db),
+) -> CandidateIngestResponse:
+    return await upsert_ingested_candidates(session, payload)
+
+
 @router.get("/profile/interests", response_model=InterestListResponse)
 async def profile_interests(
     session: AsyncSession = Depends(get_db),
@@ -247,6 +266,15 @@ async def recommendations_map(
     user=Depends(current_user),
 ) -> RecommendationsMapResponse:
     return await get_map_recommendations(session, user)
+
+
+@router.post("/recommendations/refresh", response_model=OkResponse)
+async def recommendations_refresh(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> OkResponse:
+    await refresh_recommendations_for_user(session, user, force=True)
+    return OkResponse()
 
 
 @router.get("/recommendations/archive", response_model=ArchiveResponse)

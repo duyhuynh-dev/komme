@@ -44,6 +44,12 @@ export function getMapRecommendations() {
   return request<RecommendationsMapResponse>("/v1/recommendations/map");
 }
 
+export function refreshRecommendations() {
+  return request<{ ok: true }>("/v1/recommendations/refresh", {
+    method: "POST"
+  });
+}
+
 export function getArchive() {
   return request<ArchiveResponse>("/v1/recommendations/archive");
 }

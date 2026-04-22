@@ -49,9 +49,17 @@ cd services/api && .venv/bin/pytest
 cd ../worker && .venv/bin/pytest
 ```
 
+## Supply ingestion
+
+- `services/worker` now runs a daily supply sync that combines curated NYC venue candidates with `Ticketmaster` results when `TICKETMASTER_API_KEY` is set.
+- The worker posts normalized candidates into `services/api` through `/v1/internal/ingest/candidates`.
+- Set the same `INTERNAL_INGEST_SECRET` in both services if you want the ingest route locked down outside local dev.
+- The map can be manually regenerated from the latest catalog with `POST /v1/recommendations/refresh` or the in-app `Refresh picks` button.
+
 ## Notes
 
 - The implementation uses coarse user anchors by default. Exact browser location is session-only.
 - Gemini is wrapped behind a provider abstraction to make a later Anthropic migration low-risk.
 - Travel time in MVP is heuristic, not route API based.
 - Live auth now expects `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `OAUTH_STATE_SECRET`.
+- Live Ticketmaster ingestion is optional and only activates when `TICKETMASTER_API_KEY` is present.

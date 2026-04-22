@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
     oauth_state_secret: str = ""
+    internal_ingest_secret: str = ""
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""

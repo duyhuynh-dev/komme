@@ -1,5 +1,6 @@
+from app.models.events import CanonicalEvent
 from app.models.profile import UserInterestProfile
-from app.services.recommendations import _candidate_score, _score_band
+from app.services.recommendations import _candidate_score, _derive_topic_keys, _score_band
 
 
 def test_muted_topic_scores_lower_than_matching_active_topic() -> None:
@@ -62,3 +63,17 @@ def test_score_band_thresholds_match_ranking_copy() -> None:
     assert _score_band(0.84) == "high"
     assert _score_band(0.64) == "medium"
     assert _score_band(0.41) == "low"
+
+
+def test_topic_keys_can_be_derived_from_event_text() -> None:
+    event = CanonicalEvent(
+        source_id="source-1",
+        source_event_key="event-1",
+        title="Warehouse techno installation night",
+        category="culture",
+        summary="A visual-heavy art opening with late-night DJs.",
+    )
+
+    topic_keys = _derive_topic_keys(event, ["brooklyn", "gallery opening"])
+    assert "underground_dance" in topic_keys
+    assert "gallery_nights" in topic_keys

@@ -7,6 +7,7 @@ import inngest
 from app.core.config import get_settings
 from app.models.contracts import InterestEvidence
 from app.services.pipeline import run_recommendation_pipeline
+from app.services.supply_sync import run_daily_supply_sync
 
 settings = get_settings()
 inngest_client = inngest.Inngest(app_id=settings.inngest_app_id, logger=logging.getLogger("pulse-worker"))
@@ -17,7 +18,8 @@ inngest_client = inngest.Inngest(app_id=settings.inngest_app_id, logger=logging.
     trigger=inngest.TriggerCron(cron="TZ=America/New_York 0 4 * * *"),
 )
 async def daily_supply_ingestion(_: inngest.Context) -> dict[str, str]:
-    return {"status": "queued-connectors"}
+    result = await run_daily_supply_sync()
+    return {key: str(value) for key, value in result.items()}
 
 
 @inngest_client.create_function(
@@ -47,4 +49,3 @@ async def reddit_profile_sync(_: inngest.Context) -> dict:
         "status": "profile_synced",
         "top_venue": ranked.items[0].venue_name if ranked.items else None,
     }
-

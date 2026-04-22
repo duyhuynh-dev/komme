@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     gemini_model: str = "google-gla:gemini-2.5-flash"
     inngest_app_id: str = "pulse-worker"
     ticketmaster_api_key: str = ""
+    internal_ingest_secret: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -22,4 +23,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

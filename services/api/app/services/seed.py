@@ -24,15 +24,9 @@ from app.models.user import (
     UserAnchorLocation,
     UserConstraint,
 )
-from app.services.travel import estimate_travel_bands
+from app.services.recommendations import refresh_recommendations_for_user
 
 DEMO_SOURCE_NAME = "Pulse Demo Source"
-DEMO_VIEWPORT = {
-    "latitude": 40.73061,
-    "longitude": -73.935242,
-    "latitudeDelta": 0.24,
-    "longitudeDelta": 0.24,
-}
 DEFAULT_ORIGIN = (40.7315, -73.9897)
 
 DEMO_TOPICS = [
@@ -146,40 +140,6 @@ DEMO_EVENT_SPECS = [
     },
 ]
 
-DEMO_REASONS = [
-    [
-        {
-            "title": "Taste overlap",
-            "detail": "Your Reddit activity heavily leans toward warehouse techno and after-hours bookings.",
-        },
-        {
-            "title": "Practical fit",
-            "detail": "This venue stays inside your current NYC radius and mid-range budget.",
-        },
-    ],
-    [
-        {
-            "title": "Scene proximity",
-            "detail": "The lineup matches your underground dance profile but broadens into visual art programming.",
-        },
-        {
-            "title": "Novelty balance",
-            "detail": "This is a stretch pick that still sits close to your saved culture-night signals.",
-        },
-    ],
-    [
-        {
-            "title": "Songwriting signal",
-            "detail": "Indie live-music threads and saved intimate-room posts point toward this type of room.",
-        },
-        {
-            "title": "Easy night out",
-            "detail": "Shorter travel time and earlier start make this a lower-friction midweek option.",
-        },
-    ],
-]
-
-
 async def seed_demo_state(session: AsyncSession, only_missing: bool = False) -> None:
     settings = get_settings()
     user = await session.scalar(select(User).where(User.email == settings.default_user_email))
@@ -203,7 +163,7 @@ async def bootstrap_user_with_mock_reddit(
     create_connection: bool = True,
 ) -> None:
     await ensure_user_defaults(session, user)
-    venues, occurrences = await ensure_demo_catalog(session)
+    await ensure_demo_catalog(session)
     await reset_user_demo_state(session, user)
 
     if create_connection:
@@ -260,41 +220,14 @@ async def bootstrap_user_with_mock_reddit(
             for item in DEMO_REDDIT_ACTIVITIES
         ]
     )
-
-    run = RecommendationRun(
-        user_id=user.id,
+    await session.flush()
+    await refresh_recommendations_for_user(
+        session,
+        user,
+        force=True,
         provider="mock",
         model_name="pulse-demo-seed",
-        viewport_json=DEMO_VIEWPORT,
     )
-    session.add(run)
-    await session.flush()
-
-    origin_latitude, origin_longitude = await get_user_origin(session, user)
-    for rank, (venue, occurrence, rationale) in enumerate(
-        zip(venues, occurrences, DEMO_REASONS, strict=True),
-        start=1,
-    ):
-        session.add(
-            VenueRecommendation(
-                run_id=run.id,
-                venue_id=venue.id,
-                event_occurrence_id=occurrence.id,
-                rank=rank,
-                score=0.96 - rank * 0.08,
-                score_band="high" if rank == 1 else "medium",
-                reasons_json=rationale,
-                travel_json=estimate_travel_bands(
-                    origin_latitude,
-                    origin_longitude,
-                    venue.latitude,
-                    venue.longitude,
-                ),
-                secondary_events_json=[],
-            )
-        )
-
-    await session.commit()
 
 
 async def ensure_user_defaults(session: AsyncSession, user: User) -> None:
@@ -464,16 +397,3 @@ async def reset_user_demo_state(session: AsyncSession, user: User) -> None:
     await session.execute(delete(ProfileRun).where(ProfileRun.user_id == user.id))
     await session.execute(delete(RedditActivity).where(RedditActivity.user_id == user.id))
     await session.flush()
-
-
-async def get_user_origin(session: AsyncSession, user: User) -> tuple[float, float]:
-    anchor = await session.scalar(
-        select(UserAnchorLocation)
-        .where(UserAnchorLocation.user_id == user.id)
-        .order_by(UserAnchorLocation.created_at.desc())
-        .limit(1)
-    )
-    if anchor and anchor.latitude is not None and anchor.longitude is not None:
-        return anchor.latitude, anchor.longitude
-
-    return DEFAULT_ORIGIN

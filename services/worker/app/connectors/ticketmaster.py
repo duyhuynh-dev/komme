@@ -3,6 +3,13 @@ import httpx
 from app.core.config import get_settings
 from app.models.contracts import CandidateEvent, RetrievalQuery
 
+TOPIC_HINTS = {
+    "underground_dance": ["techno", "warehouse", "dj", "rave", "dance"],
+    "indie_live_music": ["indie", "band", "gig", "concert", "songwriter"],
+    "gallery_nights": ["gallery", "art", "opening", "installation", "visual"],
+    "creative_meetups": ["meetup", "creative", "networking", "community"],
+}
+
 
 class TicketmasterConnector:
     source_name = "ticketmaster"
@@ -29,20 +36,41 @@ class TicketmasterConnector:
         for item in payload.get("_embedded", {}).get("events", []):
             venue = item.get("_embedded", {}).get("venues", [{}])[0]
             location = venue.get("location", {})
+            address = venue.get("address", {}).get("line1") or venue.get("name", "Unknown venue")
+            city = venue.get("city", {}).get("name") or "New York City"
+            state = venue.get("state", {}).get("stateCode") or "NY"
+            postal_code = venue.get("postalCode")
+            classification = (item.get("classifications") or [{}])[0]
+            genre = classification.get("genre", {}).get("name")
+            segment = classification.get("segment", {}).get("name")
+            text_blob = " ".join(filter(None, [query.query.lower(), genre.lower() if genre else "", segment.lower() if segment else ""]))
+            topic_keys = [
+                key for key, hints in TOPIC_HINTS.items() if any(hint in text_blob for hint in hints)
+            ]
             events.append(
                 CandidateEvent(
                     source=self.source_name,
+                    source_kind="api_connector",
+                    source_event_key=f"ticketmaster:{item.get('id', item.get('name', 'event'))}",
                     venue_name=venue.get("name", "Unknown venue"),
-                    neighborhood="NYC",
+                    neighborhood=city,
+                    address=address,
+                    city=city,
+                    state=state,
+                    postal_code=postal_code,
                     title=item.get("name", "Untitled event"),
+                    summary=item.get("info") or item.get("pleaseNote"),
+                    category=segment or query.category,
                     starts_at=item.get("dates", {}).get("start", {}).get("dateTime", ""),
+                    ends_at=item.get("dates", {}).get("end", {}).get("dateTime"),
                     latitude=float(location.get("latitude", 0.0)),
                     longitude=float(location.get("longitude", 0.0)),
+                    ticket_url=item.get("url"),
                     min_price=(item.get("priceRanges") or [{}])[0].get("min"),
                     max_price=(item.get("priceRanges") or [{}])[0].get("max"),
                     source_confidence=0.92,
-                    tags=[query.category, query.query],
+                    topic_keys=topic_keys,
+                    tags=[value for value in [query.category, query.query, segment, genre] if value],
                 )
             )
         return events
-

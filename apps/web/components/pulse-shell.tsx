@@ -9,6 +9,7 @@ import {
   getInterests,
   getMapRecommendations,
   patchInterests,
+  refreshRecommendations,
   submitFeedback
 } from "@/lib/api";
 import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
@@ -57,6 +58,14 @@ export function PulseShell() {
       recommendationId: string;
       action: "save" | "dismiss";
     }) => submitFeedback(recommendationId, action, []),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
+      void queryClient.invalidateQueries({ queryKey: ["archive"] });
+    }
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: refreshRecommendations,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       void queryClient.invalidateQueries({ queryKey: ["archive"] });
@@ -168,9 +177,19 @@ export function PulseShell() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Map View</p>
                 <h2 className="mt-1 text-2xl font-semibold">Recommended venues across NYC</h2>
               </div>
-              <Link href="/archive" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700 lg:hidden">
-                Archive
-              </Link>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => refreshMutation.mutate()}
+                  disabled={refreshMutation.isPending}
+                  className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm text-slate-700 transition hover:bg-white disabled:opacity-60"
+                >
+                  {refreshMutation.isPending ? "Refreshing..." : "Refresh picks"}
+                </button>
+                <Link href="/archive" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700 lg:hidden">
+                  Archive
+                </Link>
+              </div>
             </div>
 
             <PulseMap
