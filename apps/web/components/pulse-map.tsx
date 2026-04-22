@@ -5,33 +5,14 @@ import { load } from "@apple/mapkit-loader";
 import { getMapToken } from "@/lib/api";
 import type { MapVenuePin, MapViewport } from "@/lib/types";
 
-type MapKitMap = {
-  removeAnnotations: (annotations: unknown[]) => void;
-  addAnnotations: (annotations: unknown[]) => void;
-  setRegionAnimated: (region: unknown, animated: boolean) => void;
-};
+type MapKitRuntime = Awaited<ReturnType<typeof load>>;
+type MapKitMap = InstanceType<MapKitRuntime["Map"]>;
+type MapKitAnnotation = InstanceType<MapKitRuntime["MarkerAnnotation"]>;
 
-function buildRegion(
-  mapkit: NonNullable<Window["mapkit"]>,
-  viewport: MapViewport,
-) {
+function buildRegion(mapkit: MapKitRuntime, viewport: MapViewport) {
   const center = new mapkit.Coordinate(viewport.latitude, viewport.longitude);
   const span = new mapkit.CoordinateSpan(viewport.latitudeDelta, viewport.longitudeDelta);
   return new mapkit.CoordinateRegion(center, span);
-}
-
-declare global {
-  interface Window {
-    mapkit?: {
-      init: (options: { authorizationCallback: (done: (token: string) => void) => void }) => void;
-      Map: new (container: HTMLElement, options: Record<string, unknown>) => MapKitMap;
-      Coordinate: new (latitude: number, longitude: number) => unknown;
-      CoordinateRegion: new (center: unknown, span: unknown) => unknown;
-      CoordinateSpan: new (latitudeDelta: number, longitudeDelta: number) => unknown;
-      MarkerAnnotation: new (coordinate: unknown, options: Record<string, unknown>) => unknown;
-      mapkitjsVersion: string;
-    };
-  }
 }
 
 export function PulseMap({
@@ -46,8 +27,9 @@ export function PulseMap({
   onSelectVenue: (venueId: string) => void;
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapkitRef = useRef<MapKitRuntime | null>(null);
   const mapInstanceRef = useRef<MapKitMap | null>(null);
-  const annotationsRef = useRef<unknown[]>([]);
+  const annotationsRef = useRef<MapKitAnnotation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const resolvedViewport = useMemo<MapViewport>(
@@ -80,12 +62,13 @@ export function PulseMap({
           return;
         }
 
+        mapkitRef.current = mapkit;
         mapkit.init({
           authorizationCallback: (done) => done(tokenResponse.token)
         });
 
         mapInstanceRef.current = new mapkit.Map(mapRef.current, {
-          showsCompass: false,
+          showsCompass: mapkit.FeatureVisibility.Hidden,
           showsZoomControl: false,
           colorScheme: "light",
           isRotationEnabled: false,
@@ -104,7 +87,7 @@ export function PulseMap({
   }, [resolvedViewport]);
 
   useEffect(() => {
-    const mapkit = window.mapkit;
+    const mapkit = mapkitRef.current;
     const map = mapInstanceRef.current;
     if (!mapkit || !map) {
       return;
@@ -114,7 +97,7 @@ export function PulseMap({
   }, [resolvedViewport]);
 
   useEffect(() => {
-    const mapkit = window.mapkit;
+    const mapkit = mapkitRef.current;
     const map = mapInstanceRef.current;
     if (!mapkit || !map) {
       return;
@@ -140,8 +123,8 @@ export function PulseMap({
         selected: pin.venueId === selectedVenueId
       });
 
-      (annotation as { data?: Record<string, string> }).data = { venueId: pin.venueId };
-      (annotation as { addEventListener?: (eventName: string, handler: () => void) => void }).addEventListener?.(
+      annotation.data = { venueId: pin.venueId };
+      annotation.addEventListener?.(
         "select",
         () => onSelectVenue(pin.venueId),
       );

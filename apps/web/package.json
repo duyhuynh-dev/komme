@@ -9,7 +9,7 @@
     "test": "echo \"No web tests configured yet\""
   },
   "dependencies": {
-    "@apple/mapkit-loader": "^1.0.4",
+    "@apple/mapkit-loader": "^0.2.1",
     "@hookform/resolvers": "^3.9.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.8",
@@ -32,4 +32,3 @@
     "typescript": "^5.6.3"
   }
 }
-

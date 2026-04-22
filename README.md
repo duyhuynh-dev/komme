@@ -15,12 +15,15 @@ Pulse is a map-first, personalized event discovery MVP for New York City. The pr
 
 ## Local setup
 
-1. Install `pnpm` and `uv`.
-2. Copy `.env.example` values into service-specific `.env` files.
-3. Install web dependencies from the repo root with `pnpm install`.
-4. Install Python dependencies with:
+1. Install `uv`.
+2. If `pnpm` is not already installed, enable it with `corepack`.
+3. Copy `.env.example` values into service-specific `.env` files.
+4. Install web dependencies from the repo root with `pnpm install`.
+5. Install Python dependencies with:
 
 ```bash
+corepack prepare pnpm@10.10.0 --activate
+pnpm install
 cd services/api && uv sync
 cd ../worker && uv sync
 ```
@@ -38,9 +41,16 @@ cd services/api && uv run uvicorn app.main:app --reload --port 8000
 cd services/worker && uv run python -m app.main
 ```
 
+## Validation
+
+```bash
+pnpm --filter @pulse/web build
+cd services/api && .venv/bin/pytest
+cd ../worker && .venv/bin/pytest
+```
+
 ## Notes
 
 - The implementation uses coarse user anchors by default. Exact browser location is session-only.
 - Gemini is wrapped behind a provider abstraction to make a later Anthropic migration low-risk.
 - Travel time in MVP is heuristic, not route API based.
-
