@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPinned, Sparkles, Compass, CalendarDays } from "lucide-react";
+import { MapPinned, Compass, CalendarDays } from "lucide-react";
 import {
   getAuthViewer,
   getInterests,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
+import { InterestProfilePanel } from "@/components/interest-profile-panel";
 import { MagicLinkCard } from "@/components/sign-in-card";
 import { LocationOnboardingCard } from "@/components/location-onboarding-card";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
@@ -41,9 +42,10 @@ export function PulseShell() {
 
   const toggleTopicMutation = useMutation({
     mutationFn: (topics: InterestTopic[]) => patchInterests(topics),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["interests"] });
+    onSuccess: (data) => {
+      queryClient.setQueryData(["interests", identityKey], data);
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
+      void queryClient.invalidateQueries({ queryKey: ["archive"] });
     }
   });
 
@@ -75,15 +77,27 @@ export function PulseShell() {
     return mapQuery.data.cards[activeVenueId] ?? null;
   }, [mapQuery.data, selectedVenueId]);
 
-  const toggleTopic = (topic: InterestTopic) => {
+  const applyTopicAction = (
+    topic: InterestTopic,
+    action: "boost" | "mute" | "reset"
+  ) => {
     const topics = (interestsQuery.data?.topics ?? []).map((current) => {
       if (current.id !== topic.id) {
         return current;
       }
 
+      if (action === "reset") {
+        return {
+          ...current,
+          boosted: false,
+          muted: false
+        };
+      }
+
       return {
         ...current,
-        muted: !current.muted
+        boosted: action === "boost" ? !current.boosted : false,
+        muted: action === "mute" ? !current.muted : false
       };
     });
 
@@ -133,39 +147,18 @@ export function PulseShell() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-stroke/80 bg-card/70 p-6 shadow-float backdrop-blur">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-[0.22em] text-accent">Interest profile</p>
-                <h2 className="mt-2 text-2xl font-semibold">Editable signals, not a black box</h2>
-              </div>
-              <Sparkles className="h-5 w-5 text-accent" />
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {(interestsQuery.data?.topics ?? []).map((topic) => (
-                <button
-                  key={topic.id}
-                  type="button"
-                  onClick={() => toggleTopic(topic)}
-                  className={[
-                    "rounded-full border px-4 py-2 text-sm transition",
-                    topic.muted
-                      ? "border-stroke bg-slate-100 text-slate-400"
-                      : "border-accent/25 bg-accentSoft text-accent"
-                  ].join(" ")}
-                >
-                  {topic.label}
-                </button>
-              ))}
-
-              {!interestsQuery.data?.topics.length && (
-                <p className="text-sm text-slate-500">
-                  Connect Reddit to see inferred themes like underground dance, indie gigs, gallery nights, and meetups.
-                </p>
-              )}
-            </div>
-          </div>
+          <InterestProfilePanel
+            topics={interestsQuery.data?.topics ?? []}
+            isLoading={interestsQuery.isLoading}
+            isSaving={toggleTopicMutation.isPending}
+            onAction={(topicId, action) => {
+              const topic = (interestsQuery.data?.topics ?? []).find((current) => current.id === topicId);
+              if (!topic) {
+                return;
+              }
+              applyTopicAction(topic, action);
+            }}
+          />
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">

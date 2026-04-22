@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.profile import UserInterestOverride, UserInterestProfile
 from app.models.user import User
 from app.schemas.profile import InterestTopic
+from app.services.recommendations import rerank_latest_recommendations
 
 
 async def list_interests(session: AsyncSession, user: User) -> list[InterestTopic]:
@@ -69,6 +70,6 @@ async def update_interests(
                 )
             )
 
+    await rerank_latest_recommendations(session, user)
     await session.commit()
     return await list_interests(session, user)
-

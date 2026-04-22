@@ -122,6 +122,7 @@ DEMO_EVENT_SPECS = [
         "min_price": 25,
         "max_price": 35,
         "source_confidence": 0.93,
+        "topic_keys": ["underground_dance"],
     },
     {
         "key": "pulse-demo-1",
@@ -131,6 +132,7 @@ DEMO_EVENT_SPECS = [
         "min_price": 35,
         "max_price": 50,
         "source_confidence": 0.88,
+        "topic_keys": ["underground_dance", "gallery_nights"],
     },
     {
         "key": "pulse-demo-2",
@@ -140,6 +142,7 @@ DEMO_EVENT_SPECS = [
         "min_price": 45,
         "max_price": 65,
         "source_confidence": 0.83,
+        "topic_keys": ["indie_live_music"],
     },
 ]
 
@@ -414,7 +417,10 @@ async def ensure_demo_catalog(session: AsyncSession) -> tuple[list[Venue], list[
                 min_price=spec["min_price"],
                 max_price=spec["max_price"],
                 ticket_url="https://pulse.local/tickets",
-                metadata_json={"sourceConfidence": spec["source_confidence"]},
+                metadata_json={
+                    "sourceConfidence": spec["source_confidence"],
+                    "topicKeys": spec["topic_keys"],
+                },
             )
             session.add(occurrence)
         else:
@@ -423,7 +429,10 @@ async def ensure_demo_catalog(session: AsyncSession) -> tuple[list[Venue], list[
             occurrence.min_price = spec["min_price"]
             occurrence.max_price = spec["max_price"]
             occurrence.ticket_url = "https://pulse.local/tickets"
-            occurrence.metadata_json = {"sourceConfidence": spec["source_confidence"]}
+            occurrence.metadata_json = {
+                "sourceConfidence": spec["source_confidence"],
+                "topicKeys": spec["topic_keys"],
+            }
             occurrence.is_active = True
 
         occurrences.append(occurrence)
