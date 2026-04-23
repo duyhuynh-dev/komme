@@ -12,7 +12,11 @@ export function RecommendationDrawer({
   selectedVenueId,
   onSelectVenue,
   onSave,
-  onDismiss
+  onDismiss,
+  mode = "rail",
+  previewCount = 2,
+  isExpanded = false,
+  onToggleExpanded
 }: {
   loading: boolean;
   cards: Record<string, VenueRecommendationCard>;
@@ -21,8 +25,14 @@ export function RecommendationDrawer({
   onSelectVenue: (venueId: string) => void;
   onSave: (card: VenueRecommendationCard) => void;
   onDismiss: (card: VenueRecommendationCard) => void;
+  mode?: "rail" | "modal";
+  previewCount?: number;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
 }) {
   const orderedCards = Object.values(cards).sort((left, right) => right.score - left.score);
+  const visibleCards = mode === "rail" ? orderedCards.slice(0, previewCount) : orderedCards;
+  const canShowAll = mode === "rail" && orderedCards.length > visibleCards.length;
   const cardRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -35,13 +45,32 @@ export function RecommendationDrawer({
   }, [selectedVenueId]);
 
   return (
-    <aside className="flex h-full min-h-0 flex-col rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
+    <aside
+      className={[
+        "flex min-h-0 flex-col",
+        mode === "rail"
+          ? "h-full rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur"
+          : ""
+      ].join(" ")}
+    >
       <div className="px-2 pb-3">
-        <h2 className="text-2xl font-semibold">Top spots this week</h2>
-        <p className="mt-1 text-sm text-slate-500">Choose a card to focus the map and compare this week&apos;s strongest venue fits.</p>
+        <button
+          type="button"
+          onClick={mode === "rail" ? onToggleExpanded : undefined}
+          className={[
+            "min-w-0 text-left",
+            mode === "rail" ? "transition hover:opacity-80" : ""
+          ].join(" ")}
+          aria-expanded={mode === "rail" ? isExpanded : undefined}
+        >
+          <h2 className="text-2xl font-semibold">Top spots this week</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Choose a card to focus the map and compare this week&apos;s strongest venue fits.
+          </p>
+        </button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className={["min-h-0 pr-1", mode === "rail" ? "flex-1 space-y-3 overflow-y-auto" : "space-y-4"].join(" ")}>
         {loading ? (
           <div className="rounded-3xl border border-stroke bg-white/70 p-5 text-sm text-slate-500">
             Loading your current venue shortlist...
@@ -54,7 +83,7 @@ export function RecommendationDrawer({
           </div>
         ) : null}
 
-        {orderedCards.map((card) => {
+        {visibleCards.map((card) => {
           const selected = card.venueId === selectedVenueId;
 
           return (
@@ -157,6 +186,16 @@ export function RecommendationDrawer({
           );
         })}
       </div>
+
+      {canShowAll ? (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="mt-4 inline-flex self-start rounded-full border border-stroke bg-white/75 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+        >
+          Show all ({orderedCards.length}) &rarr;
+        </button>
+      ) : null}
     </aside>
   );
 }

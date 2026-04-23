@@ -10,23 +10,49 @@ interface InterestProfilePanelProps {
   isLoading: boolean;
   isSaving: boolean;
   onAction: (topicId: string, action: InterestAction) => void;
+  mode?: "rail" | "modal";
+  previewCount?: number;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
 export function InterestProfilePanel({
   topics,
   isLoading,
   isSaving,
-  onAction
+  onAction,
+  mode = "rail",
+  previewCount = 2,
+  isExpanded = false,
+  onToggleExpanded,
 }: InterestProfilePanelProps) {
+  const visibleTopics = mode === "rail" ? topics.slice(0, previewCount) : topics;
+  const canShowAll = mode === "rail" && topics.length > visibleTopics.length;
+
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+    <div
+      className={[
+        "flex min-h-0 flex-col",
+        mode === "rail"
+          ? "h-full rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur"
+          : ""
+      ].join(" ")}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={mode === "rail" ? onToggleExpanded : undefined}
+          className={[
+            "min-w-0 text-left",
+            mode === "rail" ? "transition hover:opacity-80" : ""
+          ].join(" ")}
+          aria-expanded={mode === "rail" ? isExpanded : undefined}
+        >
           <h2 className="text-xl font-semibold text-slate-900">Interest signals</h2>
           <p className="mt-1 text-sm text-slate-500">
             Boost or mute a theme, then watch the map and shortlist respond around that edit.
           </p>
-        </div>
+        </button>
         <button
           type="button"
           title="More signal sources are coming soon."
@@ -37,7 +63,12 @@ export function InterestProfilePanel({
         </button>
       </div>
 
-      <div className="mt-5 flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+      <div
+        className={[
+          "mt-5 min-h-0 pr-1",
+          mode === "rail" ? "flex-1 space-y-3 overflow-y-auto" : "space-y-4"
+        ].join(" ")}
+      >
         {isLoading ? (
           <div className="rounded-3xl border border-dashed border-stroke bg-white/50 p-5 text-sm text-slate-500">
             Loading inferred interests...
@@ -51,7 +82,7 @@ export function InterestProfilePanel({
           </div>
         ) : null}
 
-        {topics.map((topic) => {
+        {visibleTopics.map((topic) => {
           const confidencePercent = Math.round(topic.confidence * 100);
           return (
             <article
@@ -132,6 +163,16 @@ export function InterestProfilePanel({
           );
         })}
       </div>
+
+      {canShowAll ? (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="mt-4 inline-flex self-start rounded-full border border-stroke bg-white/75 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+        >
+          Show all ({topics.length}) &rarr;
+        </button>
+      ) : null}
     </div>
   );
 }

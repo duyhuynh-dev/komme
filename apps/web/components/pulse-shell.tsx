@@ -18,6 +18,7 @@ import type { InterestTopic } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
 import { AccountDock } from "@/components/account-dock";
 import { InterestProfilePanel } from "@/components/interest-profile-panel";
+import { RailModal } from "@/components/rail-modal";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
 import { SettingsDock } from "@/components/settings-dock";
@@ -27,6 +28,7 @@ export function PulseShell() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const [activeRailModal, setActiveRailModal] = useState<"signals" | "spots" | null>(null);
   const [surfaceStatus, setSurfaceStatus] = useState<string | null>(null);
   const identityKey = user?.id ?? "demo";
 
@@ -142,6 +144,9 @@ export function PulseShell() {
   const locationSummary = mapQuery.data?.userConstraint?.neighborhood || mapQuery.data?.userConstraint?.zipCode || "NYC";
   const radiusSummary = mapQuery.data?.userConstraint?.radiusMiles ? `${mapQuery.data.userConstraint.radiusMiles} mi radius` : null;
   const topbarMessage = surfaceStatus ?? (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
+  const toggleRailModal = (target: "signals" | "spots") => {
+    setActiveRailModal((current) => (current === target ? null : target));
+  };
 
   return (
     <main className="min-h-screen px-4 py-4 md:px-6 md:py-6">
@@ -236,6 +241,9 @@ export function PulseShell() {
               topics={interestsQuery.data?.topics ?? []}
               isLoading={interestsQuery.isLoading}
               isSaving={toggleTopicMutation.isPending}
+              previewCount={2}
+              isExpanded={activeRailModal === "signals"}
+              onToggleExpanded={() => toggleRailModal("signals")}
               onAction={(topicId, action) => {
                 const topic = (interestsQuery.data?.topics ?? []).find((current) => current.id === topicId);
                 if (!topic) {
@@ -250,6 +258,9 @@ export function PulseShell() {
               cards={mapQuery.data?.cards ?? {}}
               timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
               selectedVenueId={selectedVenueId}
+              previewCount={2}
+              isExpanded={activeRailModal === "spots"}
+              onToggleExpanded={() => toggleRailModal("spots")}
               onSelectVenue={setSelectedVenueId}
               onSave={(card) =>
                 feedbackMutation.mutate({ recommendationId: card.eventId, action: "save" })
@@ -261,6 +272,47 @@ export function PulseShell() {
           </div>
         </section>
       </div>
+
+      <RailModal
+        open={activeRailModal === "signals"}
+        title="Interest signals"
+        onClose={() => setActiveRailModal(null)}
+      >
+        <InterestProfilePanel
+          mode="modal"
+          topics={interestsQuery.data?.topics ?? []}
+          isLoading={interestsQuery.isLoading}
+          isSaving={toggleTopicMutation.isPending}
+          onAction={(topicId, action) => {
+            const topic = (interestsQuery.data?.topics ?? []).find((current) => current.id === topicId);
+            if (!topic) {
+              return;
+            }
+            applyTopicAction(topic, action);
+          }}
+        />
+      </RailModal>
+
+      <RailModal
+        open={activeRailModal === "spots"}
+        title="Top spots this week"
+        onClose={() => setActiveRailModal(null)}
+      >
+        <RecommendationDrawer
+          mode="modal"
+          loading={mapQuery.isLoading}
+          cards={mapQuery.data?.cards ?? {}}
+          timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
+          selectedVenueId={selectedVenueId}
+          onSelectVenue={setSelectedVenueId}
+          onSave={(card) =>
+            feedbackMutation.mutate({ recommendationId: card.eventId, action: "save" })
+          }
+          onDismiss={(card) =>
+            feedbackMutation.mutate({ recommendationId: card.eventId, action: "dismiss" })
+          }
+        />
+      </RailModal>
     </main>
   );
 }
