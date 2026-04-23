@@ -1,14 +1,16 @@
 import httpx
+from datetime import UTC, datetime
 
 from app.schemas.recommendations import RecommendationReason, TravelEstimate, VenueRecommendationCard
 from app.services.digest import (
+    _digest_due_now,
     _digest_preheader,
     _digest_subject,
     _provider_error_detail,
     _render_digest_html,
     _render_digest_text,
 )
-from app.models.user import User
+from app.models.user import EmailPreference, User
 
 
 def _sample_card(venue_name: str, neighborhood: str, event_title: str) -> VenueRecommendationCard:
@@ -80,3 +82,21 @@ def test_provider_error_detail_prefers_json_message() -> None:
     )
 
     assert _provider_error_detail(response) == "The sender domain is not verified."
+
+
+def test_digest_due_now_respects_user_day_time_and_timezone() -> None:
+    user = User(email="duy@example.com", timezone="America/New_York")
+    preference = EmailPreference(
+        user_id="user-1",
+        weekly_digest_enabled=True,
+        digest_day="Tuesday",
+        digest_time_local="09:00",
+    )
+
+    due_now = datetime(2026, 4, 21, 13, 5, tzinfo=UTC)
+    too_late = datetime(2026, 4, 21, 13, 20, tzinfo=UTC)
+    wrong_day = datetime(2026, 4, 22, 13, 5, tzinfo=UTC)
+
+    assert _digest_due_now(user, preference, due_now) is True
+    assert _digest_due_now(user, preference, too_late) is False
+    assert _digest_due_now(user, preference, wrong_day) is False

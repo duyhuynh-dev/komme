@@ -12,7 +12,7 @@ from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
 from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse
 from app.schemas.common import OkResponse, SupplySyncResponse
-from app.schemas.digest import DigestPreviewResponse, DigestSendResponse
+from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
 from app.schemas.maps import MapTokenResponse
 from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
@@ -25,7 +25,7 @@ from app.services.auth import (
     require_authenticated_user,
     resolve_user,
 )
-from app.services.digest import build_digest_preview, send_digest_preview
+from app.services.digest import build_digest_preview, send_digest_preview, send_due_weekly_digests
 from app.services.ingestion import upsert_ingested_candidates
 from app.services.profile import list_interests, update_interests
 from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
@@ -330,6 +330,17 @@ async def digest_send_preview(
         if "No recommendations are available yet" in str(error):
             status_code = status.HTTP_409_CONFLICT
         raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/internal/digests/send-weekly", response_model=DigestBatchResponse)
+async def digest_send_weekly_internal(
+    _: None = Depends(verify_internal_ingest),
+    session: AsyncSession = Depends(get_db),
+) -> DigestBatchResponse:
+    try:
+        return await send_due_weekly_digests(session)
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 
 
 @router.post("/recommendations/{recommendation_id}/feedback", response_model=OkResponse)

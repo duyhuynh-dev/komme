@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from html import escape
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.recommendation import DigestDelivery, RecommendationRun
-from app.models.user import User
-from app.schemas.digest import DigestPreviewResponse, DigestSendResponse
+from app.models.user import EmailPreference, User
+from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.recommendations import VenueRecommendationCard
 from app.services.recommendations import get_archive, refresh_recommendations_for_user
 
@@ -19,6 +21,10 @@ from app.services.recommendations import get_archive, refresh_recommendations_fo
 class DigestPreviewPayload:
     run: RecommendationRun
     response: DigestPreviewResponse
+
+
+SCHEDULED_DIGEST_PROVIDER = "resend-scheduled"
+PREVIEW_DIGEST_PROVIDER = "resend-preview"
 
 
 async def build_digest_preview(session: AsyncSession, user: User) -> DigestPreviewPayload:
@@ -48,15 +54,74 @@ async def build_digest_preview(session: AsyncSession, user: User) -> DigestPrevi
 
 
 async def send_digest_preview(session: AsyncSession, user: User) -> DigestSendResponse:
+    preview = await build_digest_preview(session, user)
+    return await _send_digest_email(
+        session=session,
+        user=user,
+        preview=preview,
+        provider=PREVIEW_DIGEST_PROVIDER,
+    )
+
+
+async def send_due_weekly_digests(
+    session: AsyncSession,
+    now_utc: datetime | None = None,
+) -> DigestBatchResponse:
     settings = get_settings()
     if not settings.resend_api_key:
-        raise RuntimeError("Resend is not configured. Add RESEND_API_KEY to send digest previews.")
+        raise RuntimeError("Resend is not configured. Add RESEND_API_KEY to send scheduled digests.")
 
-    preview = await build_digest_preview(session, user)
+    current_time = now_utc or datetime.now(tz=UTC)
+    users = list((await session.scalars(select(User).order_by(User.created_at.asc()))).all())
+
+    response = DigestBatchResponse()
+
+    for user in users:
+        preference = await session.scalar(select(EmailPreference).where(EmailPreference.user_id == user.id))
+        if preference is None or not preference.weekly_digest_enabled:
+            response.skipped += 1
+            continue
+
+        if not _digest_due_now(user, preference, current_time):
+            response.skipped += 1
+            continue
+
+        response.processedUsers += 1
+
+        if await _digest_already_sent_today(session, user, provider=SCHEDULED_DIGEST_PROVIDER, now_utc=current_time):
+            response.skipped += 1
+            continue
+
+        try:
+            preview = await build_digest_preview(session, user)
+            await _send_digest_email(
+                session=session,
+                user=user,
+                preview=preview,
+                provider=SCHEDULED_DIGEST_PROVIDER,
+            )
+            response.sent += 1
+        except RuntimeError:
+            response.failed += 1
+
+    return response
+
+
+async def _send_digest_email(
+    session: AsyncSession,
+    user: User,
+    preview: DigestPreviewPayload,
+    *,
+    provider: str,
+) -> DigestSendResponse:
+    settings = get_settings()
+    if not settings.resend_api_key:
+        raise RuntimeError("Resend is not configured. Add RESEND_API_KEY to send digests.")
+
     delivery = DigestDelivery(
         user_id=user.id,
         recommendation_run_id=preview.run.id,
-        provider="resend-preview",
+        provider=provider,
         status="queued",
     )
     session.add(delivery)
@@ -95,7 +160,7 @@ async def send_digest_preview(session: AsyncSession, user: User) -> DigestSendRe
 
     delivery.status = "sent"
     await session.commit()
-    return DigestSendResponse(recipientEmail=user.email, status="sent")
+    return DigestSendResponse(recipientEmail=user.email, provider=provider, status="sent")
 
 
 def _digest_subject(items: list[VenueRecommendationCard]) -> str:
@@ -215,6 +280,64 @@ def _format_event_time(value: str) -> str:
     except ValueError:
         return value
     return parsed.strftime("%a, %b %-d · %-I:%M %p")
+
+
+def _user_timezone(user: User) -> ZoneInfo:
+    try:
+        return ZoneInfo(user.timezone or "America/New_York")
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("America/New_York")
+
+
+def _digest_due_now(user: User, preference: EmailPreference, now_utc: datetime) -> bool:
+    now_local = now_utc.astimezone(_user_timezone(user))
+    if preference.digest_day != now_local.strftime("%A"):
+        return False
+
+    try:
+        hour_text, minute_text = preference.digest_time_local.split(":", maxsplit=1)
+        target_hour = int(hour_text)
+        target_minute = int(minute_text)
+    except (ValueError, AttributeError):
+        target_hour = 9
+        target_minute = 0
+
+    target_local = now_local.replace(
+        hour=target_hour,
+        minute=target_minute,
+        second=0,
+        microsecond=0,
+    )
+    window_end = target_local + timedelta(minutes=15)
+    return target_local <= now_local < window_end
+
+
+async def _digest_already_sent_today(
+    session: AsyncSession,
+    user: User,
+    *,
+    provider: str,
+    now_utc: datetime,
+) -> bool:
+    timezone = _user_timezone(user)
+    now_local = now_utc.astimezone(timezone)
+    day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end_local = day_start_local + timedelta(days=1)
+    day_start_utc = day_start_local.astimezone(UTC)
+    day_end_utc = day_end_local.astimezone(UTC)
+
+    existing = await session.scalar(
+        select(DigestDelivery).where(
+            and_(
+                DigestDelivery.user_id == user.id,
+                DigestDelivery.provider == provider,
+                DigestDelivery.status == "sent",
+                DigestDelivery.created_at >= day_start_utc,
+                DigestDelivery.created_at < day_end_utc,
+            )
+        ).limit(1)
+    )
+    return existing is not None
 
 
 def _provider_error_detail(response: httpx.Response) -> str:

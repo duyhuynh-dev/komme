@@ -18,3 +18,12 @@ class DigestSendResponse(BaseModel):
     recipientEmail: str
     provider: str = "resend"
     status: str = "sent"
+
+
+class DigestBatchResponse(BaseModel):
+    ok: bool = True
+    processedUsers: int = 0
+    sent: int = 0
+    skipped: int = 0
+    failed: int = 0
+    status: str = "completed"
