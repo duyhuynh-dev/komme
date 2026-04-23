@@ -81,6 +81,9 @@ export function PulseMap({
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const mapInstanceRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
+  const userHasAdjustedViewRef = useRef(false);
+  const programmaticCameraRef = useRef(false);
+  const lastCameraKeyRef = useRef<string | null>(null);
   const [mode, setMode] = useState<MapMode>("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +119,19 @@ export function PulseMap({
 
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
         map.touchZoomRotate.disableRotation();
+        map.on("dragstart", () => {
+          if (!programmaticCameraRef.current) {
+            userHasAdjustedViewRef.current = true;
+          }
+        });
+        map.on("zoomstart", () => {
+          if (!programmaticCameraRef.current) {
+            userHasAdjustedViewRef.current = true;
+          }
+        });
+        map.on("moveend", () => {
+          programmaticCameraRef.current = false;
+        });
         map.on("load", () => {
           if (!cancelled) {
             setMode("ready");
@@ -150,6 +166,26 @@ export function PulseMap({
       return;
     }
 
+    const cameraKey = [
+      resolvedViewport.latitude.toFixed(4),
+      resolvedViewport.longitude.toFixed(4),
+      resolvedViewport.latitudeDelta.toFixed(4),
+      resolvedViewport.longitudeDelta.toFixed(4),
+      ...pins.map((pin) => `${pin.venueId}:${pin.latitude.toFixed(4)}:${pin.longitude.toFixed(4)}`)
+    ].join("|");
+
+    const shouldReframe = lastCameraKeyRef.current !== cameraKey;
+    if (shouldReframe) {
+      lastCameraKeyRef.current = cameraKey;
+      userHasAdjustedViewRef.current = false;
+    }
+
+    if (userHasAdjustedViewRef.current && !shouldReframe) {
+      return;
+    }
+
+    programmaticCameraRef.current = true;
+
     if (!pins.length) {
       map.easeTo({
         center: [resolvedViewport.longitude, resolvedViewport.latitude],
@@ -168,6 +204,7 @@ export function PulseMap({
       return;
     }
 
+    // Reframe to the active shortlist once, then let manual pan/zoom take over.
     const bounds = pins.reduce(
       (currentBounds, pin) => currentBounds.extend([pin.longitude, pin.latitude]),
       new maplibregl.LngLatBounds(
