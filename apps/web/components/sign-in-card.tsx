@@ -7,7 +7,7 @@ import { getAuthViewer, startMockRedditConnection, startRedditConnection } from 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 
-export function MagicLinkCard() {
+export function MagicLinkCard({ compact = false }: { compact?: boolean }) {
   const { isConfigured, isLoading, session, user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
@@ -20,6 +20,17 @@ export function MagicLinkCard() {
     queryKey: ["auth-viewer", user?.id ?? "demo"],
     queryFn: getAuthViewer
   });
+  const redditStatusLabel =
+    viewerQuery.data?.redditConnectionMode === "live"
+      ? "Reddit connected"
+      : viewerQuery.data?.redditConnectionMode === "sample"
+        ? "Sample profile attached"
+        : session
+          ? "Ready for Reddit"
+          : "Identity only";
+  const containerClass = compact
+    ? "rounded-[1.5rem] border border-stroke/80 bg-white/60 p-4 backdrop-blur"
+    : "rounded-[1.75rem] border border-stroke bg-white/70 p-4";
 
   const sendMagicLink = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -79,21 +90,32 @@ export function MagicLinkCard() {
   };
 
   return (
-    <div className="rounded-[1.75rem] border border-stroke bg-white/70 p-4">
-      <div className="flex items-center gap-2">
-        <Mail className="h-5 w-5 text-accent" />
-        <h3 className="text-lg font-semibold">Magic-link sign in</h3>
+    <div className={containerClass}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Mail className="h-5 w-5 text-accent" />
+          <h3 className={compact ? "text-base font-semibold" : "text-lg font-semibold"}>Magic-link sign in</h3>
+        </div>
+        {compact ? (
+          <span className="rounded-full bg-canvas px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {redditStatusLabel}
+          </span>
+        ) : null}
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+      <p className={compact ? "mt-2 text-sm leading-5 text-slate-600" : "mt-2 text-sm leading-6 text-slate-600"}>
+        {compact
+          ? "Keep account setup tucked away here, then attach Reddit when you want live personalization."
+          : message}
+      </p>
 
-      <div className="mt-3 rounded-2xl bg-canvas px-3 py-3 text-sm text-slate-700">
+      <div className={compact ? "mt-3 rounded-[1.25rem] bg-canvas/80 px-3 py-3 text-sm text-slate-700" : "mt-3 rounded-2xl bg-canvas px-3 py-3 text-sm text-slate-700"}>
         {!isConfigured ? (
           <p>Supabase browser keys are missing, so the app stays in demo mode until those env vars are added.</p>
         ) : isLoading ? (
           <p>Checking your session...</p>
         ) : session ? (
-          <div className="space-y-2">
-            <p>
+          <div className={compact ? "space-y-3" : "space-y-2"}>
+            <p className={compact ? "text-sm leading-5" : undefined}>
               Signed in as <span className="font-semibold">{user?.email}</span>
             </p>
             <p className="text-slate-500">
@@ -116,7 +138,7 @@ export function MagicLinkCard() {
         )}
       </div>
 
-      <form onSubmit={sendMagicLink} className="mt-4 grid gap-3">
+      <form onSubmit={sendMagicLink} className={compact ? "mt-4 grid gap-2" : "mt-4 grid gap-3"}>
         <input
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -131,25 +153,39 @@ export function MagicLinkCard() {
         </button>
       </form>
 
-      <button
-        type="button"
-        onClick={() => void connectReddit()}
-        disabled={!session || isConnectingReddit}
-        className="mt-4 inline-flex items-center gap-2 rounded-full border border-stroke px-4 py-2 text-sm font-medium text-slate-700"
-      >
-        <Link2 className="h-4 w-4" />
-        {isConnectingReddit ? "Redirecting to Reddit..." : "Connect Reddit"}
-      </button>
+      <div className={compact ? "mt-3 grid gap-2" : undefined}>
+        <button
+          type="button"
+          onClick={() => void connectReddit()}
+          disabled={!session || isConnectingReddit}
+          className={
+            compact
+              ? "inline-flex items-center justify-center gap-2 rounded-full border border-stroke px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+              : "mt-4 inline-flex items-center justify-center gap-2 rounded-full border border-stroke px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+          }
+        >
+          <Link2 className="h-4 w-4" />
+          {isConnectingReddit ? "Redirecting to Reddit..." : "Connect Reddit"}
+        </button>
 
-      <button
-        type="button"
-        onClick={() => void connectSampleProfile()}
-        disabled={!session || isLoadingSample}
-        className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        <Link2 className="h-4 w-4" />
-        {isLoadingSample ? "Loading sample profile..." : "Load sample Reddit profile"}
-      </button>
+        <button
+          type="button"
+          onClick={() => void connectSampleProfile()}
+          disabled={!session || isLoadingSample}
+          className={
+            compact
+              ? "inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              : "mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          }
+        >
+          <Link2 className="h-4 w-4" />
+          {isLoadingSample ? "Loading sample profile..." : "Load sample Reddit profile"}
+        </button>
+      </div>
+
+      {compact ? (
+        <p className="mt-3 text-xs leading-5 text-slate-500">{message}</p>
+      ) : null}
     </div>
   );
 }

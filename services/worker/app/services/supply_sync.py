@@ -25,6 +25,7 @@ async def collect_supply_candidates() -> list[CandidateEvent]:
         "curated_venues": CuratedVenueConnector(),
     }
     seen_keys: set[str] = set()
+    seen_fingerprints: set[str] = set()
     candidates: list[CandidateEvent] = []
 
     for query in build_daily_supply_queries():
@@ -33,12 +34,21 @@ async def collect_supply_candidates() -> list[CandidateEvent]:
             continue
 
         for candidate in await connector.search(query):
-            if candidate.source_event_key in seen_keys:
+            fingerprint = _dedupe_fingerprint(candidate)
+            if candidate.source_event_key in seen_keys or fingerprint in seen_fingerprints:
                 continue
             seen_keys.add(candidate.source_event_key)
+            seen_fingerprints.add(fingerprint)
             candidates.append(candidate)
 
     return candidates
+
+
+def _dedupe_fingerprint(candidate: CandidateEvent) -> str:
+    normalized_title = " ".join(candidate.title.lower().split())
+    normalized_venue = " ".join(candidate.venue_name.lower().split())
+    starts_on = candidate.starts_at[:10]
+    return f"{normalized_venue}|{normalized_title}|{starts_on}"
 
 
 async def sync_supply_to_api(candidates: list[CandidateEvent]) -> dict:

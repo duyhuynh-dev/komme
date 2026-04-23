@@ -23,7 +23,7 @@ const defaultConstraint = {
   socialMode: "either" as const
 };
 
-export function LocationOnboardingCard() {
+export function LocationOnboardingCard({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<string>("Use your current location for a better map center, or save a ZIP fallback.");
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -77,24 +77,37 @@ export function LocationOnboardingCard() {
   };
 
   return (
-    <div className="rounded-[1.75rem] border border-stroke bg-white/70 p-4">
-      <div className="flex items-center gap-2">
-        <MapPinned className="h-5 w-5 text-accent" />
-        <h3 className="text-lg font-semibold">Location anchor</h3>
+    <div className={compact ? "rounded-[1.5rem] border border-stroke/80 bg-white/60 p-4 backdrop-blur" : "rounded-[1.75rem] border border-stroke bg-white/70 p-4"}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <MapPinned className="h-5 w-5 text-accent" />
+          <h3 className={compact ? "text-base font-semibold" : "text-lg font-semibold"}>Location anchor</h3>
+        </div>
+        {compact ? (
+          <button
+            type="button"
+            onClick={askForLocation}
+            className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white"
+          >
+            Use live
+          </button>
+        ) : null}
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{status}</p>
+      <p className={compact ? "mt-2 text-sm leading-5 text-slate-600" : "mt-2 text-sm leading-6 text-slate-600"}>{status}</p>
 
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={askForLocation}
-          className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white"
-        >
-          Use current location
-        </button>
-      </div>
+      {!compact ? (
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={askForLocation}
+            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Use current location
+          </button>
+        </div>
+      ) : null}
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="mt-4 grid gap-3">
+      <form onSubmit={form.handleSubmit(onSubmit)} className={compact ? "mt-4 grid gap-3 sm:grid-cols-2" : "mt-4 grid gap-3"}>
         <label className="grid gap-1">
           <span className="text-sm font-medium text-slate-700">ZIP code</span>
           <input
@@ -102,14 +115,7 @@ export function LocationOnboardingCard() {
             className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
           />
         </label>
-        <label className="grid gap-1">
-          <span className="text-sm font-medium text-slate-700">Neighborhood</span>
-          <input
-            {...form.register("neighborhood")}
-            className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="grid gap-1">
+        <label className={compact ? "grid gap-1 sm:col-span-1" : "grid gap-1"}>
           <span className="text-sm font-medium text-slate-700">Radius in miles</span>
           <input
             type="number"
@@ -117,12 +123,18 @@ export function LocationOnboardingCard() {
             className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
           />
         </label>
+        <label className={compact ? "grid gap-1 sm:col-span-2" : "grid gap-1"}>
+          <span className="text-sm font-medium text-slate-700">Neighborhood</span>
+          <input
+            {...form.register("neighborhood")}
+            className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
+          />
+        </label>
 
-        <button type="submit" className="rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium">
+        <button type="submit" className={compact ? "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium sm:col-span-2" : "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium"}>
           Save planning anchor
         </button>
       </form>
     </div>
   );
 }
-

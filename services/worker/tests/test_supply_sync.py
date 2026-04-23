@@ -44,3 +44,42 @@ async def test_collect_supply_candidates_dedupes_by_source_event_key(monkeypatch
     candidates = await collect_supply_candidates()
     assert len(candidates) == 1
     assert candidates[0].source_event_key == "shared-event"
+
+
+@pytest.mark.asyncio
+async def test_collect_supply_candidates_dedupes_by_normalized_event_fingerprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeConnector:
+        def __init__(self, source_name: str, title: str, event_key: str) -> None:
+            self.source_name = source_name
+            self.title = title
+            self.event_key = event_key
+
+        async def search(self, query: RetrievalQuery) -> list[CandidateEvent]:
+            return [
+                CandidateEvent(
+                    source=self.source_name,
+                    source_event_key=self.event_key,
+                    venue_name="Public Records",
+                    neighborhood="Gowanus",
+                    address="233 Butler St, Brooklyn, NY",
+                    title=self.title,
+                    starts_at="2026-04-25T23:30:00+00:00",
+                    latitude=40.6784,
+                    longitude=-73.9896,
+                )
+            ]
+
+    monkeypatch.setattr(
+        "app.services.supply_sync.TicketmasterConnector",
+        lambda: FakeConnector("ticketmaster", "Late Night Warehouse Textures", "ticketmaster-1"),
+    )
+    monkeypatch.setattr(
+        "app.services.supply_sync.CuratedVenueConnector",
+        lambda: FakeConnector("curated_venues", "Late Night Warehouse Textures", "curated-1"),
+    )
+
+    candidates = await collect_supply_candidates()
+    assert len(candidates) == 1
+    assert candidates[0].source_event_key in {"ticketmaster-1", "curated-1"}

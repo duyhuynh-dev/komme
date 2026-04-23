@@ -116,43 +116,71 @@ export function PulseShell() {
   return (
     <main className="min-h-screen px-4 py-4 md:px-6 md:py-6">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-        <section className="grid gap-4 lg:grid-cols-[1.1fr_1.6fr]">
+        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-[2rem] border border-stroke/80 bg-card/80 p-6 shadow-float backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
+            <div className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
               <div>
-                <span className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent">
-                  {viewerQuery.data?.isAuthenticated ? "Signed-In Beta" : "Private Beta Demo"}
-                </span>
-                <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">
-                  Your Reddit taste, turned into a city map.
-                </h1>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                  Pulse ranks NYC venues by how well their upcoming events match your current interests, then
-                  highlights the best places directly on the map.
-                </p>
-                <p className="mt-3 text-sm text-slate-500">
-                  {viewerQuery.data?.isAuthenticated
-                    ? `Personalized for ${viewerQuery.data.email}.`
-                    : "Demo mode is active until you sign in with Supabase magic link."}
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-accent">
+                      {viewerQuery.data?.isAuthenticated ? "Signed-In Beta" : "Private Beta Demo"}
+                    </span>
+                    <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">
+                      Your Reddit taste, turned into a city map.
+                    </h1>
+                    <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+                      Pulse ranks NYC venues by how well their upcoming events match your current interests, then
+                      highlights the best places directly on the map.
+                    </p>
+                    <p className="mt-3 text-sm text-slate-500">
+                      {viewerQuery.data?.isAuthenticated
+                        ? `Personalized for ${viewerQuery.data.email}.`
+                        : "Demo mode is active until you sign in with Supabase magic link."}
+                    </p>
+                  </div>
+                  <Link
+                    href="/archive"
+                    className="hidden rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white lg:inline-flex"
+                  >
+                    Weekly archive
+                  </Link>
+                </div>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <StatCard icon={MapPinned} label="Map-first picks" value="3-5 primary spots" />
+                  <StatCard icon={Compass} label="Travel aware" value="Approx walk + transit" />
+                  <StatCard icon={CalendarDays} label="Weekly cadence" value="Tuesday 9 AM digest" />
+                </div>
+
+                <div className="mt-6 rounded-[1.75rem] border border-stroke/70 bg-white/45 px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Recommendation Lens</p>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                    Pulse balances durable taste, your current edits, and practical city constraints so the map stays
+                    personal without turning setup into the main event.
+                  </p>
+                </div>
               </div>
-              <Link
-                href="/archive"
-                className="hidden rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white lg:inline-flex"
-              >
-                Weekly archive
-              </Link>
-            </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <StatCard icon={MapPinned} label="Map-first picks" value="3-5 primary spots" />
-              <StatCard icon={Compass} label="Travel aware" value="Approx walk + transit" />
-              <StatCard icon={CalendarDays} label="Weekly cadence" value="Tuesday 9 AM digest" />
-            </div>
+              <aside className="rounded-[1.75rem] border border-stroke/80 bg-white/50 p-4 shadow-[0_18px_36px_rgba(17,24,39,0.08)] backdrop-blur">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Setup Rail</p>
+                    <h2 className="mt-1 text-2xl font-semibold">Personalize quietly</h2>
+                  </div>
+                  <span className="rounded-full bg-accentSoft px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+                    {viewerQuery.data?.isAuthenticated ? "Live account" : "Ready when you are"}
+                  </span>
+                </div>
 
-            <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <LocationOnboardingCard />
-              <MagicLinkCard />
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Keep identity and location setup off to the side, then let the map stay center stage.
+                </p>
+
+                <div className="mt-4 space-y-4">
+                  <MagicLinkCard compact />
+                  <LocationOnboardingCard compact />
+                </div>
+              </aside>
             </div>
           </div>
 
