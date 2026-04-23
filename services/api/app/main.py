@@ -18,7 +18,7 @@ settings = get_settings()
 app = FastAPI(title="Pulse API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.web_app_url],
+    allow_origins=settings.allowed_web_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
