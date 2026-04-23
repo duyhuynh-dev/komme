@@ -127,3 +127,10 @@ export interface DigestSendResponse {
   provider: string;
   status: string;
 }
+
+export interface EmailPreferences {
+  weeklyDigestEnabled: boolean;
+  digestDay: string;
+  digestTimeLocal: string;
+  timezone: string;
+}

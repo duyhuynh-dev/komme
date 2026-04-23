@@ -72,4 +72,3 @@ class EmailPreference(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     digest_time_local: Mapped[str] = mapped_column(String(16), default="09:00")
 
     user = relationship("User", back_populates="email_preferences")
-

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.user import User
+from app.models.user import EmailPreference, User
 
 
 @dataclass
@@ -33,6 +33,15 @@ async def get_or_create_user(
 
     user = User(email=email, display_name=display_name or "Pulse Beta User")
     session.add(user)
+    await session.flush()
+    session.add(
+        EmailPreference(
+            user_id=user.id,
+            weekly_digest_enabled=True,
+            digest_day="Tuesday",
+            digest_time_local="09:00",
+        )
+    )
     await session.commit()
     await session.refresh(user)
     return user

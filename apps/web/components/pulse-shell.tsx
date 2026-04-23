@@ -7,6 +7,7 @@ import { MapPinned, Compass, CalendarDays } from "lucide-react";
 import {
   sendDigestPreview,
   getAuthViewer,
+  getEmailPreferences,
   getInterests,
   getMapRecommendations,
   patchInterests,
@@ -16,11 +17,13 @@ import {
 } from "@/lib/api";
 import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
+import { DigestSettingsCard } from "@/components/digest-settings-card";
 import { InterestProfilePanel } from "@/components/interest-profile-panel";
 import { MagicLinkCard } from "@/components/sign-in-card";
 import { LocationOnboardingCard } from "@/components/location-onboarding-card";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
+import { formatDigestTime } from "@/lib/utils";
 
 export function PulseShell() {
   const { user } = useAuth();
@@ -34,6 +37,11 @@ export function PulseShell() {
     queryFn: getAuthViewer
   });
   const isAuthenticated = Boolean(viewerQuery.data?.isAuthenticated);
+  const emailPreferencesQuery = useQuery({
+    queryKey: ["email-preferences", identityKey],
+    queryFn: getEmailPreferences,
+    enabled: isAuthenticated,
+  });
 
   const mapQuery = useQuery({
     queryKey: ["map-recommendations", identityKey],
@@ -141,6 +149,13 @@ export function PulseShell() {
     toggleTopicMutation.mutate(topics);
   };
 
+  const cadenceValue =
+    isAuthenticated && emailPreferencesQuery.data
+      ? emailPreferencesQuery.data.weeklyDigestEnabled
+        ? `${emailPreferencesQuery.data.digestDay} ${formatDigestTime(emailPreferencesQuery.data.digestTimeLocal)} digest`
+        : "Digest paused"
+      : "Tuesday 9 AM digest";
+
   return (
     <main className="min-h-screen px-4 py-4 md:px-6 md:py-6">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
@@ -177,7 +192,7 @@ export function PulseShell() {
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
                   <StatCard icon={MapPinned} label="Map-first picks" value="3-5 primary spots" />
                   <StatCard icon={Compass} label="Travel aware" value="Approx walk + transit" />
-                  <StatCard icon={CalendarDays} label="Weekly cadence" value="Tuesday 9 AM digest" />
+                  <StatCard icon={CalendarDays} label="Weekly cadence" value={cadenceValue} />
                 </div>
 
                 <div className="mt-6 rounded-[1.75rem] border border-stroke/70 bg-white/45 px-4 py-4">
@@ -212,6 +227,7 @@ export function PulseShell() {
                   {isAuthenticated ? (
                     <>
                       <LocationOnboardingCard compact />
+                      <DigestSettingsCard compact />
                       <MagicLinkCard compact />
                     </>
                   ) : (

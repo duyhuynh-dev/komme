@@ -35,3 +35,16 @@ class AnchorPayload(BaseModel):
     longitude: float | None = None
     source: str
 
+
+class EmailPreferenceResponse(BaseModel):
+    weeklyDigestEnabled: bool = True
+    digestDay: str = "Tuesday"
+    digestTimeLocal: str = "09:00"
+    timezone: str = "America/New_York"
+
+
+class EmailPreferencePayload(BaseModel):
+    weeklyDigestEnabled: bool = True
+    digestDay: str = "Tuesday"
+    digestTimeLocal: str = "09:00"
+    timezone: str | None = None

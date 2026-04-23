@@ -16,7 +16,14 @@ from app.schemas.common import OkResponse, SupplySyncResponse
 from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
 from app.schemas.maps import MapTokenResponse
-from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
+from app.schemas.profile import (
+    AnchorPayload,
+    EmailPreferencePayload,
+    EmailPreferenceResponse,
+    InterestListResponse,
+    InterestListUpdate,
+    UserConstraintPayload,
+)
 from app.schemas.recommendations import ArchiveResponse, FeedbackPayload, RecommendationsMapResponse
 from app.services.apple_maps import build_mapkit_token
 from app.services.auth import (
@@ -28,7 +35,7 @@ from app.services.auth import (
 )
 from app.services.digest import build_digest_preview, send_digest_preview, send_due_weekly_digests
 from app.services.ingestion import upsert_ingested_candidates
-from app.services.profile import list_interests, update_interests
+from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
@@ -219,6 +226,23 @@ async def profile_interests_update(
 ) -> InterestListResponse:
     topics = await update_interests(session, user, payload.topics)
     return InterestListResponse(topics=topics)
+
+
+@router.get("/profile/email-preferences", response_model=EmailPreferenceResponse)
+async def profile_email_preferences(
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> EmailPreferenceResponse:
+    return await get_email_preferences(session, identity.user)
+
+
+@router.patch("/profile/email-preferences", response_model=EmailPreferenceResponse)
+async def profile_email_preferences_update(
+    payload: EmailPreferencePayload,
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> EmailPreferenceResponse:
+    return await update_email_preferences(session, identity.user, payload)
 
 
 @router.post("/profile/anchor", response_model=OkResponse)

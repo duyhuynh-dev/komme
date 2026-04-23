@@ -3,6 +3,7 @@ import type {
   AuthViewer,
   DigestPreviewResponse,
   DigestSendResponse,
+  EmailPreferences,
   FeedbackReason,
   InterestTopic,
   LocationAnchorPayload,
@@ -81,6 +82,17 @@ export function getDigestPreview() {
 export function sendDigestPreview() {
   return request<DigestSendResponse>("/v1/digest/send-preview", {
     method: "POST"
+  });
+}
+
+export function getEmailPreferences() {
+  return request<EmailPreferences>("/v1/profile/email-preferences");
+}
+
+export function saveEmailPreferences(payload: EmailPreferences) {
+  return request<EmailPreferences>("/v1/profile/email-preferences", {
+    method: "PATCH",
+    body: JSON.stringify(payload)
   });
 }
 
