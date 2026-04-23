@@ -41,6 +41,7 @@ function zoomFromViewport(viewport: MapViewport) {
 function createMarkerElement(pin: MapVenuePin, selectedVenueId: string | null, onSelectVenue: (venueId: string) => void) {
   const markerElement = document.createElement("button");
   markerElement.type = "button";
+  markerElement.title = pin.venueName;
   markerElement.className = [
     "pulse-map-marker",
     `band-${pin.scoreBand}`,
@@ -52,12 +53,7 @@ function createMarkerElement(pin: MapVenuePin, selectedVenueId: string | null, o
   const dotElement = document.createElement("span");
   dotElement.className = "pulse-map-marker__dot";
   dotElement.setAttribute("aria-hidden", "true");
-
-  const labelElement = document.createElement("span");
-  labelElement.className = "pulse-map-marker__label";
-  labelElement.textContent = pin.venueName;
-
-  markerElement.append(dotElement, labelElement);
+  markerElement.append(dotElement);
   markerElement.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();

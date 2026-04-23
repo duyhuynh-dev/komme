@@ -34,24 +34,19 @@ body {
 .pulse-map-marker {
   display: inline-flex;
   align-items: center;
-  gap: 0.38rem;
-  border: 1px solid rgba(226, 232, 240, 0.95);
+  justify-content: center;
+  border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+  background: transparent;
+  box-shadow: none;
   color: #0f172a;
   cursor: pointer;
-  padding: 0.24rem 0.32rem 0.24rem 0.24rem;
+  padding: 0;
   transition:
     box-shadow 160ms ease,
     border-color 160ms ease,
     background-color 160ms ease,
-    transform 160ms ease;
-}
-
-.pulse-map-marker:hover {
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
-  transform: translateY(-1px);
+    opacity 160ms ease;
 }
 
 .pulse-map-marker:focus-visible {
@@ -60,64 +55,43 @@ body {
 }
 
 .pulse-map-marker.is-selected {
-  border-color: rgba(15, 118, 110, 0.4);
-  background: rgba(240, 253, 250, 0.98);
-  box-shadow:
-    0 20px 44px rgba(15, 118, 110, 0.18),
-    0 0 0 4px rgba(15, 118, 110, 0.12);
-  padding-right: 0.76rem;
+  opacity: 1;
 }
 
 .pulse-map-marker__dot {
-  height: 1.05rem;
-  width: 1.05rem;
+  height: 1.22rem;
+  width: 1.22rem;
   border-radius: 999px;
   flex: 0 0 auto;
-  position: relative;
-  border: 2px solid rgba(255, 255, 255, 0.96);
-  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.12);
-}
-
-.pulse-map-marker__label {
-  display: inline-block;
-  max-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: max-width 180ms ease, opacity 140ms ease;
-}
-
-.pulse-map-marker:hover .pulse-map-marker__label {
-  max-width: 10rem;
-  opacity: 1;
+  border: 3px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(148, 163, 184, 0.18);
 }
 
 .pulse-map-marker.band-high .pulse-map-marker__dot {
   background: linear-gradient(135deg, #164e63, #0f766e);
-  height: 1.35rem;
-  width: 1.35rem;
+  height: 1.38rem;
+  width: 1.38rem;
 }
 
 .pulse-map-marker.band-medium .pulse-map-marker__dot {
   background: linear-gradient(135deg, #ec9f30, #f97316);
-  height: 1.12rem;
-  width: 1.12rem;
+  height: 1.22rem;
+  width: 1.22rem;
 }
 
 .pulse-map-marker.band-low .pulse-map-marker__dot {
   background: linear-gradient(135deg, #94a3b8, #64748b);
-  height: 0.94rem;
-  width: 0.94rem;
-  opacity: 0.92;
+  height: 1.06rem;
+  width: 1.06rem;
+  opacity: 0.94;
 }
 
 .pulse-map-marker.is-selected .pulse-map-marker__dot {
-  height: 1.5rem;
-  width: 1.5rem;
+  box-shadow:
+    0 14px 32px rgba(15, 23, 42, 0.18),
+    0 0 0 6px rgba(15, 118, 110, 0.14);
 }
 
 .maplibregl-ctrl-group {
