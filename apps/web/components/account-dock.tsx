@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -10,12 +10,11 @@ import {
   LogOut,
   Mail,
   ShieldCheck,
-  UserRound,
-  X,
 } from "lucide-react";
 import { getAuthViewer, startMockRedditConnection, startRedditConnection } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
+import { TopbarSheet } from "@/components/topbar-sheet";
 
 function statusCopy(connectionMode: "none" | "live" | "sample", isSignedIn: boolean) {
   if (connectionMode === "live") {
@@ -51,8 +50,6 @@ export function AccountDock() {
   const [showSwitchForm, setShowSwitchForm] = useState(false);
   const [isConnectingReddit, setIsConnectingReddit] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const supabase = getSupabaseBrowserClient();
 
   const viewerQuery = useQuery({
@@ -63,26 +60,6 @@ export function AccountDock() {
   const isSignedIn = Boolean(session && !isLoading);
   const connectionMode = viewerQuery.data?.redditConnectionMode ?? "none";
   const status = statusCopy(connectionMode, isSignedIn);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) {
-        return;
-      }
-      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) {
-        return;
-      }
-      setOpen(false);
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
 
   const sendMagicLink = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -142,38 +119,18 @@ export function AccountDock() {
   };
 
   return (
-    <div className="relative z-[70]">
+    <>
       <button
-        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-11 items-center gap-2 rounded-full border border-stroke bg-white/72 px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-white"
+        className="inline-flex h-11 items-center gap-2 rounded-full border border-stroke bg-white/70 px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-white"
       >
-        {isSignedIn ? <UserRound className="h-4 w-4 shrink-0 text-accent" /> : <Mail className="h-4 w-4 shrink-0 text-accent" />}
         <span className="text-sm font-medium text-slate-900">Profile</span>
         {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
       </button>
 
-      {open ? (
-        <div
-          ref={panelRef}
-          className="absolute right-0 top-[calc(100%+0.85rem)] z-[80] w-[min(23rem,calc(100vw-2rem))] rounded-[1.75rem] border border-stroke/80 bg-white/96 p-4 shadow-[0_32px_70px_rgba(15,23,42,0.2)] backdrop-blur"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Account</p>
-              <h3 className="mt-1 text-xl font-semibold text-slate-900">{isSignedIn ? "Profile" : "Sign in quietly"}</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stroke bg-white text-slate-500 transition hover:text-slate-900"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="mt-4 rounded-[1.35rem] border border-stroke/80 bg-canvas/70 p-4">
+      <TopbarSheet open={open} onClose={() => setOpen(false)} title="Profile" eyebrow="Account" widthClass="max-w-[26rem]">
+        <div className="rounded-[1.35rem] border border-stroke/80 bg-canvas/70 p-4">
             {isConfigured ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
@@ -200,92 +157,91 @@ export function AccountDock() {
                 Supabase browser keys are missing, so the app stays in demo mode until those env vars are added.
               </p>
             )}
-          </div>
-
-          {isConfigured ? (
-            <>
-              {isSignedIn ? (
-                <div className="mt-4 space-y-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                    {connectionMode !== "live" ? (
-                      <button
-                        type="button"
-                        onClick={() => void connectReddit()}
-                        disabled={isConnectingReddit}
-                        className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                      >
-                        <Link2 className="h-4 w-4" />
-                        {isConnectingReddit ? "Redirecting..." : connectionMode === "sample" ? "Connect live Reddit" : "Connect Reddit"}
-                      </button>
-                    ) : (
-                      <div className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
-                        Live Reddit connected
-                      </div>
-                    )}
-
-                    {connectionMode === "none" ? (
-                      <button
-                        type="button"
-                        onClick={() => void connectSampleProfile()}
-                        disabled={isLoadingSample}
-                        className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-60"
-                      >
-                        <Link2 className="h-4 w-4" />
-                        {isLoadingSample ? "Loading sample..." : "Use sample profile"}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stroke/80 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowSwitchForm((value) => !value)}
-                      className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
-                    >
-                      {showSwitchForm ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      Use another email
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void signOut()}
-                      className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign out
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {!isSignedIn || showSwitchForm ? (
-                <form
-                  onSubmit={sendMagicLink}
-                  className="mt-4 grid gap-2 rounded-[1.25rem] border border-dashed border-stroke bg-white/70 p-3"
-                >
-                  {isSignedIn ? (
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Switch account</p>
-                  ) : (
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Magic-link sign in</p>
-                  )}
-                  <input
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                    className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
-                  />
-                  <button type="submit" className="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">
-                    {isSignedIn ? "Send magic link to another email" : "Send magic link"}
-                  </button>
-                </form>
-              ) : null}
-            </>
-          ) : null}
-
-          <p className="mt-4 text-xs leading-5 text-slate-500">{message}</p>
         </div>
-      ) : null}
-    </div>
+
+        {isConfigured ? (
+          <>
+            {isSignedIn ? (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {connectionMode !== "live" ? (
+                    <button
+                      type="button"
+                      onClick={() => void connectReddit()}
+                      disabled={isConnectingReddit}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {isConnectingReddit ? "Redirecting..." : connectionMode === "sample" ? "Connect live Reddit" : "Connect Reddit"}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
+                      Live Reddit connected
+                    </div>
+                  )}
+
+                  {connectionMode === "none" ? (
+                    <button
+                      type="button"
+                      onClick={() => void connectSampleProfile()}
+                      disabled={isLoadingSample}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-60"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {isLoadingSample ? "Loading sample..." : "Use sample profile"}
+                    </button>
+                  ) : null}
+                  </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stroke/80 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSwitchForm((value) => !value)}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+                  >
+                    {showSwitchForm ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    Use another email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!isSignedIn || showSwitchForm ? (
+              <form
+                onSubmit={sendMagicLink}
+                className="mt-4 grid gap-2 rounded-[1.25rem] border border-dashed border-stroke bg-white/70 p-3"
+              >
+                {isSignedIn ? (
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Switch account</p>
+                ) : (
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Magic-link sign in</p>
+                )}
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
+                />
+                <button type="submit" className="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">
+                  {isSignedIn ? "Send magic link to another email" : "Send magic link"}
+                </button>
+              </form>
+            ) : null}
+          </>
+        ) : null}
+
+        <p className="mt-4 text-xs leading-5 text-slate-500">{message}</p>
+      </TopbarSheet>
+    </>
   );
 }
