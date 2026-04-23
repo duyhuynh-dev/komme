@@ -93,7 +93,7 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
           </button>
         ) : null}
       </div>
-      <p className={compact ? "mt-2 text-sm leading-5 text-slate-600" : "mt-2 text-sm leading-6 text-slate-600"}>{status}</p>
+      <p className={compact ? "mt-2 text-xs leading-5 text-slate-500" : "mt-2 text-sm leading-6 text-slate-600"}>{status}</p>
 
       {!compact ? (
         <div className="mt-4 flex gap-2">
@@ -109,14 +109,14 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
 
       <form onSubmit={form.handleSubmit(onSubmit)} className={compact ? "mt-4 grid gap-3 sm:grid-cols-2" : "mt-4 grid gap-3"}>
         <label className="grid gap-1">
-          <span className="text-sm font-medium text-slate-700">ZIP code</span>
+          <span className={compact ? "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" : "text-sm font-medium text-slate-700"}>ZIP code</span>
           <input
             {...form.register("zipCode")}
             className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
           />
         </label>
         <label className={compact ? "grid gap-1 sm:col-span-1" : "grid gap-1"}>
-          <span className="text-sm font-medium text-slate-700">Radius in miles</span>
+          <span className={compact ? "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" : "text-sm font-medium text-slate-700"}>Radius in miles</span>
           <input
             type="number"
             {...form.register("radiusMiles")}
@@ -124,14 +124,14 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
           />
         </label>
         <label className={compact ? "grid gap-1 sm:col-span-2" : "grid gap-1"}>
-          <span className="text-sm font-medium text-slate-700">Neighborhood</span>
+          <span className={compact ? "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" : "text-sm font-medium text-slate-700"}>Neighborhood</span>
           <input
             {...form.register("neighborhood")}
             className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
           />
         </label>
 
-        <button type="submit" className={compact ? "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium sm:col-span-2" : "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium"}>
+        <button type="submit" className={compact ? "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium shadow-sm sm:col-span-2" : "rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium"}>
           Save planning anchor
         </button>
       </form>

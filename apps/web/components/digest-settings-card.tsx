@@ -97,11 +97,11 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
         </span>
       </div>
 
-      <p className={compact ? "mt-2 text-sm leading-5 text-slate-600" : "mt-2 text-sm leading-6 text-slate-600"}>
+      <p className={compact ? "mt-2 text-xs leading-5 text-slate-500" : "mt-2 text-sm leading-6 text-slate-600"}>
         Keep the shortlist on autopilot without putting the email workflow in the middle of the main map experience.
       </p>
 
-      <p className="mt-3 rounded-[1.15rem] bg-canvas/80 px-3 py-3 text-sm leading-6 text-slate-600">{status}</p>
+      <p className={compact ? "mt-3 rounded-[1.15rem] bg-canvas/80 px-3 py-2.5 text-sm leading-6 text-slate-600" : "mt-3 rounded-[1.15rem] bg-canvas/80 px-3 py-3 text-sm leading-6 text-slate-600"}>{status}</p>
 
       <form
         onSubmit={form.handleSubmit((nextValues) =>
@@ -112,23 +112,25 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
         )}
         className={compact ? "mt-4 grid gap-3" : "mt-4 grid gap-4"}
       >
-        <label className="flex items-start gap-3 rounded-[1.15rem] border border-stroke bg-white/70 px-3 py-3">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-stroke text-accent focus:ring-accent"
-            {...form.register("weeklyDigestEnabled")}
-          />
+        <label className="flex items-center justify-between gap-3 rounded-[1.15rem] border border-stroke bg-white/70 px-3 py-3">
           <span>
             <span className="block text-sm font-medium text-slate-800">Email the weekly shortlist automatically</span>
-            <span className="mt-1 block text-xs leading-5 text-slate-500">
-              Pulse checks the schedule every 15 minutes, then sends the latest completed recommendation run when your window opens.
-            </span>
+            {!compact ? (
+              <span className="mt-1 block text-xs leading-5 text-slate-500">
+                Pulse checks the schedule every 15 minutes, then sends the latest completed recommendation run when your window opens.
+              </span>
+            ) : null}
           </span>
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-stroke text-accent focus:ring-accent"
+            {...form.register("weeklyDigestEnabled")}
+          />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1">
-            <span className="text-sm font-medium text-slate-700">Delivery day</span>
+            <span className={compact ? "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" : "text-sm font-medium text-slate-700"}>Delivery day</span>
             <select
               {...form.register("digestDay")}
               disabled={!values.weeklyDigestEnabled}
@@ -143,7 +145,7 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
           </label>
 
           <label className="grid gap-1">
-            <span className="text-sm font-medium text-slate-700">Delivery time</span>
+            <span className={compact ? "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" : "text-sm font-medium text-slate-700"}>Delivery time</span>
             <input
               type="time"
               {...form.register("digestTimeLocal")}
@@ -160,7 +162,7 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
           <button
             type="submit"
             disabled={saveMutation.isPending || preferencesQuery.isLoading}
-            className="rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-canvas disabled:opacity-60"
+            className="rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-canvas disabled:opacity-60"
           >
             {saveMutation.isPending ? "Saving..." : "Save digest timing"}
           </button>
