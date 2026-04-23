@@ -1,5 +1,13 @@
+import httpx
+
 from app.schemas.recommendations import RecommendationReason, TravelEstimate, VenueRecommendationCard
-from app.services.digest import _digest_preheader, _digest_subject, _render_digest_html, _render_digest_text
+from app.services.digest import (
+    _digest_preheader,
+    _digest_subject,
+    _provider_error_detail,
+    _render_digest_html,
+    _render_digest_text,
+)
 from app.models.user import User
 
 
@@ -59,3 +67,14 @@ def test_digest_renderers_include_key_event_details() -> None:
     assert "Open the live map" in html
     assert "Pulse Weekly: 1 NYC picks for this week" in text
     assert "Travel: 18 min walk, 12 min transit" in text
+
+
+def test_provider_error_detail_prefers_json_message() -> None:
+    request = httpx.Request("POST", "https://api.resend.com/emails")
+    response = httpx.Response(
+        status_code=422,
+        request=request,
+        json={"message": "The sender domain is not verified."},
+    )
+
+    assert _provider_error_detail(response) == "The sender domain is not verified."

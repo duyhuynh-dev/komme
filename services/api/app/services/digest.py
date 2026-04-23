@@ -79,10 +79,19 @@ async def send_digest_preview(session: AsyncSession, user: User) -> DigestSendRe
                 },
             )
             response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        delivery.status = "failed"
+        await session.commit()
+        provider_detail = _provider_error_detail(error.response)
+        raise RuntimeError(
+            f"Pulse could not send the digest preview. {provider_detail}"
+        ) from error
     except httpx.HTTPError as error:
         delivery.status = "failed"
         await session.commit()
-        raise RuntimeError("Pulse could not send the digest preview. Check your Resend configuration and try again.") from error
+        raise RuntimeError(
+            "Pulse could not send the digest preview because Resend was unreachable. Check your network and try again."
+        ) from error
 
     delivery.status = "sent"
     await session.commit()
@@ -197,3 +206,22 @@ def _format_event_time(value: str) -> str:
     except ValueError:
         return value
     return parsed.strftime("%a, %b %-d · %-I:%M %p")
+
+
+def _provider_error_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("message", "error", "detail"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    text = response.text.strip()
+    if text:
+        return text
+
+    return f"Resend returned status {response.status_code}. Check your sender/domain configuration and try again."
