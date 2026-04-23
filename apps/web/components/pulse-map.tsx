@@ -1,20 +1,69 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { load } from "@apple/mapkit-loader";
-import { MapPin } from "lucide-react";
-import { getMapToken } from "@/lib/api";
+import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker, StyleSpecification } from "maplibre-gl";
 import type { MapVenuePin, MapViewport } from "@/lib/types";
 
-type MapKitRuntime = Awaited<ReturnType<typeof load>>;
-type MapKitMap = InstanceType<MapKitRuntime["Map"]>;
-type MapKitAnnotation = InstanceType<MapKitRuntime["MarkerAnnotation"]>;
-type MapMode = "loading" | "apple" | "fallback" | "error";
+type MapLibreModule = typeof import("maplibre-gl");
+type MapMode = "loading" | "ready" | "error";
 
-function buildRegion(mapkit: MapKitRuntime, viewport: MapViewport) {
-  const center = new mapkit.Coordinate(viewport.latitude, viewport.longitude);
-  const span = new mapkit.CoordinateSpan(viewport.latitudeDelta, viewport.longitudeDelta);
-  return new mapkit.CoordinateRegion(center, span);
+const NYC_DEFAULT_VIEWPORT: MapViewport = {
+  latitude: 40.73061,
+  longitude: -73.935242,
+  latitudeDelta: 0.22,
+  longitudeDelta: 0.22
+};
+
+const OPEN_STREET_MAP_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    "openstreetmap-tiles": {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "&copy; OpenStreetMap contributors"
+    }
+  },
+  layers: [
+    {
+      id: "openstreetmap-layer",
+      type: "raster",
+      source: "openstreetmap-tiles"
+    }
+  ]
+};
+
+function zoomFromViewport(viewport: MapViewport) {
+  const normalizedLongitudeDelta = Math.max(viewport.longitudeDelta, 0.015);
+  return Math.min(15.5, Math.max(10.25, Math.log2(360 / normalizedLongitudeDelta)));
+}
+
+function createMarkerElement(pin: MapVenuePin, selectedVenueId: string | null, onSelectVenue: (venueId: string) => void) {
+  const markerElement = document.createElement("button");
+  markerElement.type = "button";
+  markerElement.className = [
+    "pulse-map-marker",
+    `band-${pin.scoreBand}`,
+    pin.venueId === selectedVenueId ? "is-selected" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  markerElement.setAttribute("aria-label", `Select ${pin.venueName}`);
+  const dotElement = document.createElement("span");
+  dotElement.className = "pulse-map-marker__dot";
+  dotElement.setAttribute("aria-hidden", "true");
+
+  const labelElement = document.createElement("span");
+  labelElement.className = "pulse-map-marker__label";
+  labelElement.textContent = pin.venueName;
+
+  markerElement.append(dotElement, labelElement);
+  markerElement.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectVenue(pin.venueId);
+  });
+  return markerElement;
 }
 
 export function PulseMap({
@@ -29,20 +78,14 @@ export function PulseMap({
   onSelectVenue: (venueId: string) => void;
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapkitRef = useRef<MapKitRuntime | null>(null);
-  const mapInstanceRef = useRef<MapKitMap | null>(null);
-  const annotationsRef = useRef<MapKitAnnotation[]>([]);
+  const maplibreRef = useRef<MapLibreModule | null>(null);
+  const mapInstanceRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<MapLibreMarker[]>([]);
   const [mode, setMode] = useState<MapMode>("loading");
   const [error, setError] = useState<string | null>(null);
 
   const resolvedViewport = useMemo<MapViewport>(
-    () =>
-      viewport ?? {
-        latitude: 40.73061,
-        longitude: -73.935242,
-        latitudeDelta: 0.22,
-        longitudeDelta: 0.22
-      },
+    () => viewport ?? NYC_DEFAULT_VIEWPORT,
     [viewport],
   );
 
@@ -55,40 +98,35 @@ export function PulseMap({
       }
 
       try {
-        const tokenResponse = await getMapToken();
-        if (!tokenResponse.enabled || !tokenResponse.token) {
-          if (!cancelled) {
-            setMode("fallback");
-          }
-          return;
-        }
-
-        const mapkit = await load({
-          token: tokenResponse.token,
-          libraries: ["map"]
-        });
+        const maplibregl = await import("maplibre-gl");
 
         if (cancelled || !mapRef.current) {
           return;
         }
 
-        mapkitRef.current = mapkit;
-        mapkit.init({
-          authorizationCallback: (done) => done(tokenResponse.token as string)
+        maplibreRef.current = maplibregl;
+        const map = new maplibregl.Map({
+          container: mapRef.current,
+          style: OPEN_STREET_MAP_STYLE,
+          center: [NYC_DEFAULT_VIEWPORT.longitude, NYC_DEFAULT_VIEWPORT.latitude],
+          zoom: zoomFromViewport(NYC_DEFAULT_VIEWPORT),
+          attributionControl: { compact: true },
+          dragRotate: false
         });
 
-        mapInstanceRef.current = new mapkit.Map(mapRef.current, {
-          showsCompass: mapkit.FeatureVisibility.Hidden,
-          showsZoomControl: false,
-          colorScheme: "light",
-          isRotationEnabled: false,
-          region: buildRegion(mapkit, resolvedViewport)
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+        map.touchZoomRotate.disableRotation();
+        map.on("load", () => {
+          if (!cancelled) {
+            setMode("ready");
+          }
         });
-        setMode("apple");
+
+        mapInstanceRef.current = map;
       } catch (mapError) {
         if (!cancelled) {
           setMode("error");
-          setError(mapError instanceof Error ? mapError.message : "Unable to initialize Apple MapKit.");
+          setError(mapError instanceof Error ? mapError.message : "Unable to initialize the map.");
         }
       }
     }
@@ -97,116 +135,83 @@ export function PulseMap({
 
     return () => {
       cancelled = true;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      mapInstanceRef.current?.remove();
+      mapInstanceRef.current = null;
+      maplibreRef.current = null;
     };
-  }, [resolvedViewport]);
+  }, []);
 
   useEffect(() => {
-    const mapkit = mapkitRef.current;
     const map = mapInstanceRef.current;
-    if (!mapkit || !map) {
+    const maplibregl = maplibreRef.current;
+    if (!map || !maplibregl) {
       return;
     }
 
-    map.setRegionAnimated(buildRegion(mapkit, resolvedViewport), true);
-  }, [resolvedViewport]);
-
-  useEffect(() => {
-    const mapkit = mapkitRef.current;
-    const map = mapInstanceRef.current;
-    if (!mapkit || !map) {
-      return;
-    }
-
-    if (annotationsRef.current.length) {
-      map.removeAnnotations(annotationsRef.current);
-    }
-
-    const annotations = pins.map((pin) => {
-      const coordinate = new mapkit.Coordinate(pin.latitude, pin.longitude);
-      const annotation = new mapkit.MarkerAnnotation(coordinate, {
-        color:
-          pin.venueId === selectedVenueId
-            ? "#0f766e"
-            : pin.scoreBand === "high"
-              ? "#164e63"
-              : pin.scoreBand === "medium"
-                ? "#ca8a04"
-                : "#6b7280",
-        title: pin.venueName,
-        glyphText: pin.scoreBand === "high" ? "P" : pin.scoreBand === "medium" ? "M" : "L",
-        selected: pin.venueId === selectedVenueId
+    if (!pins.length) {
+      map.easeTo({
+        center: [resolvedViewport.longitude, resolvedViewport.latitude],
+        zoom: zoomFromViewport(resolvedViewport),
+        duration: 900
       });
+      return;
+    }
 
-      annotation.data = { venueId: pin.venueId };
-      annotation.addEventListener?.("select", () => onSelectVenue(pin.venueId));
+    if (pins.length === 1) {
+      map.easeTo({
+        center: [pins[0].longitude, pins[0].latitude],
+        zoom: Math.max(13.4, zoomFromViewport(resolvedViewport)),
+        duration: 900
+      });
+      return;
+    }
 
-      return annotation;
+    const bounds = pins.reduce(
+      (currentBounds, pin) => currentBounds.extend([pin.longitude, pin.latitude]),
+      new maplibregl.LngLatBounds(
+        [pins[0].longitude, pins[0].latitude],
+        [pins[0].longitude, pins[0].latitude]
+      ),
+    );
+
+    map.fitBounds(bounds as LngLatBoundsLike, {
+      padding: {
+        top: 112,
+        right: 36,
+        bottom: 36,
+        left: 36
+      },
+      duration: 900,
+      maxZoom: 13.8
+    });
+  }, [pins, resolvedViewport]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const maplibregl = maplibreRef.current;
+    if (!map || !maplibregl) {
+      return;
+    }
+
+    markersRef.current.forEach((marker) => marker.remove());
+
+    const markers = pins.map((pin) => {
+      const markerElement = createMarkerElement(pin, selectedVenueId, onSelectVenue);
+      return new maplibregl.Marker({
+        element: markerElement,
+        anchor: "bottom"
+      })
+        .setLngLat([pin.longitude, pin.latitude])
+        .addTo(map);
     });
 
-    annotationsRef.current = annotations;
-    map.addAnnotations(annotations);
+    markersRef.current = markers;
+    return () => {
+      markers.forEach((marker) => marker.remove());
+    };
   }, [onSelectVenue, pins, selectedVenueId]);
-
-  if (mode === "fallback") {
-    return (
-      <div className="relative h-[62vh] min-h-[420px] w-full overflow-hidden bg-[radial-gradient(circle_at_top,#f7efe0,transparent_35%),linear-gradient(135deg,#f4ede2,#e8f4f1)]">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(15,118,110,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(15,118,110,0.08)_1px,transparent_1px)] bg-[size:72px_72px]" />
-        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-4 border-b border-stroke/70 bg-white/75 px-5 py-4 backdrop-blur">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Map Preview</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Apple Maps preview is unavailable until `APPLE_MAPS_*` credentials are configured. Venue recommendations are still live.
-            </p>
-          </div>
-        </div>
-
-        <div className="absolute inset-0 px-6 pb-6 pt-28">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {pins.map((pin) => {
-              const selected = pin.venueId === selectedVenueId;
-              return (
-                <button
-                  key={pin.venueId}
-                  type="button"
-                  onClick={() => onSelectVenue(pin.venueId)}
-                  className={[
-                    "rounded-[1.5rem] border bg-white/80 p-4 text-left shadow-sm backdrop-blur transition",
-                    selected ? "border-accent ring-2 ring-accent/20" : "border-stroke hover:bg-white"
-                  ].join(" ")}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="inline-flex items-center gap-2">
-                      <span
-                        className={[
-                          "inline-flex h-9 w-9 items-center justify-center rounded-full text-white",
-                          pin.scoreBand === "high"
-                            ? "bg-deep"
-                            : pin.scoreBand === "medium"
-                              ? "bg-amber-500"
-                              : "bg-slate-400"
-                        ].join(" ")}
-                      >
-                        <MapPin className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{pin.venueName}</p>
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{pin.scoreBand}</p>
-                      </div>
-                    </div>
-                    {selected ? (
-                      <span className="rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-                        Selected
-                      </span>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (mode === "error") {
     return (
@@ -219,10 +224,21 @@ export function PulseMap({
   }
 
   return (
-    <div className="relative h-[62vh] min-h-[420px] w-full">
+    <div className="relative h-[62vh] min-h-[420px] w-full overflow-hidden bg-[radial-gradient(circle_at_top,#f7efe0,transparent_35%),linear-gradient(135deg,#f4ede2,#e8f4f1)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-4 border-b border-stroke/70 bg-white/78 px-5 py-4 backdrop-blur">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Interactive Map</p>
+          <p className="mt-1 text-sm text-slate-600">
+            Live venue pins powered by MapLibre and OpenStreetMap, centered around your current shortlist.
+          </p>
+        </div>
+        <span className="hidden rounded-full bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent md:inline-flex">
+          MapLibre + OSM
+        </span>
+      </div>
       {mode === "loading" ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 text-sm text-slate-500">
-          Loading map preview...
+          Loading live map...
         </div>
       ) : null}
       <div ref={mapRef} className="h-full w-full" />

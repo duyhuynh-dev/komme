@@ -31,3 +31,91 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.pulse-map-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+  cursor: pointer;
+  padding: 0.48rem 0.82rem 0.48rem 0.5rem;
+  transform: translateY(0);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.pulse-map-marker:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+}
+
+.pulse-map-marker:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.45);
+  outline-offset: 3px;
+}
+
+.pulse-map-marker.is-selected {
+  border-color: rgba(15, 118, 110, 0.4);
+  background: rgba(240, 253, 250, 0.98);
+  box-shadow: 0 20px 44px rgba(15, 118, 110, 0.18);
+}
+
+.pulse-map-marker__dot {
+  height: 1.9rem;
+  width: 1.9rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.pulse-map-marker__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0.42rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.pulse-map-marker__label {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.pulse-map-marker.band-high .pulse-map-marker__dot {
+  background: linear-gradient(135deg, #164e63, #0f766e);
+}
+
+.pulse-map-marker.band-medium .pulse-map-marker__dot {
+  background: linear-gradient(135deg, #f59e0b, #fb7185);
+}
+
+.pulse-map-marker.band-low .pulse-map-marker__dot {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+.maplibregl-ctrl-group {
+  border-radius: 999px !important;
+  overflow: hidden;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16) !important;
+}
+
+.maplibregl-ctrl-group button {
+  height: 2.35rem !important;
+  width: 2.35rem !important;
+}
+
+.maplibregl-ctrl-bottom-right {
+  margin: 0 1rem 1rem 0 !important;
+}

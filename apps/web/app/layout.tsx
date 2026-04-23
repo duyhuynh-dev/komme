@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "@/app/globals.css";
 import { Providers } from "@/components/providers";
 
@@ -20,4 +21,3 @@ export default function RootLayout({
     </html>
   );
 }
-
