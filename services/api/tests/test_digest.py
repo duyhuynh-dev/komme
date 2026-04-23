@@ -65,6 +65,8 @@ def test_digest_renderers_include_key_event_details() -> None:
     assert "Duy, your city picks are ready." in html
     assert "After-Hours Techno Showcase" in html
     assert "Open the live map" in html
+    assert 'table role="presentation"' in html
+    assert "display:inline-block;padding:8px 12px" in html
     assert "Pulse Weekly: 1 NYC picks for this week" in text
     assert "Travel: 18 min walk, 12 min transit" in text
 

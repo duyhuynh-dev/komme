@@ -119,7 +119,10 @@ def _render_digest_html(
 ) -> str:
     settings = get_settings()
     intro_name = user.display_name or user.email.split("@")[0]
-    cards_html = "".join(_render_card_html(item) for item in items)
+    cards_html = "".join(
+        f'<div style="margin-top:{0 if index == 0 else 16}px;">{_render_card_html(item)}</div>'
+        for index, item in enumerate(items)
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -136,7 +139,7 @@ def _render_digest_html(
         <p style="margin:0 0 24px;font-size:16px;line-height:1.7;color:#4a6078;">
           Pulse translated your latest signals into a sharper shortlist for this week. Here are the venues currently leading your map.
         </p>
-        <div style="display:grid;gap:16px;">{cards_html}</div>
+        <div>{cards_html}</div>
         <div style="margin-top:28px;padding-top:22px;border-top:1px solid #e5d9cb;">
           <a href="{escape(settings.web_app_url)}" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#14213d;color:#ffffff;text-decoration:none;font-weight:600;">
             Open the live map
@@ -160,14 +163,20 @@ def _render_card_html(item: VenueRecommendationCard) -> str:
     travel = " · ".join(escape(travel_item.label) for travel_item in item.travel)
     return f"""
       <div style="border:1px solid #e5d9cb;border-radius:24px;padding:20px;background:#ffffff;">
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-          <div>
-            <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#6a7c8e;">{escape(item.neighborhood)}</div>
-            <h2 style="margin:10px 0 4px;font-size:24px;line-height:1.1;">{escape(item.venueName)}</h2>
-            <p style="margin:0;color:#4a6078;font-size:15px;line-height:1.6;">{escape(item.eventTitle)}</p>
-          </div>
-          <div style="padding:8px 12px;border-radius:999px;background:#f4faf8;color:#167d73;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">{escape(item.scoreBand)}</div>
-        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr>
+            <td valign="top" style="padding:0;">
+              <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#6a7c8e;">{escape(item.neighborhood)}</div>
+              <h2 style="margin:10px 0 4px;font-size:24px;line-height:1.1;">{escape(item.venueName)}</h2>
+              <p style="margin:0;color:#4a6078;font-size:15px;line-height:1.6;">{escape(item.eventTitle)}</p>
+            </td>
+            <td align="right" valign="top" style="padding:0 0 0 12px;white-space:nowrap;">
+              <span style="display:inline-block;padding:8px 12px;border-radius:999px;background:#f4faf8;color:#167d73;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;line-height:1;white-space:nowrap;mso-line-height-rule:exactly;">
+                {escape(item.scoreBand)}
+              </span>
+            </td>
+          </tr>
+        </table>
         <p style="margin:16px 0 0;color:#4a6078;font-size:14px;line-height:1.7;">
           {escape(_format_event_time(item.startsAt))} · {escape(item.priceLabel)} · {escape(item.address)}
         </p>
