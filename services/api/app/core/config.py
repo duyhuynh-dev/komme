@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
     reddit_redirect_uri: str = "http://localhost:8000/v1/reddit/connect/callback"
+    reddit_public_user_agent: str = "Pulse/0.1 (by /u/duyhuynh-dev)"
+    reddit_public_cache_dir: str = str(SERVICE_ROOT / ".cache" / "reddit-public")
+    reddit_public_cache_ttl_hours: int = 24
+    reddit_public_timeout_seconds: float = 15.0
 
     apple_maps_team_id: str = ""
     apple_maps_key_id: str = ""
