@@ -77,7 +77,7 @@ export function submitFeedback(
 }
 
 export function getMapToken() {
-  return request<{ token: string }>("/v1/maps/token");
+  return request<{ enabled: boolean; token: string | null }>("/v1/maps/token");
 }
 
 export function saveAnchor(payload: LocationAnchorPayload) {

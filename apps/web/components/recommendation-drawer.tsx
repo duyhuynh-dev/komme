@@ -44,10 +44,17 @@ export function RecommendationDrawer({
           const selected = card.venueId === selectedVenueId;
 
           return (
-            <button
+            <article
               key={card.venueId}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectVenue(card.venueId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectVenue(card.venueId);
+                }
+              }}
               className={[
                 "w-full rounded-[1.75rem] border p-4 text-left transition",
                 selected ? "border-accent bg-accentSoft/60" : "border-stroke bg-white/80 hover:bg-white"
@@ -126,11 +133,10 @@ export function RecommendationDrawer({
                   </div>
                 </div>
               ) : null}
-            </button>
+            </article>
           );
         })}
       </div>
     </aside>
   );
 }
-

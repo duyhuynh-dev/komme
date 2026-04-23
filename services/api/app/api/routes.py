@@ -307,6 +307,6 @@ async def recommendation_feedback(
 @router.get("/maps/token", response_model=MapTokenResponse)
 async def maps_token() -> MapTokenResponse:
     try:
-        return MapTokenResponse(token=build_mapkit_token())
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        return MapTokenResponse(enabled=True, token=build_mapkit_token())
+    except ValueError:
+        return MapTokenResponse(enabled=False, token=None)
