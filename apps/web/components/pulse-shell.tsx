@@ -231,7 +231,7 @@ export function PulseShell() {
             </div>
           </div>
 
-          <div className="grid min-h-0 gap-4 xl:grid-rows-[auto,minmax(0,1fr)]">
+          <div className="grid min-h-0 gap-4 xl:grid-rows-[minmax(0,0.92fr)_minmax(22rem,1.08fr)]">
             <InterestProfilePanel
               topics={interestsQuery.data?.topics ?? []}
               isLoading={interestsQuery.isLoading}

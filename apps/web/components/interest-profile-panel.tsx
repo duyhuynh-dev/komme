@@ -19,7 +19,7 @@ export function InterestProfilePanel({
   onAction
 }: InterestProfilePanelProps) {
   return (
-    <div className="rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur">
+    <div className="flex h-full min-h-0 flex-col rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Interest signals</h2>
@@ -37,7 +37,7 @@ export function InterestProfilePanel({
         </button>
       </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-5 flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
         {isLoading ? (
           <div className="rounded-3xl border border-dashed border-stroke bg-white/50 p-5 text-sm text-slate-500">
             Loading inferred interests...
