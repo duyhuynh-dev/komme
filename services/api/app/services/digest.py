@@ -66,6 +66,8 @@ async def send_digest_preview(session: AsyncSession, user: User) -> DigestSendRe
 async def send_due_weekly_digests(
     session: AsyncSession,
     now_utc: datetime | None = None,
+    *,
+    dry_run: bool = False,
 ) -> DigestBatchResponse:
     settings = get_settings()
     if not settings.resend_api_key:
@@ -74,7 +76,7 @@ async def send_due_weekly_digests(
     current_time = now_utc or datetime.now(tz=UTC)
     users = list((await session.scalars(select(User).order_by(User.created_at.asc()))).all())
 
-    response = DigestBatchResponse()
+    response = DigestBatchResponse(dryRun=dry_run)
 
     for user in users:
         preference = await session.scalar(select(EmailPreference).where(EmailPreference.user_id == user.id))
@@ -90,6 +92,11 @@ async def send_due_weekly_digests(
 
         if await _digest_already_sent_today(session, user, provider=SCHEDULED_DIGEST_PROVIDER, now_utc=current_time):
             response.skipped += 1
+            continue
+
+        response.recipients.append(user.email)
+        if dry_run:
+            response.wouldSend += 1
             continue
 
         try:

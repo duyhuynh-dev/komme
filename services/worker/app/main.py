@@ -1,11 +1,13 @@
 import logging
 import os
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 import inngest.fast_api
 
 from app.jobs.workflows import daily_supply_ingestion, inngest_client, reddit_profile_sync, weekly_recommendations
 from app.core.config import get_settings
+from app.services.digest_sync import trigger_scheduled_digest_delivery
 from app.services.supply_sync import run_daily_supply_sync
 
 app = FastAPI(title="Pulse Worker", version="0.1.0")
@@ -35,3 +37,15 @@ def verify_sync_secret(x_pulse_ingest_secret: str | None = Header(default=None))
 @app.post("/v1/supply/sync")
 async def sync_supply(_: None = Depends(verify_sync_secret)) -> dict:
     return await run_daily_supply_sync()
+
+
+@app.post("/v1/digests/run-scheduled")
+async def run_scheduled_digests(
+    dry_run: bool = False,
+    now_override: datetime | None = None,
+    _: None = Depends(verify_sync_secret),
+) -> dict:
+    return await trigger_scheduled_digest_delivery(
+        dry_run=dry_run,
+        now_override=now_override,
+    )

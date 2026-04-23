@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 import httpx
@@ -334,11 +335,13 @@ async def digest_send_preview(
 
 @router.post("/internal/digests/send-weekly", response_model=DigestBatchResponse)
 async def digest_send_weekly_internal(
+    dry_run: bool = False,
+    now_override: datetime | None = None,
     _: None = Depends(verify_internal_ingest),
     session: AsyncSession = Depends(get_db),
 ) -> DigestBatchResponse:
     try:
-        return await send_due_weekly_digests(session)
+        return await send_due_weekly_digests(session, now_utc=now_override, dry_run=dry_run)
     except RuntimeError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 

@@ -5,7 +5,7 @@ Pulse is a map-first, personalized event discovery MVP for New York City. The pr
 - `Next.js` for the consumer web experience
 - `FastAPI` for APIs and backend integrations
 - `Inngest + PydanticAI` for controlled agentic workflows
-- `Apple MapKit JS` and `Apple Maps Server API` for the map stack
+- `MapLibre + OpenStreetMap` for the live map stack
 
 ## Workspace
 
@@ -55,6 +55,36 @@ cd ../worker && .venv/bin/pytest
 - The worker posts normalized candidates into `services/api` through `/v1/internal/ingest/candidates`.
 - Set the same `INTERNAL_INGEST_SECRET` in both services if you want the ingest route locked down outside local dev.
 - The map can be manually regenerated from the latest catalog with `POST /v1/recommendations/refresh` or the in-app `Refresh picks` button.
+
+## Weekly digests
+
+- Manual preview sends use `POST /v1/digest/send-preview` and require `RESEND_API_KEY`.
+- Scheduled delivery runs through the worker and calls `POST /v1/internal/digests/send-weekly` on the API.
+- The worker cron checks every 15 minutes and the API decides whether each user is actually due based on:
+  - `weekly_digest_enabled`
+  - `digest_day`
+  - `digest_time_local`
+  - user `timezone`
+
+## Scheduled digest smoke test
+
+Use the worker endpoint to test the scheduled flow immediately instead of waiting for cron:
+
+```bash
+curl -X POST "http://127.0.0.1:8001/v1/digests/run-scheduled?dry_run=true&now_override=2026-04-21T13:05:00%2B00:00" \
+  -H "x-pulse-ingest-secret: ${INTERNAL_INGEST_SECRET}"
+```
+
+Why that timestamp:
+
+- `2026-04-21T13:05:00+00:00` is Tuesday `09:05` in `America/New_York`
+- that falls inside the current 15-minute delivery window for a user whose digest is due at `Tuesday 09:00`
+
+What to expect:
+
+- `dry_run=true` returns who would receive the digest without actually sending email
+- removing `dry_run=true` sends the real scheduled digest, assuming `RESEND_API_KEY` is configured
+- the worker endpoint requires the same `INTERNAL_INGEST_SECRET` used for supply sync
 
 ## Notes
 

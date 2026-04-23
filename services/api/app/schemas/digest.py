@@ -24,6 +24,9 @@ class DigestBatchResponse(BaseModel):
     ok: bool = True
     processedUsers: int = 0
     sent: int = 0
+    wouldSend: int = 0
     skipped: int = 0
     failed: int = 0
+    dryRun: bool = False
+    recipients: list[str] = Field(default_factory=list)
     status: str = "completed"
