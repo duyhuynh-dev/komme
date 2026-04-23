@@ -36,7 +36,7 @@ export function RecommendationDrawer({
 
         {!loading && !orderedCards.length ? (
           <div className="rounded-3xl border border-dashed border-stroke bg-white/70 p-5 text-sm text-slate-500">
-            No saved recommendation run yet. Connect Reddit and refresh supply ingestion to populate this drawer.
+            No saved recommendation run yet. Use Sync supply to pull in fresh events, then refresh picks to populate this drawer.
           </div>
         ) : null}
 

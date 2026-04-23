@@ -10,6 +10,7 @@ import {
   getMapRecommendations,
   patchInterests,
   refreshRecommendations,
+  syncSupply,
   submitFeedback
 } from "@/lib/api";
 import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
@@ -24,6 +25,7 @@ export function PulseShell() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const [supplyStatus, setSupplyStatus] = useState<string | null>(null);
   const identityKey = user?.id ?? "demo";
 
   const viewerQuery = useQuery({
@@ -70,6 +72,20 @@ export function PulseShell() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       void queryClient.invalidateQueries({ queryKey: ["archive"] });
+    }
+  });
+
+  const syncSupplyMutation = useMutation({
+    mutationFn: syncSupply,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
+      void queryClient.invalidateQueries({ queryKey: ["archive"] });
+      setSupplyStatus(
+        `Synced ${data.candidateCount} candidates and saved ${data.accepted} fresh events into the catalog.`,
+      );
+    },
+    onError: (error) => {
+      setSupplyStatus(error instanceof Error ? error.message : "Unable to sync fresh venue supply right now.");
     }
   });
 
@@ -218,12 +234,25 @@ export function PulseShell() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Map View</p>
                 <h2 className="mt-1 text-2xl font-semibold">Recommended venues across NYC</h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  {syncSupplyMutation.isPending
+                    ? "Syncing live venue supply before recomputing your shortlist..."
+                    : supplyStatus ?? "Refresh picks reranks what is already saved. Sync supply also pulls fresh event inventory first."}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => syncSupplyMutation.mutate()}
+                  disabled={syncSupplyMutation.isPending}
+                  className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm text-slate-700 transition hover:bg-white disabled:opacity-60"
+                >
+                  {syncSupplyMutation.isPending ? "Syncing supply..." : "Sync supply"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => refreshMutation.mutate()}
-                  disabled={refreshMutation.isPending}
+                  disabled={refreshMutation.isPending || syncSupplyMutation.isPending}
                   className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm text-slate-700 transition hover:bg-white disabled:opacity-60"
                 >
                   {refreshMutation.isPending ? "Refreshing..." : "Refresh picks"}

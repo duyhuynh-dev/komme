@@ -99,3 +99,14 @@ export interface LocationAnchorPayload {
   longitude?: number;
   source: "live" | "zip" | "neighborhood";
 }
+
+export interface SupplySyncResponse {
+  ok: boolean;
+  candidateCount: number;
+  accepted: number;
+  sourcesCreated: number;
+  venuesCreated: number;
+  eventsCreated: number;
+  occurrencesCreated: number;
+  status: string;
+}

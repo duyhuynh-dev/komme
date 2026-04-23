@@ -5,6 +5,7 @@ import type {
   InterestTopic,
   LocationAnchorPayload,
   RecommendationsMapResponse,
+  SupplySyncResponse,
   UserConstraint
 } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -46,6 +47,12 @@ export function getMapRecommendations() {
 
 export function refreshRecommendations() {
   return request<{ ok: true }>("/v1/recommendations/refresh", {
+    method: "POST"
+  });
+}
+
+export function syncSupply() {
+  return request<SupplySyncResponse>("/v1/supply/sync", {
     method: "POST"
   });
 }

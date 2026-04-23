@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./pulse.db"
     default_user_email: str = "beta@pulse.local"
     api_base_url: str = "http://localhost:8000"
+    worker_base_url: str = "http://localhost:8001"
     web_app_url: str = "http://localhost:3000"
     web_allowed_origins: str = ""
 

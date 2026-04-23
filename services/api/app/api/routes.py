@@ -11,7 +11,7 @@ from app.db.session import get_db
 from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
 from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse
-from app.schemas.common import OkResponse
+from app.schemas.common import OkResponse, SupplySyncResponse
 from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
 from app.schemas.maps import MapTokenResponse
 from app.schemas.profile import AnchorPayload, InterestListResponse, InterestListUpdate, UserConstraintPayload
@@ -29,6 +29,7 @@ from app.services.profile import list_interests, update_interests
 from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
+from app.services.worker_sync import trigger_worker_supply_sync
 
 router = APIRouter(prefix="/v1")
 
@@ -277,6 +278,22 @@ async def recommendations_refresh(
 ) -> OkResponse:
     await refresh_recommendations_for_user(session, user, force=True)
     return OkResponse()
+
+
+@router.post("/supply/sync", response_model=SupplySyncResponse)
+async def supply_sync(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> SupplySyncResponse:
+    try:
+        payload = await trigger_worker_supply_sync()
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    await refresh_recommendations_for_user(session, user, force=True)
+    return payload
 
 
 @router.get("/recommendations/archive", response_model=ArchiveResponse)
