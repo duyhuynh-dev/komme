@@ -36,13 +36,10 @@ export function SettingsDock({ showDigest = false }: { showDigest?: boolean }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-11 items-center gap-2 rounded-full border border-stroke/80 bg-white/85 px-4 py-2 text-left shadow-[0_14px_36px_rgba(17,24,39,0.08)] transition hover:bg-white"
+        className="inline-flex h-11 items-center gap-2 rounded-full border border-stroke bg-white/72 px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-white"
       >
         <Settings2 className="h-4 w-4 shrink-0 text-slate-600" />
-        <span className="flex min-w-0 items-center gap-2 leading-none">
-          <span className="text-sm font-semibold text-slate-900">Settings</span>
-          <span className="truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">Location · Digest</span>
-        </span>
+        <span className="text-sm font-medium text-slate-900">Settings</span>
         {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
       </button>
 
