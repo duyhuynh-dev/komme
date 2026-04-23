@@ -18,7 +18,18 @@ def test_oauth_state_round_trip_returns_email() -> None:
     assert parse_oauth_state(token, TEST_SECRET) == "user@example.com"
 
 
+def test_oauth_state_supports_alternate_purposes() -> None:
+    token = build_oauth_state("user@example.com", TEST_SECRET, purpose="spotify-connect")
+    assert parse_oauth_state(token, TEST_SECRET, purpose="spotify-connect") == "user@example.com"
+
+
 def test_oauth_state_rejects_invalid_secret() -> None:
     token = build_oauth_state("user@example.com", TEST_SECRET)
     with pytest.raises(HTTPException):
         parse_oauth_state(token, OTHER_SECRET)
+
+
+def test_oauth_state_rejects_wrong_purpose() -> None:
+    token = build_oauth_state("user@example.com", TEST_SECRET, purpose="spotify-connect")
+    with pytest.raises(HTTPException):
+        parse_oauth_state(token, TEST_SECRET, purpose="reddit-connect")

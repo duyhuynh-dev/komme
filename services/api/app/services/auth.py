@@ -128,12 +128,18 @@ async def require_authenticated_user(
     )
 
 
-def build_oauth_state(email: str, secret: str, expires_in_seconds: int = 600) -> str:
+def build_oauth_state(
+    email: str,
+    secret: str,
+    *,
+    purpose: str = "reddit-connect",
+    expires_in_seconds: int = 600,
+) -> str:
     now = datetime.now(tz=UTC)
     return jwt.encode(
         {
             "sub": email,
-            "purpose": "reddit-connect",
+            "purpose": purpose,
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
         },
@@ -142,7 +148,12 @@ def build_oauth_state(email: str, secret: str, expires_in_seconds: int = 600) ->
     )
 
 
-def parse_oauth_state(state_token: str, secret: str) -> str:
+def parse_oauth_state(
+    state_token: str,
+    secret: str,
+    *,
+    purpose: str = "reddit-connect",
+) -> str:
     try:
         payload = jwt.decode(state_token, secret, algorithms=["HS256"])
     except ExpiredSignatureError as error:
@@ -156,7 +167,7 @@ def parse_oauth_state(state_token: str, secret: str) -> str:
             detail="OAuth state is invalid.",
         ) from error
 
-    if payload.get("purpose") != "reddit-connect" or not payload.get("sub"):
+    if payload.get("purpose") != purpose or not payload.get("sub"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth state is invalid.",

@@ -10,7 +10,14 @@ class ThemeEvidenceCount(BaseModel):
 
 
 class ThemeEvidenceSnippet(BaseModel):
-    type: Literal["comment", "submission", "manual", "provider_note"]
+    type: Literal[
+        "comment",
+        "submission",
+        "manual",
+        "provider_note",
+        "spotify_artist",
+        "spotify_track",
+    ]
     subreddit: str | None = None
     snippet: str
     permalink: str | None = None

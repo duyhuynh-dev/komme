@@ -12,3 +12,7 @@ class AuthViewerResponse(BaseModel):
 
 class RedditConnectStartResponse(BaseModel):
     authorizeUrl: str
+
+
+class SpotifyConnectStartResponse(BaseModel):
+    authorizeUrl: str

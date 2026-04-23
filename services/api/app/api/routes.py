@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
-from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse
+from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse, SpotifyConnectStartResponse
 from app.schemas.common import OkResponse, SupplySyncResponse
 from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
@@ -45,11 +45,13 @@ from app.services.profile import get_email_preferences, list_interests, update_e
 from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
+from app.services.spotify_oauth import build_spotify_authorize_url, exchange_spotify_code, fetch_spotify_profile
 from app.services.worker_sync import trigger_worker_supply_sync
 from app.taste.errors import TasteProviderError
 from app.taste.profile_contracts import TasteProfile
 from app.taste.profile_service import apply_taste_profile
 from app.taste.providers.manual import ManualThemeProvider
+from app.taste.providers.spotify import SpotifyProvider
 
 router = APIRouter(prefix="/v1")
 
@@ -121,7 +123,7 @@ async def reddit_connect_start(
             detail="OAuth state secret is not configured.",
         )
 
-    state = build_oauth_state(identity.user.email, settings.oauth_state_secret)
+    state = build_oauth_state(identity.user.email, settings.oauth_state_secret, purpose="reddit-connect")
     try:
         authorize_url = build_reddit_authorize_url(state)
     except ValueError as error:
@@ -149,7 +151,7 @@ async def reddit_connect_callback(
             detail="OAuth state secret is not configured.",
         )
 
-    email = parse_oauth_state(state, settings.oauth_state_secret)
+    email = parse_oauth_state(state, settings.oauth_state_secret, purpose="reddit-connect")
     user = await get_or_create_user(session, email=email)
 
     token_payload = {
@@ -200,6 +202,77 @@ async def reddit_connect_callback(
     connection.scope_csv = token_payload.get("scope")
     await session.commit()
     return RedirectResponse(f"{settings.web_app_url}/?reddit=connected", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/spotify/connect/start", response_model=SpotifyConnectStartResponse)
+async def spotify_connect_start(
+    identity=Depends(authenticated_identity),
+) -> SpotifyConnectStartResponse:
+    settings = get_settings()
+    if not settings.oauth_state_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth state secret is not configured.",
+        )
+
+    state = build_oauth_state(identity.user.email, settings.oauth_state_secret, purpose="spotify-connect")
+    try:
+        authorize_url = build_spotify_authorize_url(state)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    return SpotifyConnectStartResponse(authorizeUrl=authorize_url)
+
+
+@router.get("/spotify/connect/callback")
+async def spotify_connect_callback(
+    code: str | None = None,
+    error: str | None = None,
+    state: str | None = None,
+    session: AsyncSession = Depends(get_db),
+):
+    settings = get_settings()
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if not code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Spotify authorization code.")
+    if not state:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing OAuth state.")
+    if not settings.oauth_state_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth state secret is not configured.",
+        )
+
+    email = parse_oauth_state(state, settings.oauth_state_secret, purpose="spotify-connect")
+    user = await get_or_create_user(session, email=email)
+
+    try:
+        token_payload = await exchange_spotify_code(code)
+        me_payload = await fetch_spotify_profile(token_payload["access_token"])
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Spotify OAuth exchange failed.",
+        ) from error
+
+    connection = await session.scalar(
+        select(OAuthConnection).where(
+            OAuthConnection.user_id == user.id,
+            OAuthConnection.provider == "spotify",
+        )
+    )
+    if connection is None:
+        connection = OAuthConnection(user_id=user.id, provider="spotify")
+        session.add(connection)
+
+    connection.provider_user_id = me_payload.get("id")
+    connection.access_token_encrypted = token_payload.get("access_token")
+    connection.refresh_token_encrypted = token_payload.get("refresh_token") or connection.refresh_token_encrypted
+    connection.scope_csv = token_payload.get("scope")
+    await session.commit()
+    return RedirectResponse(f"{settings.web_app_url}/?spotify=connected", status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/reddit/mock-connect", response_model=OkResponse)
@@ -433,6 +506,34 @@ def _serialize_taste_profile(profile: TasteProfile) -> TasteProfileResponse:
     )
 
 
+def _raise_taste_provider_http_error(error: TasteProviderError) -> None:
+    status_code = status.HTTP_400_BAD_REQUEST
+    if error.code in {"insufficient_signal", "no_public_activity"}:
+        status_code = status.HTTP_409_CONFLICT
+    if error.retryable or error.code == "provider_unavailable":
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    raise HTTPException(status_code=status_code, detail=error.message) from error
+
+
+async def _require_oauth_connection(
+    session: AsyncSession,
+    user_id: str,
+    provider_name: str,
+) -> OAuthConnection:
+    connection = await session.scalar(
+        select(OAuthConnection).where(
+            OAuthConnection.user_id == user_id,
+            OAuthConnection.provider == provider_name,
+        )
+    )
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Connect {provider_name.title()} before previewing this provider.",
+        )
+    return connection
+
+
 @router.get("/taste/themes", response_model=ThemeCatalogResponse)
 async def taste_themes() -> ThemeCatalogResponse:
     provider = ManualThemeProvider()
@@ -447,7 +548,7 @@ async def taste_manual_preview(payload: ManualTastePayload) -> TasteProfileRespo
     try:
         profile = await provider.build_profile(payload.selectedThemeIds)
     except TasteProviderError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message) from error
+        _raise_taste_provider_http_error(error)
     return _serialize_taste_profile(profile)
 
 
@@ -462,5 +563,34 @@ async def taste_manual_apply(
         profile = await provider.build_profile(payload.selectedThemeIds)
         applied = await apply_taste_profile(session, identity.user, profile)
     except TasteProviderError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message) from error
+        _raise_taste_provider_http_error(error)
+    return _serialize_taste_profile(applied)
+
+
+@router.get("/taste/spotify/preview", response_model=TasteProfileResponse)
+async def taste_spotify_preview(
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> TasteProfileResponse:
+    connection = await _require_oauth_connection(session, identity.user.id, "spotify")
+    provider = SpotifyProvider()
+    try:
+        profile = await provider.build_profile(session, connection)
+    except TasteProviderError as error:
+        _raise_taste_provider_http_error(error)
+    return _serialize_taste_profile(profile)
+
+
+@router.post("/taste/spotify/apply", response_model=TasteProfileResponse)
+async def taste_spotify_apply(
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> TasteProfileResponse:
+    connection = await _require_oauth_connection(session, identity.user.id, "spotify")
+    provider = SpotifyProvider()
+    try:
+        profile = await provider.build_profile(session, connection)
+        applied = await apply_taste_profile(session, identity.user, profile)
+    except TasteProviderError as error:
+        _raise_taste_provider_http_error(error)
     return _serialize_taste_profile(applied)

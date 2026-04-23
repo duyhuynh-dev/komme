@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     reddit_public_cache_dir: str = str(SERVICE_ROOT / ".cache" / "reddit-public")
     reddit_public_cache_ttl_hours: int = 24
     reddit_public_timeout_seconds: float = 15.0
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_redirect_uri: str = "http://localhost:8000/v1/spotify/connect/callback"
+    spotify_scopes: str = "user-top-read user-read-recently-played"
+    spotify_timeout_seconds: float = 20.0
 
     apple_maps_team_id: str = ""
     apple_maps_key_id: str = ""
