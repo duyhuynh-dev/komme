@@ -25,6 +25,12 @@ from app.schemas.profile import (
     UserConstraintPayload,
 )
 from app.schemas.recommendations import ArchiveResponse, FeedbackPayload, RecommendationsMapResponse
+from app.schemas.taste import (
+    ManualTastePayload,
+    TasteProfileResponse,
+    ThemeCatalogItemResponse,
+    ThemeCatalogResponse,
+)
 from app.services.apple_maps import build_mapkit_token
 from app.services.auth import (
     get_or_create_user,
@@ -40,6 +46,10 @@ from app.services.recommendations import get_archive, get_map_recommendations, r
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
 from app.services.worker_sync import trigger_worker_supply_sync
+from app.taste.errors import TasteProviderError
+from app.taste.profile_contracts import TasteProfile
+from app.taste.profile_service import apply_taste_profile
+from app.taste.providers.manual import ManualThemeProvider
 
 router = APIRouter(prefix="/v1")
 
@@ -396,3 +406,61 @@ async def maps_token() -> MapTokenResponse:
         return MapTokenResponse(enabled=True, token=build_mapkit_token())
     except ValueError:
         return MapTokenResponse(enabled=False, token=None)
+
+
+def _serialize_taste_profile(profile: TasteProfile) -> TasteProfileResponse:
+    return TasteProfileResponse(
+        source=profile.source,
+        sourceKey=profile.source_key,
+        username=profile.username,
+        generatedAt=profile.generated_at.isoformat(),
+        themes=[
+            {
+                "id": theme.id,
+                "label": theme.label,
+                "confidence": theme.confidence,
+                "confidenceLabel": theme.confidence_label,
+                "evidence": {
+                    "matchedSubreddits": [item.model_dump() for item in theme.evidence.matched_subreddits],
+                    "matchedKeywords": [item.model_dump() for item in theme.evidence.matched_keywords],
+                    "topExamples": [item.model_dump() for item in theme.evidence.top_examples],
+                    "providerNotes": theme.evidence.provider_notes,
+                },
+            }
+            for theme in profile.themes
+        ],
+        unmatchedActivity=profile.unmatched_activity,
+    )
+
+
+@router.get("/taste/themes", response_model=ThemeCatalogResponse)
+async def taste_themes() -> ThemeCatalogResponse:
+    provider = ManualThemeProvider()
+    return ThemeCatalogResponse(
+        items=[ThemeCatalogItemResponse(**item.model_dump()) for item in provider.available_themes()]
+    )
+
+
+@router.post("/taste/manual/preview", response_model=TasteProfileResponse)
+async def taste_manual_preview(payload: ManualTastePayload) -> TasteProfileResponse:
+    provider = ManualThemeProvider()
+    try:
+        profile = await provider.build_profile(payload.selectedThemeIds)
+    except TasteProviderError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message) from error
+    return _serialize_taste_profile(profile)
+
+
+@router.post("/taste/manual/apply", response_model=TasteProfileResponse)
+async def taste_manual_apply(
+    payload: ManualTastePayload,
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> TasteProfileResponse:
+    provider = ManualThemeProvider()
+    try:
+        profile = await provider.build_profile(payload.selectedThemeIds)
+        applied = await apply_taste_profile(session, identity.user, profile)
+    except TasteProviderError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message) from error
+    return _serialize_taste_profile(applied)

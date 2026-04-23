@@ -36,3 +36,10 @@ class ProviderUnavailableError(TasteProviderError):
     code = "provider_unavailable"
     retryable = True
 
+
+class InvalidManualSelectionError(TasteProviderError):
+    code = "invalid_manual_selection"
+
+
+class UnknownThemeError(TasteProviderError):
+    code = "unknown_theme"
