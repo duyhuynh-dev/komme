@@ -31,7 +31,7 @@ export function SettingsDock({ showDigest = false }: { showDigest?: boolean }) {
   }, [open]);
 
   return (
-    <div className="relative">
+    <div className="relative z-50">
       <button
         ref={triggerRef}
         type="button"
@@ -41,9 +41,9 @@ export function SettingsDock({ showDigest = false }: { showDigest?: boolean }) {
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-slate-700">
           <Settings2 className="h-4 w-4" />
         </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-slate-900">Settings</span>
-          <span className="block text-xs uppercase tracking-[0.18em] text-slate-500">Location and digest</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900">Settings</span>
+          <span className="truncate text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Location · Digest</span>
         </span>
         {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
       </button>
@@ -51,7 +51,7 @@ export function SettingsDock({ showDigest = false }: { showDigest?: boolean }) {
       {open ? (
         <div
           ref={panelRef}
-          className="absolute right-0 top-[calc(100%+0.85rem)] z-30 w-[min(27rem,calc(100vw-2rem))] rounded-[1.75rem] border border-stroke/80 bg-white/95 p-4 shadow-[0_28px_60px_rgba(15,23,42,0.18)] backdrop-blur"
+          className="absolute right-0 top-[calc(100%+0.85rem)] z-50 w-[min(27rem,calc(100vw-2rem))] rounded-[1.75rem] border border-stroke/80 bg-white/95 p-4 shadow-[0_32px_70px_rgba(15,23,42,0.18)] backdrop-blur"
         >
           <div className="flex items-start justify-between gap-3">
             <div>

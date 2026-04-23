@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Bookmark, MapPin, MoveRight, XCircle } from "lucide-react";
 import type { VenueRecommendationCard } from "@/lib/types";
 import { formatEventStart } from "@/lib/utils";
@@ -20,6 +21,16 @@ export function RecommendationDrawer({
   onDismiss: (card: VenueRecommendationCard) => void;
 }) {
   const orderedCards = Object.values(cards).sort((left, right) => right.score - left.score);
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  useEffect(() => {
+    if (!selectedVenueId) {
+      return;
+    }
+
+    const target = cardRefs.current[selectedVenueId];
+    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedVenueId]);
 
   return (
     <aside className="flex h-full min-h-0 flex-col rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
@@ -47,6 +58,9 @@ export function RecommendationDrawer({
           return (
             <article
               key={card.venueId}
+              ref={(node) => {
+                cardRefs.current[card.venueId] = node;
+              }}
               role="button"
               tabIndex={0}
               onClick={() => onSelectVenue(card.venueId)}

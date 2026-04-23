@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, Sparkles, VolumeX } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { InterestTopic } from "@/lib/types";
 
 type InterestAction = "boost" | "mute" | "reset";
@@ -30,8 +30,9 @@ export function InterestProfilePanel({
         <button
           type="button"
           title="More signal sources are coming soon."
-          className="rounded-full border border-stroke bg-white/70 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-white"
+          className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-stroke bg-white/70 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-white"
         >
+          <Sparkles className="h-4 w-4" />
           Add signal
         </button>
       </div>
@@ -57,12 +58,26 @@ export function InterestProfilePanel({
               key={topic.id}
               className={[
                 "rounded-3xl border bg-white/75 p-4 transition",
-                topic.muted ? "border-slate-200" : topic.boosted ? "border-accent/35" : "border-stroke"
+                topic.muted
+                  ? "border-slate-200 shadow-[inset_3px_0_0_0_rgba(100,116,139,0.4)]"
+                  : topic.boosted
+                    ? "border-accent/35 shadow-[inset_3px_0_0_0_rgba(15,118,110,0.72)]"
+                    : "border-stroke"
               ].join(" ")}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">{topic.label}</h3>
+                  <div className="flex items-center gap-2">
+                    {(topic.boosted || topic.muted) ? (
+                      <span
+                        className={[
+                          "h-2.5 w-2.5 rounded-full",
+                          topic.boosted ? "bg-accent" : "bg-slate-400"
+                        ].join(" ")}
+                      />
+                    ) : null}
+                    <h3 className="text-base font-semibold text-slate-900">{topic.label}</h3>
+                  </div>
                   <p className="mt-2 text-sm text-slate-500">Confidence {confidencePercent}% from observed signals.</p>
                 </div>
 
@@ -142,7 +157,7 @@ function ActionButton({
         ? "border-slate-300 bg-slate-900 text-white"
         : "border-stroke bg-white text-slate-700"
       : tone === "ghost"
-        ? "border-stroke bg-transparent text-slate-500"
+        ? "border-stroke bg-transparent text-slate-500 disabled:border-stroke/50 disabled:text-slate-300"
         : active
           ? "border-accent bg-accent text-white"
           : "border-accent/20 bg-accentSoft text-accent";

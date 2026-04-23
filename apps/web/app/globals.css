@@ -62,7 +62,9 @@ body {
 .pulse-map-marker.is-selected {
   border-color: rgba(15, 118, 110, 0.4);
   background: rgba(240, 253, 250, 0.98);
-  box-shadow: 0 20px 44px rgba(15, 118, 110, 0.18);
+  box-shadow:
+    0 20px 44px rgba(15, 118, 110, 0.18),
+    0 0 0 4px rgba(15, 118, 110, 0.12);
   padding-right: 0.76rem;
 }
 
@@ -72,14 +74,8 @@ body {
   border-radius: 999px;
   flex: 0 0 auto;
   position: relative;
-}
-
-.pulse-map-marker__dot::after {
-  content: "";
-  position: absolute;
-  inset: 0.22rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.12);
 }
 
 .pulse-map-marker__label {
@@ -95,8 +91,7 @@ body {
   transition: max-width 180ms ease, opacity 140ms ease;
 }
 
-.pulse-map-marker:hover .pulse-map-marker__label,
-.pulse-map-marker.is-selected .pulse-map-marker__label {
+.pulse-map-marker:hover .pulse-map-marker__label {
   max-width: 10rem;
   opacity: 1;
 }

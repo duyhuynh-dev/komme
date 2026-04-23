@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   sendDigestPreview,
@@ -14,7 +14,7 @@ import {
   syncSupply,
   submitFeedback
 } from "@/lib/api";
-import type { InterestTopic, VenueRecommendationCard } from "@/lib/types";
+import type { InterestTopic } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
 import { AccountDock } from "@/components/account-dock";
 import { InterestProfilePanel } from "@/components/interest-profile-panel";
@@ -106,20 +106,6 @@ export function PulseShell() {
     }
   });
 
-  const selectedCard: VenueRecommendationCard | null = useMemo(() => {
-    if (!mapQuery.data) {
-      return null;
-    }
-
-    const initialVenueId = mapQuery.data.pins.at(0)?.venueId ?? null;
-    const activeVenueId = selectedVenueId ?? initialVenueId;
-    if (!activeVenueId) {
-      return null;
-    }
-
-    return mapQuery.data.cards[activeVenueId] ?? null;
-  }, [mapQuery.data, selectedVenueId]);
-
   const applyTopicAction = (
     topic: InterestTopic,
     action: "boost" | "mute" | "reset"
@@ -155,22 +141,12 @@ export function PulseShell() {
       : null;
   const locationSummary = mapQuery.data?.userConstraint?.neighborhood || mapQuery.data?.userConstraint?.zipCode || "NYC";
   const radiusSummary = mapQuery.data?.userConstraint?.radiusMiles ? `${mapQuery.data.userConstraint.radiusMiles} mi radius` : null;
-  const topbarMessage =
-    surfaceStatus ??
-    (isAuthenticated
-      ? [
-          locationSummary !== "NYC" ? `Anchored to ${locationSummary}` : "Anchored to NYC",
-          radiusSummary,
-          cadenceValue ? (cadenceValue === "Digest paused" ? "Weekly digest paused" : `Digest sends ${cadenceValue}`) : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : "Open Profile to sign in, save this map, and keep setup tucked behind Settings.");
+  const topbarMessage = surfaceStatus ?? (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
 
   return (
     <main className="min-h-screen px-4 py-4 md:px-6 md:py-6">
       <div className="mx-auto flex max-w-[1680px] flex-col gap-4 xl:h-[calc(100vh-3rem)]">
-        <header className="rounded-[1.5rem] border border-stroke/80 bg-card/80 px-5 py-3.5 shadow-float backdrop-blur">
+        <header className="relative z-40 overflow-visible rounded-[1.5rem] border border-stroke/80 bg-card/80 px-5 py-3.5 shadow-float backdrop-blur">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-600">
@@ -190,9 +166,7 @@ export function PulseShell() {
                   </>
                 ) : null}
               </div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                {topbarMessage}
-              </p>
+              {topbarMessage ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{topbarMessage}</p> : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -208,24 +182,22 @@ export function PulseShell() {
           </div>
         </header>
 
-        <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.58fr)_minmax(23rem,0.82fr)]">
+        <section className="relative z-0 grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.58fr)_minmax(23rem,0.82fr)]">
           <div className="flex min-h-[58vh] min-w-0 flex-col overflow-hidden rounded-[2rem] border border-stroke/80 bg-card/80 shadow-float">
             <div className="flex flex-col gap-4 border-b border-stroke/70 bg-white/84 px-5 py-4 backdrop-blur md:flex-row md:items-start md:justify-between">
               <div className="max-w-2xl">
-                <h1 className="text-[1.9rem] font-semibold leading-tight text-slate-900">Your shortlist, on the map</h1>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {mapQuery.data?.pins.length
-                    ? `See the venues currently leading your map, then use signals on the right to reshape the stack live.`
-                    : "Pulse will populate the map as soon as recommendations are ready."}
-                </p>
+                <p className="text-sm font-medium uppercase tracking-[0.22em] text-slate-500">This week on the map</p>
+                <h1 className="mt-2 text-2xl font-semibold leading-tight text-slate-900">
+                  {mapQuery.data?.pins.length ? `${mapQuery.data.pins.length} venues leading right now` : "Waiting on recommendations"}
+                </h1>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <button
                   type="button"
                   onClick={() => digestPreviewMutation.mutate()}
                   disabled={!isAuthenticated || digestPreviewMutation.isPending}
-                  className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
+                  className="whitespace-nowrap rounded-full border border-stroke bg-white/70 px-3 py-2 text-[13px] font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
                   title={isAuthenticated ? "Email the current shortlist to yourself." : "Sign in to email this list."}
                 >
                   {digestPreviewMutation.isPending ? "Emailing..." : "Email me this list"}
@@ -234,7 +206,7 @@ export function PulseShell() {
                   type="button"
                   onClick={() => syncSupplyMutation.mutate()}
                   disabled={syncSupplyMutation.isPending || digestPreviewMutation.isPending}
-                  className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
+                  className="whitespace-nowrap rounded-full border border-stroke bg-white/70 px-3 py-2 text-[13px] font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
                 >
                   {syncSupplyMutation.isPending ? "Checking..." : "Check for new events"}
                 </button>
@@ -242,7 +214,7 @@ export function PulseShell() {
                   type="button"
                   onClick={() => refreshMutation.mutate()}
                   disabled={refreshMutation.isPending || syncSupplyMutation.isPending || digestPreviewMutation.isPending}
-                  className="rounded-full border border-stroke bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
+                  className="whitespace-nowrap rounded-full border border-stroke bg-white/70 px-3 py-2 text-[13px] font-medium text-slate-700 transition hover:bg-white disabled:opacity-60"
                 >
                   {refreshMutation.isPending ? "Re-ranking..." : "Re-rank now"}
                 </button>
@@ -253,7 +225,7 @@ export function PulseShell() {
               <PulseMap
                 pins={mapQuery.data?.pins ?? []}
                 viewport={mapQuery.data?.viewport ?? null}
-                selectedVenueId={selectedCard?.venueId ?? null}
+                selectedVenueId={selectedVenueId}
                 onSelectVenue={setSelectedVenueId}
               />
             </div>
@@ -276,7 +248,7 @@ export function PulseShell() {
             <RecommendationDrawer
               loading={mapQuery.isLoading}
               cards={mapQuery.data?.cards ?? {}}
-              selectedVenueId={selectedCard?.venueId ?? null}
+              selectedVenueId={selectedVenueId}
               onSelectVenue={setSelectedVenueId}
               onSave={(card) =>
                 feedbackMutation.mutate({ recommendationId: card.eventId, action: "save" })

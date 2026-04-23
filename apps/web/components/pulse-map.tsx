@@ -213,15 +213,19 @@ export function PulseMap({
       ),
     );
 
+    const container = map.getContainer();
+    const horizontalPadding = Math.max(32, Math.round(container.clientWidth * 0.08));
+    const verticalPadding = Math.max(32, Math.round(container.clientHeight * 0.1));
+
     map.fitBounds(bounds as LngLatBoundsLike, {
       padding: {
-        top: 112,
-        right: 36,
-        bottom: 36,
-        left: 36
+        top: verticalPadding,
+        right: horizontalPadding,
+        bottom: verticalPadding,
+        left: horizontalPadding
       },
       duration: 900,
-      maxZoom: 13.8
+      maxZoom: 14.9
     });
   }, [pins, resolvedViewport]);
 
@@ -280,12 +284,26 @@ export function PulseMap({
   }
 
   return (
-    <div className="relative h-full min-h-[520px] w-full overflow-hidden bg-[radial-gradient(circle_at_top,#f7efe0,transparent_35%),linear-gradient(135deg,#f4ede2,#e8f4f1)]">
+    <div className="relative h-full min-h-[520px] w-full overflow-hidden border-t border-white/65 bg-[radial-gradient(circle_at_top,#f7efe0,transparent_35%),linear-gradient(135deg,#f4ede2,#e8f4f1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
       {mode === "loading" ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 text-sm text-slate-500">
           Loading live map...
         </div>
       ) : null}
+      <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-3 rounded-full border border-stroke/80 bg-white/88 px-3 py-2 text-xs font-medium text-slate-600 shadow-[0_16px_30px_rgba(15,23,42,0.12)] backdrop-blur">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-full bg-[linear-gradient(135deg,#164e63,#0f766e)]" />
+          High
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[linear-gradient(135deg,#ec9f30,#f97316)]" />
+          Medium
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-[linear-gradient(135deg,#94a3b8,#64748b)]" />
+          Low
+        </span>
+      </div>
       <div ref={mapRef} className="h-full w-full" />
     </div>
   );
