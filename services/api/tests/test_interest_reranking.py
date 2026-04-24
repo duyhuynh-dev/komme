@@ -185,6 +185,90 @@ def test_candidate_score_strong_match_beats_generic_event() -> None:
     assert generic_topics == []
 
 
+def test_candidate_score_category_affinity_lifts_market_events_for_collector_taste() -> None:
+    profiles_by_key = {
+        "collector_marketplaces": UserInterestProfile(
+            user_id="user-1",
+            topic_key="collector_marketplaces",
+            label="Collector marketplaces",
+            confidence=0.95,
+            boosted=False,
+            muted=False,
+        ),
+        "style_design_shopping": UserInterestProfile(
+            user_id="user-1",
+            topic_key="style_design_shopping",
+            label="Style / design shopping",
+            confidence=0.82,
+            boosted=False,
+            muted=False,
+        ),
+    }
+
+    market_score, _, _ = _candidate_score(
+        [],
+        profiles_by_key,
+        source_confidence=0.78,
+        transit_minutes=28,
+        budget_fit=0.9,
+        category="market",
+        tags=["vintage", "design fair"],
+    )
+    generic_score, _, _ = _candidate_score(
+        [],
+        profiles_by_key,
+        source_confidence=0.9,
+        transit_minutes=24,
+        budget_fit=0.92,
+        category="culture",
+        tags=["community"],
+    )
+
+    assert market_score > generic_score
+
+
+def test_candidate_score_category_affinity_lifts_talks_for_intellectual_scene() -> None:
+    profiles_by_key = {
+        "student_intellectual_scene": UserInterestProfile(
+            user_id="user-1",
+            topic_key="student_intellectual_scene",
+            label="Campus / intellectual scene",
+            confidence=0.82,
+            boosted=False,
+            muted=False,
+        ),
+        "ambitious_professional_scene": UserInterestProfile(
+            user_id="user-1",
+            topic_key="ambitious_professional_scene",
+            label="Ambitious professional scene",
+            confidence=0.7,
+            boosted=False,
+            muted=False,
+        ),
+    }
+
+    talk_score, _, _ = _candidate_score(
+        [],
+        profiles_by_key,
+        source_confidence=0.74,
+        transit_minutes=34,
+        budget_fit=0.86,
+        category="talk",
+        tags=["book discussion", "lecture"],
+    )
+    nightlife_score, _, _ = _candidate_score(
+        [],
+        profiles_by_key,
+        source_confidence=0.9,
+        transit_minutes=26,
+        budget_fit=0.9,
+        category="live music",
+        tags=["dj set"],
+    )
+
+    assert talk_score > nightlife_score
+
+
 def test_feedback_adjustment_penalizes_dismissed_patterns() -> None:
     profiles_by_key = {
         "underground_dance": UserInterestProfile(

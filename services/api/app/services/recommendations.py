@@ -45,6 +45,16 @@ TOPIC_KEYWORD_MAP = {
     "ambitious_professional_scene": ["networking", "panel", "speaker", "founder", "industry", "cocktail"],
     "style_design_shopping": ["design", "fashion", "vintage", "market", "popup", "boutique"],
 }
+TOPIC_CATEGORY_HINTS = {
+    "underground_dance": ["club", "dance", "dj", "electronic", "live music", "nightlife"],
+    "indie_live_music": ["concert", "live music", "performance", "show"],
+    "gallery_nights": ["art", "culture", "exhibition", "gallery", "screening"],
+    "creative_meetups": ["community", "conversation", "meetup", "networking", "talk", "workshop"],
+    "collector_marketplaces": ["bazaar", "fair", "market", "popup", "shopping", "swap", "vintage"],
+    "student_intellectual_scene": ["book", "campus", "discussion", "lecture", "reading", "screening", "seminar", "talk"],
+    "ambitious_professional_scene": ["career", "founder", "industry", "networking", "panel", "professional", "speaker", "talk"],
+    "style_design_shopping": ["boutique", "design", "fashion", "market", "popup", "shopping", "thrift", "vintage"],
+}
 
 
 @dataclass
@@ -277,6 +287,39 @@ def _interest_fit(
     return (_clamp_score(score), matched_topics, muted_topics)
 
 
+def _category_affinity(
+    category: str,
+    tags: list[str],
+    profiles_by_key: dict[str, UserInterestProfile],
+) -> float:
+    blob = " ".join(
+        filter(
+            None,
+            [
+                _normalize_text(category),
+                " ".join(_normalize_text(tag) for tag in tags),
+            ],
+        )
+    )
+    if not blob:
+        return 0.0
+
+    matching_weights: list[float] = []
+    for topic_key, topic in profiles_by_key.items():
+        if topic.muted:
+            continue
+        hints = TOPIC_CATEGORY_HINTS.get(topic_key, [])
+        if any(hint in blob for hint in hints):
+            matching_weights.append(_topic_weight(topic))
+
+    if not matching_weights:
+        return 0.0
+
+    strongest = max(matching_weights)
+    breadth_bonus = min(0.05, max(0, len(matching_weights) - 1) * 0.025)
+    return min(0.18, (strongest * 0.16) + breadth_bonus)
+
+
 def _transit_minutes(travel: list[dict]) -> int:
     for band in travel:
         if band["mode"] == "transit":
@@ -469,13 +512,18 @@ def _candidate_score(
     source_confidence: float,
     transit_minutes: int,
     budget_fit: float,
+    *,
+    category: str = "",
+    tags: list[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile]]:
     interest_fit, matched_topics, muted_topics = _interest_fit(topic_keys, profiles_by_key)
+    category_fit = _category_affinity(category, tags or [], profiles_by_key)
     total_score = _clamp_score(
-        (interest_fit * 0.7)
-        + (_distance_fit(transit_minutes) * 0.13)
+        (interest_fit * 0.64)
+        + (category_fit * 0.15)
+        + (_distance_fit(transit_minutes) * 0.11)
         + (budget_fit * 0.10)
-        + (source_confidence * 0.07)
+        + (source_confidence * 0.05)
     )
     return total_score, matched_topics, muted_topics
 
@@ -685,6 +733,8 @@ async def refresh_recommendations_for_user(
             source_confidence,
             _transit_minutes(travel),
             budget_fit,
+            category=event.category,
+            tags=metadata.get("tags", []),
         )
         feedback_adjustment, feedback_reason = _feedback_adjustment(
             topic_keys=topic_keys,
@@ -838,7 +888,6 @@ async def get_map_recommendations(
     if run is None:
         return _empty_response(display_timezone)
 
-    anchor = await _user_anchor(session, user.id)
     constraints = await _user_constraints(session, user.id)
     pins, items, cards = await _cards_for_run(session, run)
     if not items:
