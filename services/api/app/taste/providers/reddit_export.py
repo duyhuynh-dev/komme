@@ -1,8 +1,662 @@
-from app.taste.contracts import NormalizedRedditActivity
+from __future__ import annotations
+
+import csv
+import io
+import json
+import zipfile
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from app.taste.contracts import (
+    NormalizedRedditActivity,
+    RecentComment,
+    RecentSubmission,
+    SubredditActivitySummary,
+)
+from app.taste.errors import (
+    InsufficientSignalError,
+    InvalidRedditExportError,
+    NoPublicActivityError,
+)
+from app.taste.profile_contracts import (
+    TasteProfile,
+    TasteTheme,
+    ThemeEvidence,
+    ThemeEvidenceCount,
+    ThemeEvidenceSnippet,
+)
+from app.taste.theme_catalog import THEME_CATALOG_BY_ID
+
+
+@dataclass(frozen=True)
+class RedditThemeRule:
+    theme_id: str
+    subreddit_weights: dict[str, int]
+    keyword_weights: dict[str, int]
+    provider_note: str
+
+
+REDDIT_THEME_RULES: tuple[RedditThemeRule, ...] = (
+    RedditThemeRule(
+        theme_id="underground_dance",
+        subreddit_weights={
+            "aves": 4,
+            "techno": 4,
+            "electronicmusic": 3,
+            "dnb": 3,
+            "drumandbass": 3,
+            "nycnightlife": 2,
+        },
+        keyword_weights={
+            "warehouse": 3,
+            "techno": 3,
+            "rave": 3,
+            "afters": 3,
+            "dj": 1,
+            "sound system": 2,
+            "club night": 2,
+        },
+        provider_note="Built from dance-music communities and rave language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="indie_live_music",
+        subreddit_weights={
+            "indieheads": 4,
+            "letstalkmusic": 3,
+            "listentothis": 2,
+            "music": 1,
+            "brooklynmusic": 2,
+        },
+        keyword_weights={
+            "live show": 3,
+            "tour": 2,
+            "band": 2,
+            "venue": 2,
+            "gig": 2,
+            "singer-songwriter": 2,
+            "alt-pop": 2,
+        },
+        provider_note="Built from band-forward communities and live-show language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="gallery_nights",
+        subreddit_weights={
+            "art": 2,
+            "contemporaryart": 3,
+            "artistlounge": 2,
+            "streetart": 2,
+        },
+        keyword_weights={
+            "gallery": 3,
+            "opening": 2,
+            "installation": 3,
+            "exhibit": 2,
+            "museum": 2,
+            "artist talk": 2,
+            "curator": 2,
+        },
+        provider_note="Built from art communities and opening-night language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="jazz_intimate_shows",
+        subreddit_weights={
+            "jazz": 4,
+            "jazzguitar": 2,
+            "vinyljazz": 2,
+            "jazzpiano": 2,
+        },
+        keyword_weights={
+            "jazz": 2,
+            "quartet": 3,
+            "trio": 3,
+            "listening room": 3,
+            "improv": 2,
+            "small room": 2,
+        },
+        provider_note="Built from jazz communities and intimate-room language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="hiphop_rap_shows",
+        subreddit_weights={
+            "hiphopheads": 4,
+            "rap": 3,
+            "makinghiphop": 2,
+            "trapmuzik": 2,
+        },
+        keyword_weights={
+            "rap": 2,
+            "hip hop": 2,
+            "cypher": 3,
+            "freestyle": 3,
+            "beats": 1,
+            "showcase": 2,
+        },
+        provider_note="Built from rap communities and performance-heavy language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="comedy_nights",
+        subreddit_weights={
+            "standup": 4,
+            "comedy": 2,
+            "improv": 3,
+            "livefromnewyork": 2,
+        },
+        keyword_weights={
+            "stand-up": 3,
+            "comedian": 2,
+            "open mic": 3,
+            "improv": 2,
+            "sketch": 2,
+            "comic": 2,
+        },
+        provider_note="Built from comedy communities and room-night language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="dive_bar_scene",
+        subreddit_weights={
+            "beer": 2,
+            "cocktails": 1,
+            "brooklyn": 1,
+            "asknyc": 1,
+        },
+        keyword_weights={
+            "dive bar": 4,
+            "neighborhood bar": 3,
+            "cheap drinks": 3,
+            "jukebox": 2,
+            "pool table": 2,
+            "local spot": 2,
+        },
+        provider_note="Built from neighborhood-bar language and low-key night recommendations in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="rooftop_lounges",
+        subreddit_weights={
+            "asknyc": 1,
+            "cocktails": 2,
+            "nycbitcheswithtaste": 2,
+        },
+        keyword_weights={
+            "rooftop": 4,
+            "cocktail bar": 3,
+            "lounge": 2,
+            "dress code": 2,
+            "happy hour": 1,
+            "view": 1,
+        },
+        provider_note="Built from rooftop, cocktail, and polished-night language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="late_night_food",
+        subreddit_weights={
+            "foodnyc": 4,
+            "nycfood": 4,
+            "seriouseats": 2,
+            "askculinary": 1,
+        },
+        keyword_weights={
+            "late-night": 3,
+            "late night": 3,
+            "food crawl": 2,
+            "reservation": 1,
+            "popup dinner": 3,
+            "tasting menu": 2,
+            "omakase": 2,
+        },
+        provider_note="Built from food communities and after-hours dining language in your Reddit export.",
+    ),
+    RedditThemeRule(
+        theme_id="queer_nightlife",
+        subreddit_weights={
+            "lgbt": 2,
+            "rupaulsdragrace": 3,
+            "ainbow": 2,
+            "askgaybros": 1,
+            "actuallesbians": 1,
+        },
+        keyword_weights={
+            "queer": 3,
+            "drag": 3,
+            "gay bar": 3,
+            "lesbian bar": 3,
+            "ballroom": 2,
+            "pride": 2,
+        },
+        provider_note="Built from queer community signals and nightlife-specific language in your Reddit export.",
+    ),
+)
+
+_COMMENT_FILENAMES = ("comments.csv", "comments.json")
+_SUBMISSION_FILENAMES = ("posts.csv", "posts.json", "submissions.csv", "submissions.json")
 
 
 class RedditExportProvider:
     source_name = "reddit_export"
 
     async def fetch(self, source_key: str) -> NormalizedRedditActivity:
-        raise NotImplementedError("Reddit export provider will be implemented after the public username spike.")
+        path = Path(source_key)
+        raw_bytes = path.read_bytes()
+        return self.parse_bytes(raw_bytes, filename=path.name)
+
+    async def build_profile(self, source_key: str) -> TasteProfile:
+        activity = await self.fetch(source_key)
+        return self.build_profile_from_activity(activity)
+
+    def parse_bytes(self, raw_bytes: bytes, *, filename: str = "reddit-export.zip") -> NormalizedRedditActivity:
+        normalized_filename = filename.lower()
+        if normalized_filename.endswith(".zip"):
+            return self._parse_zip(raw_bytes, filename=filename)
+        if normalized_filename.endswith(".json"):
+            return self._parse_json_document(raw_bytes, filename=filename)
+        raise InvalidRedditExportError("Reddit export must be a zip archive or JSON document.")
+
+    def build_profile_from_bytes(self, raw_bytes: bytes, *, filename: str = "reddit-export.zip") -> TasteProfile:
+        activity = self.parse_bytes(raw_bytes, filename=filename)
+        return self.build_profile_from_activity(activity, source_key=filename)
+
+    def build_profile_from_activity(
+        self,
+        activity: NormalizedRedditActivity,
+        *,
+        source_key: str | None = None,
+    ) -> TasteProfile:
+        themes: list[TasteTheme] = []
+        matched_subreddits_global: set[str] = set()
+
+        combined_items: list[tuple[str, RecentComment | RecentSubmission]] = [
+            *[("comment", comment) for comment in activity.recent_comments],
+            *[("submission", submission) for submission in activity.recent_submissions],
+        ]
+
+        for rule in REDDIT_THEME_RULES:
+            theme = self._score_theme(rule, combined_items)
+            if theme is None:
+                continue
+            matched_subreddits_global.update(item.key for item in theme.evidence.matched_subreddits)
+            themes.append(theme)
+
+        themes.sort(key=lambda item: item.confidence, reverse=True)
+        if not themes:
+            raise InsufficientSignalError(
+                "Reddit export did not surface enough nightlife signal yet."
+            )
+
+        unmatched_activity = {
+            "topUnmatchedSubreddits": [
+                {
+                    "subreddit": summary.subreddit,
+                    "interactionCount": summary.comment_count + summary.submission_count,
+                }
+                for summary in activity.subreddit_activity
+                if summary.subreddit.lower() not in matched_subreddits_global
+            ][:8]
+        }
+
+        return TasteProfile(
+            source="reddit_export",
+            source_key=source_key or activity.source_key,
+            username=activity.username,
+            themes=themes,
+            unmatched_activity=unmatched_activity,
+        )
+
+    def _parse_zip(self, raw_bytes: bytes, *, filename: str) -> NormalizedRedditActivity:
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(raw_bytes))
+        except zipfile.BadZipFile as error:
+            raise InvalidRedditExportError("Unable to read the uploaded Reddit export zip.") from error
+
+        comments_rows: list[dict[str, Any]] = []
+        submission_rows: list[dict[str, Any]] = []
+        username: str | None = None
+
+        with archive:
+            for member_name in archive.namelist():
+                if member_name.endswith("/"):
+                    continue
+                basename = Path(member_name).name.lower()
+                with archive.open(member_name) as member:
+                    member_bytes = member.read()
+
+                if basename in _COMMENT_FILENAMES:
+                    comments_rows = self._parse_rows(member_bytes, basename)
+                    username = username or _extract_username_from_rows(comments_rows)
+                elif basename in _SUBMISSION_FILENAMES:
+                    submission_rows = self._parse_rows(member_bytes, basename)
+                    username = username or _extract_username_from_rows(submission_rows)
+                elif basename in {"account.json", "user.json", "profile.json"}:
+                    username = username or _extract_username_from_json(member_bytes)
+
+        return self._build_activity(
+            comments_rows,
+            submission_rows,
+            username=username,
+            source_key=filename,
+        )
+
+    def _parse_json_document(self, raw_bytes: bytes, *, filename: str) -> NormalizedRedditActivity:
+        try:
+            payload = json.loads(raw_bytes.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise InvalidRedditExportError("Unable to parse the uploaded Reddit export JSON.") from error
+
+        if not isinstance(payload, dict):
+            raise InvalidRedditExportError("Reddit export JSON must be an object.")
+
+        comments_rows = _coerce_json_rows(payload.get("comments"))
+        submission_rows = _coerce_json_rows(
+            payload.get("posts") or payload.get("submissions") or payload.get("submitted")
+        )
+        username = (
+            _string_or_none(payload.get("username"))
+            or _string_or_none(payload.get("user"))
+            or _extract_username_from_json(raw_bytes)
+        )
+
+        return self._build_activity(
+            comments_rows,
+            submission_rows,
+            username=username,
+            source_key=filename,
+        )
+
+    def _parse_rows(self, raw_bytes: bytes, filename: str) -> list[dict[str, Any]]:
+        if filename.endswith(".csv"):
+            try:
+                text = raw_bytes.decode("utf-8-sig")
+            except UnicodeDecodeError as error:
+                raise InvalidRedditExportError(f"Unable to decode {filename} from the Reddit export.") from error
+            return list(csv.DictReader(io.StringIO(text)))
+
+        if filename.endswith(".json"):
+            try:
+                payload = json.loads(raw_bytes.decode("utf-8-sig"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise InvalidRedditExportError(f"Unable to parse {filename} from the Reddit export.") from error
+            return _coerce_json_rows(payload)
+
+        raise InvalidRedditExportError(f"Unsupported Reddit export file format: {filename}")
+
+    def _build_activity(
+        self,
+        comments_rows: list[dict[str, Any]],
+        submission_rows: list[dict[str, Any]],
+        *,
+        username: str | None,
+        source_key: str,
+    ) -> NormalizedRedditActivity:
+        comments = [comment for comment in (_comment_from_row(row) for row in comments_rows) if comment is not None]
+        submissions = [
+            submission
+            for submission in (_submission_from_row(row) for row in submission_rows)
+            if submission is not None
+        ]
+
+        if not comments and not submissions:
+            raise NoPublicActivityError("The Reddit export did not include usable comments or submissions.")
+
+        subreddit_counts: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"comment_count": 0, "submission_count": 0, "total_karma": 0}
+        )
+
+        for comment in comments:
+            summary = subreddit_counts[comment.subreddit]
+            summary["comment_count"] += 1
+            summary["total_karma"] += comment.score
+
+        for submission in submissions:
+            summary = subreddit_counts[submission.subreddit]
+            summary["submission_count"] += 1
+            summary["total_karma"] += submission.score
+
+        subreddit_activity = [
+            SubredditActivitySummary(subreddit=subreddit, **counts)
+            for subreddit, counts in sorted(
+                subreddit_counts.items(),
+                key=lambda item: (
+                    -(item[1]["comment_count"] + item[1]["submission_count"]),
+                    item[0],
+                ),
+            )
+        ]
+
+        comments.sort(key=lambda item: item.created_at, reverse=True)
+        submissions.sort(key=lambda item: item.created_at, reverse=True)
+
+        return NormalizedRedditActivity(
+            source="reddit_export",
+            source_key=source_key,
+            username=username,
+            fetched_at=datetime.now(UTC),
+            total_comments=len(comments),
+            total_submissions=len(submissions),
+            subreddit_activity=subreddit_activity,
+            recent_comments=comments,
+            recent_submissions=submissions,
+        )
+
+    def _score_theme(
+        self,
+        rule: RedditThemeRule,
+        items: list[tuple[str, RecentComment | RecentSubmission]],
+    ) -> TasteTheme | None:
+        subreddit_hits: Counter[str] = Counter()
+        keyword_hits: Counter[str] = Counter()
+        examples: list[ThemeEvidenceSnippet] = []
+
+        for item_type, item in items:
+            subreddit = item.subreddit.lower()
+            text = _item_text(item)
+            matched = False
+
+            if subreddit in rule.subreddit_weights:
+                subreddit_hits[subreddit] += 1
+                matched = True
+
+            for keyword in rule.keyword_weights:
+                if keyword in text:
+                    keyword_hits[keyword] += 1
+                    matched = True
+
+            if matched and len(examples) < 3:
+                examples.append(
+                    ThemeEvidenceSnippet(
+                        type=item_type,
+                        subreddit=item.subreddit,
+                        snippet=_example_snippet(item),
+                        permalink=getattr(item, "permalink", None),
+                    )
+                )
+
+        if not subreddit_hits and not keyword_hits:
+            return None
+
+        confidence = min(
+            95,
+            sum(min(count, 4) * rule.subreddit_weights[subreddit] * 6 for subreddit, count in subreddit_hits.items())
+            + sum(min(count, 4) * rule.keyword_weights[keyword] * 3 for keyword, count in keyword_hits.items()),
+        )
+        if confidence < 32 or not examples:
+            return None
+
+        item = THEME_CATALOG_BY_ID[rule.theme_id]
+        return TasteTheme(
+            id=item.id,
+            label=item.label,
+            confidence=confidence,
+            confidence_label=_confidence_label(confidence),
+            evidence=ThemeEvidence(
+                matched_subreddits=[
+                    ThemeEvidenceCount(key=subreddit, count=count)
+                    for subreddit, count in subreddit_hits.most_common(4)
+                ],
+                matched_keywords=[
+                    ThemeEvidenceCount(key=keyword, count=count)
+                    for keyword, count in keyword_hits.most_common(5)
+                ],
+                top_examples=examples,
+                provider_notes=[rule.provider_note],
+            ),
+        )
+
+
+def _coerce_json_rows(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        items = value.get("items")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    return []
+
+
+def _extract_username_from_json(raw_bytes: bytes) -> str | None:
+    try:
+        payload = json.loads(raw_bytes.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    return (
+        _string_or_none(payload.get("username"))
+        or _string_or_none(payload.get("user"))
+        or _string_or_none((payload.get("account") or {}).get("username"))
+    )
+
+
+def _extract_username_from_rows(rows: list[dict[str, Any]]) -> str | None:
+    for row in rows:
+        username = _first_present(row, "username", "author", "user", "account")
+        if username:
+            return username
+    return None
+
+
+def _comment_from_row(row: dict[str, Any]) -> RecentComment | None:
+    subreddit = _first_present(row, "subreddit")
+    body = _first_present(row, "body", "comment", "comment_body", "text")
+    if not subreddit or not body:
+        return None
+
+    return RecentComment(
+        subreddit=subreddit,
+        body=body,
+        score=_parse_int(_first_present(row, "score", "karma", "ups")) or 0,
+        created_at=_parse_datetime(
+            _first_present(row, "created_utc", "created_at", "created", "date", "timestamp")
+        ),
+        post_title=_first_present(row, "link_title", "post_title", "submission_title", "title"),
+        permalink=_normalize_permalink(_first_present(row, "permalink", "link", "url")),
+    )
+
+
+def _submission_from_row(row: dict[str, Any]) -> RecentSubmission | None:
+    subreddit = _first_present(row, "subreddit")
+    title = _first_present(row, "title", "post_title", "submission_title")
+    if not subreddit or not title:
+        return None
+
+    return RecentSubmission(
+        subreddit=subreddit,
+        title=title,
+        score=_parse_int(_first_present(row, "score", "karma", "ups")) or 0,
+        created_at=_parse_datetime(
+            _first_present(row, "created_utc", "created_at", "created", "date", "timestamp")
+        ),
+        permalink=_normalize_permalink(_first_present(row, "permalink", "link", "url")),
+        body=_first_present(row, "body", "selftext", "text"),
+    )
+
+
+def _first_present(row: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized:
+                return normalized
+            continue
+        normalized = str(value).strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _parse_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(float(value))
+    except ValueError:
+        return None
+
+
+def _parse_datetime(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(UTC)
+
+    try:
+        return datetime.fromtimestamp(float(value), tz=UTC)
+    except ValueError:
+        pass
+
+    normalized = value.strip().replace("Z", "+00:00")
+    if normalized.endswith(" UTC"):
+        normalized = normalized.removesuffix(" UTC") + "+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.now(UTC)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _normalize_permalink(value: str | None) -> str | None:
+    if not value:
+        return None
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith("/"):
+        return f"https://www.reddit.com{value}"
+    return value
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _item_text(item: RecentComment | RecentSubmission) -> str:
+    parts = [
+        item.subreddit,
+        getattr(item, "title", None),
+        getattr(item, "body", None),
+        getattr(item, "post_title", None),
+    ]
+    return " ".join(part.lower() for part in parts if part)
+
+
+def _example_snippet(item: RecentComment | RecentSubmission) -> str:
+    source_text = getattr(item, "body", None) or getattr(item, "title", None) or getattr(item, "post_title", None)
+    if source_text is None:
+        return item.subreddit
+    return source_text if len(source_text) <= 140 else f"{source_text[:137].rstrip()}..."
+
+
+def _confidence_label(confidence: int) -> str:
+    if confidence >= 80:
+        return "Strong"
+    if confidence >= 60:
+        return "Clear"
+    if confidence >= 40:
+        return "Emerging"
+    return "Weak"

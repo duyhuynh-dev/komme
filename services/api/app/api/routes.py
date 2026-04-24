@@ -54,6 +54,7 @@ from app.taste.errors import InsufficientSignalError, TasteProviderError
 from app.taste.profile_contracts import TasteProfile
 from app.taste.profile_service import apply_taste_profile
 from app.taste.providers.manual import ManualThemeProvider
+from app.taste.providers.reddit_export import RedditExportProvider
 from app.taste.providers.spotify import SpotifyProvider
 
 router = APIRouter(prefix="/v1")
@@ -624,6 +625,45 @@ async def taste_manual_apply(
     provider = ManualThemeProvider()
     try:
         profile = await provider.build_profile(payload.selectedThemeIds)
+        applied = await apply_taste_profile(session, identity.user, profile)
+    except TasteProviderError as error:
+        _raise_taste_provider_http_error(error)
+    return _serialize_taste_profile(applied)
+
+
+def _uploaded_export_filename(request: Request) -> str:
+    return request.headers.get("x-upload-filename") or "reddit-export.zip"
+
+
+@router.post("/taste/reddit-export/preview", response_model=TasteProfileResponse)
+async def taste_reddit_export_preview(request: Request) -> TasteProfileResponse:
+    raw_bytes = await request.body()
+    provider = RedditExportProvider()
+    try:
+        profile = provider.build_profile_from_bytes(raw_bytes, filename=_uploaded_export_filename(request))
+    except InsufficientSignalError as error:
+        empty_profile = TasteProfile(
+            source="reddit_export",
+            source_key=_uploaded_export_filename(request),
+            themes=[],
+            unmatched_activity={"reason": error.message},
+        )
+        return _serialize_taste_profile(empty_profile)
+    except TasteProviderError as error:
+        _raise_taste_provider_http_error(error)
+    return _serialize_taste_profile(profile)
+
+
+@router.post("/taste/reddit-export/apply", response_model=TasteProfileResponse)
+async def taste_reddit_export_apply(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> TasteProfileResponse:
+    raw_bytes = await request.body()
+    provider = RedditExportProvider()
+    try:
+        profile = provider.build_profile_from_bytes(raw_bytes, filename=_uploaded_export_filename(request))
         applied = await apply_taste_profile(session, identity.user, profile)
     except TasteProviderError as error:
         _raise_taste_provider_http_error(error)

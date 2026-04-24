@@ -43,3 +43,7 @@ class InvalidManualSelectionError(TasteProviderError):
 
 class UnknownThemeError(TasteProviderError):
     code = "unknown_theme"
+
+
+class InvalidRedditExportError(TasteProviderError):
+    code = "invalid_reddit_export"
