@@ -42,12 +42,21 @@ Important production values:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `OAUTH_STATE_SECRET`
+- `PULSE_SESSION_SECRET`
 - `INTERNAL_INGEST_SECRET`
 - `RESEND_API_KEY`
 - `DIGEST_FROM_EMAIL`
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
 - `TICKETMASTER_API_KEY` if you want live Ticketmaster ingestion
 - `GEMINI_API_KEY` if you want live AI-backed worker tasks
 - `INNGEST_SIGNING_KEY` so the worker exposes the Inngest serve route
+
+Spotify OAuth redirect in production should be:
+
+```text
+https://$API_DOMAIN/v1/spotify/connect/callback
+```
 
 ## 3. Build and boot the stack
 
@@ -66,6 +75,8 @@ docker compose --env-file deploy/ec2/.env.ec2 -f deploy/ec2/docker-compose.yml l
 docker compose --env-file deploy/ec2/.env.ec2 -f deploy/ec2/docker-compose.yml logs -f web
 ```
 
+The compose stack now includes healthchecks for `web`, `api`, and `worker`, and waits for them before Caddy proxies traffic.
+
 ## 4. Health checks
 
 After boot, verify:
@@ -74,6 +85,12 @@ After boot, verify:
 curl https://$API_DOMAIN/healthz
 curl https://$WORKER_DOMAIN/healthz
 open https://$APP_DOMAIN
+```
+
+Or use the included smoke-test helper:
+
+```bash
+bash deploy/ec2/smoke-test.sh deploy/ec2/.env.ec2
 ```
 
 ## 5. Inngest Cloud sync

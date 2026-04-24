@@ -14,9 +14,12 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - web
-      - api
-      - worker
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
 
   web:
     build:
@@ -31,6 +34,12 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   api:
     build:
@@ -48,17 +57,27 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
+      PULSE_SESSION_SECRET: ${PULSE_SESSION_SECRET}
       INTERNAL_INGEST_SECRET: ${INTERNAL_INGEST_SECRET}
       RESEND_API_KEY: ${RESEND_API_KEY}
       DIGEST_FROM_EMAIL: ${DIGEST_FROM_EMAIL}
       REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
       REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
       REDDIT_REDIRECT_URI: https://${API_DOMAIN}/v1/reddit/connect/callback
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET}
+      SPOTIFY_REDIRECT_URI: https://${API_DOMAIN}/v1/spotify/connect/callback
       APPLE_MAPS_TEAM_ID: ${APPLE_MAPS_TEAM_ID}
       APPLE_MAPS_KEY_ID: ${APPLE_MAPS_KEY_ID}
       APPLE_MAPS_PRIVATE_KEY: ${APPLE_MAPS_PRIVATE_KEY}
       APPLE_MAPS_MAPS_ID: ${APPLE_MAPS_MAPS_ID}
       APPLE_MAPS_ORIGIN: https://${APP_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   worker:
     build:
@@ -74,6 +93,12 @@ services:
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
       TICKETMASTER_API_KEY: ${TICKETMASTER_API_KEY}
       INTERNAL_INGEST_SECRET: ${INTERNAL_INGEST_SECRET}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
 volumes:
   caddy_data:
