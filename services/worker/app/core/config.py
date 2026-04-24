@@ -4,8 +4,9 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SERVICE_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = Path(__file__).resolve()
+SERVICE_ROOT = CONFIG_PATH.parents[2]
+REPO_ROOT = CONFIG_PATH.parents[4] if len(CONFIG_PATH.parents) > 4 else SERVICE_ROOT
 
 
 class Settings(BaseSettings):
