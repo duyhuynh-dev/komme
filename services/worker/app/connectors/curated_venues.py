@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Iterable
+import json
 import re
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
@@ -135,7 +136,41 @@ PIONEER_WORKS = CuratedVenueSource(
     default_duration_hours=3,
     parser_name="pioneer_works",
 )
-CURATED_SOURCES = [PUBLIC_RECORDS, PIONEER_WORKS]
+MCNALLY_JACKSON = CuratedVenueSource(
+    key="mcnally-jackson",
+    listing_url="https://www.mcnallyjackson.com/events",
+    venue=VenueMetadata(
+        venue_name="McNally Jackson Seaport",
+        neighborhood="Seaport",
+        address="4 Fulton St, New York, NY",
+        city="New York City",
+        state="NY",
+        postal_code="10038",
+        latitude=40.7062,
+        longitude=-74.0035,
+    ),
+    default_category="culture",
+    default_duration_hours=2,
+    parser_name="json_ld_events",
+)
+ARTISTS_AND_FLEAS = CuratedVenueSource(
+    key="artists-and-fleas",
+    listing_url="https://www.artistsandfleas.com/",
+    venue=VenueMetadata(
+        venue_name="Artists & Fleas Williamsburg",
+        neighborhood="Williamsburg",
+        address="70 N 7th St, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        postal_code="11249",
+        latitude=40.7192,
+        longitude=-73.9614,
+    ),
+    default_category="market",
+    default_duration_hours=4,
+    parser_name="json_ld_events",
+)
+CURATED_SOURCES = [PUBLIC_RECORDS, PIONEER_WORKS, MCNALLY_JACKSON, ARTISTS_AND_FLEAS]
 
 
 class CuratedVenueConnector:
@@ -176,6 +211,10 @@ class CuratedVenueConnector:
 
                 if source.parser_name == "pioneer_works":
                     source_candidates.extend(await _parse_pioneer_works_calendar(client, html, source))
+                    continue
+
+                if source.parser_name == "json_ld_events":
+                    source_candidates.extend(_parse_json_ld_events(html, source))
 
         return _dedupe_candidates(source_candidates) or _demo_fallback_candidates(self.source_name)
 
@@ -314,6 +353,211 @@ def _extract_meta_description(document: HTMLParser) -> str:
         if node and node.attributes.get("content"):
             return _normalize_text(node.attributes["content"])
     return ""
+
+
+def _parse_json_ld_events(html: str, source: CuratedVenueSource) -> list[CandidateEvent]:
+    document = HTMLParser(html)
+    parsed: list[CandidateEvent] = []
+    seen: set[str] = set()
+
+    for payload in _json_ld_event_payloads(document):
+        name = _normalize_text(_string_value(payload.get("name")))
+        if not name:
+            continue
+
+        starts_at = _parse_json_ld_datetime(payload.get("startDate"))
+        if starts_at is None:
+            continue
+
+        end_dt = _parse_json_ld_datetime(payload.get("endDate"))
+        if end_dt is None:
+            end_dt = starts_at + timedelta(hours=source.default_duration_hours)
+
+        description = _normalize_text(_string_value(payload.get("description")))
+        category = _infer_json_ld_category(payload, description, source.default_category)
+        offers = payload.get("offers")
+        min_price, max_price = _json_ld_offer_price(offers)
+        tags = _json_ld_tags(payload, category, source)
+
+        candidate = _candidate_event(
+            source_name="curated_venues",
+            source_key=source.key,
+            venue=source.venue,
+            title=name,
+            summary=description or f"{category.title()} event at {source.venue.venue_name}.",
+            category=category,
+            starts_at=starts_at,
+            ends_at=end_dt,
+            ticket_url=_string_value(payload.get("url")) or source.listing_url,
+            min_price=min_price,
+            max_price=max_price,
+            source_confidence=0.8,
+            tags=tags,
+        )
+        if candidate.source_event_key in seen:
+            continue
+        seen.add(candidate.source_event_key)
+        parsed.append(candidate)
+
+    return parsed
+
+
+def _json_ld_event_payloads(document: HTMLParser) -> list[dict]:
+    payloads: list[dict] = []
+    for node in document.css('script[type="application/ld+json"]'):
+        raw_text = node.text(strip=True)
+        if not raw_text:
+            continue
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            continue
+        payloads.extend(_flatten_json_ld_events(parsed))
+    return payloads
+
+
+def _flatten_json_ld_events(value: object) -> list[dict]:
+    if isinstance(value, list):
+        flattened: list[dict] = []
+        for item in value:
+            flattened.extend(_flatten_json_ld_events(item))
+        return flattened
+
+    if not isinstance(value, dict):
+        return []
+
+    graph = value.get("@graph")
+    if isinstance(graph, list):
+        flattened: list[dict] = []
+        for item in graph:
+            flattened.extend(_flatten_json_ld_events(item))
+        return flattened
+
+    type_value = value.get("@type")
+    if isinstance(type_value, list):
+        type_names = {str(item).lower() for item in type_value}
+    else:
+        type_names = {str(type_value).lower()} if type_value else set()
+
+    if any(type_name.endswith("event") or type_name == "event" for type_name in type_names):
+        return [value]
+
+    item_list = value.get("itemListElement")
+    if isinstance(item_list, list):
+        flattened: list[dict] = []
+        for item in item_list:
+            if isinstance(item, dict) and isinstance(item.get("item"), dict):
+                flattened.extend(_flatten_json_ld_events(item["item"]))
+            else:
+                flattened.extend(_flatten_json_ld_events(item))
+        return flattened
+
+    return []
+
+
+def _parse_json_ld_datetime(value: object) -> datetime | None:
+    raw_value = _string_value(value)
+    if not raw_value:
+        return None
+
+    normalized = raw_value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=NYC_TZ)
+    return parsed.astimezone(NYC_TZ)
+
+
+def _json_ld_tags(payload: dict, category: str, source: CuratedVenueSource) -> list[str]:
+    tag_candidates: list[str] = [source.venue.venue_name, category]
+    for key in ("eventAttendanceMode", "eventStatus", "keywords"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            tag_candidates.extend(_normalize_text(_string_value(item)) for item in value if _string_value(item))
+        elif isinstance(value, str):
+            tag_candidates.extend(_normalize_text(part) for part in value.split(",") if _normalize_text(part))
+
+    location = payload.get("location")
+    if isinstance(location, dict):
+        location_name = _normalize_text(_string_value(location.get("name")))
+        if location_name:
+            tag_candidates.append(location_name)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for tag in tag_candidates:
+        normalized = _normalize_text(tag)
+        if not normalized:
+            continue
+        lowered = normalized.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        deduped.append(normalized)
+    return deduped
+
+
+def _json_ld_offer_price(value: object) -> tuple[float | None, float | None]:
+    prices: list[float] = []
+
+    def collect(obj: object) -> None:
+        if isinstance(obj, list):
+            for item in obj:
+                collect(item)
+            return
+        if not isinstance(obj, dict):
+            return
+        price = obj.get("price")
+        if isinstance(price, (int, float)):
+            prices.append(float(price))
+        elif isinstance(price, str):
+            match = re.search(r"\d+(?:\.\d+)?", price)
+            if match:
+                prices.append(float(match.group(0)))
+        nested = obj.get("offers")
+        if nested is not None:
+            collect(nested)
+
+    collect(value)
+    if not prices:
+        return None, None
+    return min(prices), max(prices)
+
+
+def _infer_json_ld_category(payload: dict, description: str, fallback: str) -> str:
+    text = " ".join(
+        filter(
+            None,
+            [
+                _string_value(payload.get("name")) or "",
+                description,
+                _string_value(payload.get("keywords")) or "",
+                _string_value(payload.get("eventAttendanceMode")) or "",
+            ],
+        )
+    ).lower()
+    if any(term in text for term in ("market", "vendor", "bazaar", "fair", "popup", "pop-up")):
+        return "market"
+    if any(term in text for term in ("reading", "author", "book", "discussion", "lecture", "conversation")):
+        return "talk"
+    if any(term in text for term in ("networking", "founder", "industry", "professional", "career", "panel")):
+        return "networking"
+    if any(term in text for term in ("workshop", "studio", "design", "creative", "maker")):
+        return "community"
+    return fallback
+
+
+def _string_value(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("@value", "name", "text"):
+            nested = value.get(key)
+            if isinstance(nested, str):
+                return nested
+    return None
 
 
 def _parse_public_records_html(html: str, source: CuratedVenueSource) -> list[CandidateEvent]:
@@ -558,5 +802,77 @@ def _demo_fallback_candidates(source_name: str) -> list[CandidateEvent]:
             source_confidence=0.82,
             topic_keys=["indie_live_music"],
             tags=["indie live music", "songwriter"],
+        ),
+        CandidateEvent(
+            source=source_name,
+            source_kind="curated_feed",
+            source_event_key="curated:artists-and-fleas-collector-market",
+            venue_name="Artists & Fleas Williamsburg",
+            neighborhood="Williamsburg",
+            address="70 N 7th St, Brooklyn, NY",
+            city="New York City",
+            state="NY",
+            postal_code="11249",
+            title="Collector market weekend floor",
+            summary="An all-day indoor market with vintage dealers, design sellers, and collector-friendly browsing.",
+            category="market",
+            starts_at="2026-04-26T16:00:00+00:00",
+            ends_at="2026-04-26T22:00:00+00:00",
+            latitude=40.7192,
+            longitude=-73.9614,
+            ticket_url="https://www.artistsandfleas.com/",
+            min_price=None,
+            max_price=None,
+            source_confidence=0.8,
+            topic_keys=["collector_marketplaces", "style_design_shopping"],
+            tags=["collector market", "vintage", "design"],
+        ),
+        CandidateEvent(
+            source=source_name,
+            source_kind="curated_feed",
+            source_event_key="curated:mcnally-jackson-reading-night",
+            venue_name="McNally Jackson Seaport",
+            neighborhood="Seaport",
+            address="4 Fulton St, New York, NY",
+            city="New York City",
+            state="NY",
+            postal_code="10038",
+            title="Author conversation and reading",
+            summary="A bookstore event with a live reading, audience Q&A, and literary discussion in Lower Manhattan.",
+            category="talk",
+            starts_at="2026-04-29T23:00:00+00:00",
+            ends_at="2026-04-30T01:00:00+00:00",
+            latitude=40.7062,
+            longitude=-74.0035,
+            ticket_url="https://www.mcnallyjackson.com/events",
+            min_price=None,
+            max_price=None,
+            source_confidence=0.79,
+            topic_keys=["student_intellectual_scene"],
+            tags=["reading", "book talk", "discussion"],
+        ),
+        CandidateEvent(
+            source=source_name,
+            source_kind="curated_feed",
+            source_event_key="curated:neuehouse-founder-panel",
+            venue_name="NeueHouse Madison Square",
+            neighborhood="NoMad",
+            address="110 E 25th St, New York, NY",
+            city="New York City",
+            state="NY",
+            postal_code="10010",
+            title="Founder conversation and mixer",
+            summary="An after-work panel for ambitious operators followed by structured networking and light drinks.",
+            category="networking",
+            starts_at="2026-04-30T22:30:00+00:00",
+            ends_at="2026-05-01T01:30:00+00:00",
+            latitude=40.7424,
+            longitude=-73.9845,
+            ticket_url="https://www.neuehouse.com/",
+            min_price=18,
+            max_price=35,
+            source_confidence=0.77,
+            topic_keys=["ambitious_professional_scene", "creative_meetups"],
+            tags=["founder", "networking", "panel"],
         ),
     ]

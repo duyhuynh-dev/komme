@@ -1,6 +1,8 @@
 from app.connectors.curated_venues import (
+    ARTISTS_AND_FLEAS,
     PIONEER_WORKS,
     PUBLIC_RECORDS,
+    _parse_json_ld_events,
     _parse_pioneer_works_calendar,
     _parse_public_records_html,
 )
@@ -33,6 +35,33 @@ PIONEER_WORKS_DETAIL_HTML = """
   <body>
     <div>Start: April 25, 2026 | 8:00 pm</div>
   </body>
+</html>
+"""
+
+JSON_LD_EVENTS_HTML = """
+<html>
+  <head>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "BusinessEvent",
+            "name": "Collector Market Weekend Floor",
+            "description": "A vintage market with design vendors and collector-friendly stalls.",
+            "startDate": "2026-05-02T12:00:00-04:00",
+            "endDate": "2026-05-02T16:00:00-04:00",
+            "url": "https://example.com/collector-market",
+            "keywords": ["vintage", "design market", "popup"],
+            "offers": [
+              {"price": "12"},
+              {"price": "18"}
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
 </html>
 """
 
@@ -76,3 +105,17 @@ async def test_parse_pioneer_works_calendar_enriches_with_detail_page() -> None:
     assert candidate.category == "live music"
     assert candidate.ticket_url.endswith("/programs/clan-of-xymox-cold-cave")
     assert "Pioneer Works" in candidate.summary
+
+
+def test_parse_json_ld_events_extracts_broader_cultural_candidate() -> None:
+    candidates = _parse_json_ld_events(JSON_LD_EVENTS_HTML, ARTISTS_AND_FLEAS)
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.venue_name == "Artists & Fleas Williamsburg"
+    assert candidate.category == "market"
+    assert candidate.ticket_url == "https://example.com/collector-market"
+    assert candidate.min_price == 12
+    assert candidate.max_price == 18
+    assert "collector_marketplaces" in candidate.topic_keys
+    assert "style_design_shopping" in candidate.topic_keys
