@@ -1,11 +1,12 @@
 # Pulse EC2 Deployment
 
-This deploy target runs the entire Pulse stack on a single EC2 instance with Docker Compose:
+This deploy target runs the backend Pulse stack on a single EC2 instance with Docker Compose:
 
-- `web` on `https://$APP_DOMAIN`
 - `api` on `https://$API_DOMAIN`
 - `worker` on `https://$WORKER_DOMAIN`
 - `caddy` handling TLS and reverse proxying
+
+The `web` app is intended to run on `Vercel` with its own custom domain.
 
 The stack assumes you are keeping:
 
@@ -21,7 +22,6 @@ Use an Ubuntu 24.04 or similar Linux host with:
 - Docker Compose plugin
 - ports `80` and `443` open in the security group
 - your DNS records pointing to the instance:
-  - `$APP_DOMAIN`
   - `$API_DOMAIN`
   - `$WORKER_DOMAIN`
 
@@ -37,8 +37,8 @@ Important production values:
 
 - `DATABASE_URL`
   Usually your Supabase Postgres connection string with `asyncpg`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `WEB_APP_URL`
+- `WEB_ALLOWED_ORIGINS`
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `OAUTH_STATE_SECRET`
@@ -56,6 +56,13 @@ Spotify OAuth redirect in production should be:
 
 ```text
 https://$API_DOMAIN/v1/spotify/connect/callback
+```
+
+Your frontend origin in production should be the Vercel custom domain, for example:
+
+```text
+WEB_APP_URL=https://pulse-app.duckdns.org
+WEB_ALLOWED_ORIGINS=https://pulse-app.duckdns.org
 ```
 
 ## 3. Build and boot the stack
@@ -84,7 +91,6 @@ After boot, verify:
 ```bash
 curl https://$API_DOMAIN/healthz
 curl https://$WORKER_DOMAIN/healthz
-open https://$APP_DOMAIN
 ```
 
 Or use the included smoke-test helper:
@@ -106,7 +112,34 @@ In Inngest Cloud:
 - point your app sync / serve URL at `https://$WORKER_DOMAIN/api/inngest`
 - make sure the signing key in Inngest matches `INNGEST_SIGNING_KEY`
 
-## 6. Smoke tests
+## 6. Vercel frontend
+
+Create a Vercel project from this repo using:
+
+- Framework: `Next.js`
+- Root directory: `apps/web`
+
+Recommended production custom domain:
+
+```text
+https://pulse-app.duckdns.org
+```
+
+Recommended Vercel environment variables:
+
+```text
+NEXT_PUBLIC_API_URL=https://$API_DOMAIN
+NEXT_PUBLIC_SUPABASE_URL=<your supabase url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your supabase anon key>
+```
+
+In DuckDNS:
+
+- point `pulse-app.duckdns.org` at `76.76.21.21` for Vercel
+- point `pulse-api.duckdns.org` at your EC2 public or elastic IP
+- point `pulse-worker.duckdns.org` at your EC2 public or elastic IP
+
+## 7. Smoke tests
 
 ### Supply sync
 
@@ -141,7 +174,7 @@ docker compose --env-file deploy/ec2/.env.ec2 -f deploy/ec2/docker-compose.yml u
 
 ## Notes
 
-- `web` is fully on EC2 in this setup; `Vercel` is not used.
+- `web` is hosted on `Vercel` in this setup.
 - The `api` talks to the `worker` over the internal Docker network with `http://worker:8001`.
 - The `worker` talks back to the `api` internally with `http://api:8000`.
-- Caddy terminates TLS automatically once your domains resolve to the EC2 instance.
+- Caddy terminates TLS automatically for `api` and `worker` once those domains resolve to the EC2 instance.

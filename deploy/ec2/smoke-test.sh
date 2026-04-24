@@ -14,7 +14,6 @@ set -a
 source "$ENV_FILE"
 set +a
 
-: "${APP_DOMAIN:?APP_DOMAIN is required}"
 : "${API_DOMAIN:?API_DOMAIN is required}"
 : "${WORKER_DOMAIN:?WORKER_DOMAIN is required}"
 
@@ -24,10 +23,6 @@ echo
 
 echo "Checking worker health..."
 curl --fail --silent --show-error "https://${WORKER_DOMAIN}/healthz"
-echo
-
-echo "Checking web root..."
-curl --fail --silent --show-error --head "https://${APP_DOMAIN}"
 echo
 
 if [[ -n "${INTERNAL_INGEST_SECRET:-}" ]]; then
