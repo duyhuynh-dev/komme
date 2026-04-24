@@ -78,6 +78,9 @@ PIONEER_START_PATTERN = re.compile(
     r"(?P<year>\d{4})\s*\|\s*"
     r"(?P<time>\d{1,2}:\d{2}\s*[APMapm]{2})"
 )
+NINETYTWO_Y_DATE_PATTERN = re.compile(
+    r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})\s+\|\s+(?P<time>\d{1,2}:\d{2}\s*[APMapm]{2})$"
+)
 
 
 @dataclass(frozen=True)
@@ -170,7 +173,24 @@ ARTISTS_AND_FLEAS = CuratedVenueSource(
     default_duration_hours=4,
     parser_name="json_ld_events",
 )
-CURATED_SOURCES = [PUBLIC_RECORDS, PIONEER_WORKS, MCNALLY_JACKSON, ARTISTS_AND_FLEAS]
+NINETYTWO_Y = CuratedVenueSource(
+    key="92ny",
+    listing_url="https://my.92ny.org/events",
+    venue=VenueMetadata(
+        venue_name="92NY",
+        neighborhood="Upper East Side",
+        address="1395 Lexington Ave, New York, NY",
+        city="New York City",
+        state="NY",
+        postal_code="10128",
+        latitude=40.7829,
+        longitude=-73.9523,
+    ),
+    default_category="talk",
+    default_duration_hours=2,
+    parser_name="ninetytwo_y",
+)
+CURATED_SOURCES = [PUBLIC_RECORDS, PIONEER_WORKS, MCNALLY_JACKSON, ARTISTS_AND_FLEAS, NINETYTWO_Y]
 
 
 class CuratedVenueConnector:
@@ -215,6 +235,10 @@ class CuratedVenueConnector:
 
                 if source.parser_name == "json_ld_events":
                     source_candidates.extend(_parse_json_ld_events(html, source))
+                    continue
+
+                if source.parser_name == "ninetytwo_y":
+                    source_candidates.extend(_parse_ninetytwo_y_events(html, source))
 
         return _dedupe_candidates(source_candidates) or _demo_fallback_candidates(self.source_name)
 
@@ -558,6 +582,66 @@ def _string_value(value: object) -> str | None:
             if isinstance(nested, str):
                 return nested
     return None
+
+
+def _parse_ninetytwo_y_events(html: str, source: CuratedVenueSource) -> list[CandidateEvent]:
+    document = HTMLParser(html)
+    lines = _calendar_lines(document)
+    parsed: list[CandidateEvent] = []
+    seen: set[str] = set()
+
+    for index, line in enumerate(lines):
+        match = NINETYTWO_Y_DATE_PATTERN.match(line)
+        if not match:
+            continue
+
+        month = MONTH_NAME_TO_NUMBER.get(match.group("month").lower())
+        if month is None:
+            continue
+
+        title = ""
+        for candidate_line in lines[index + 1 : index + 4]:
+            lowered = candidate_line.lower()
+            if lowered in {"view more", "in person", "online"}:
+                continue
+            title = candidate_line
+            break
+        if not title:
+            continue
+
+        starts_at = _parse_local_datetime(month, int(match.group("day")), _normalize_text(match.group("time")))
+        category = _infer_ninetytwo_y_category(title)
+        summary = f"{category.title()} event at 92NY on the Upper East Side."
+        candidate = _candidate_event(
+            source_name="curated_venues",
+            source_key=source.key,
+            venue=source.venue,
+            title=title,
+            summary=summary,
+            category=category,
+            starts_at=starts_at,
+            ends_at=starts_at + timedelta(hours=source.default_duration_hours),
+            ticket_url=source.listing_url,
+            min_price=None,
+            max_price=None,
+            source_confidence=0.78,
+            tags=["92ny", category, "upper east side"],
+        )
+        if candidate.source_event_key in seen:
+            continue
+        seen.add(candidate.source_event_key)
+        parsed.append(candidate)
+
+    return parsed
+
+
+def _infer_ninetytwo_y_category(title: str) -> str:
+    lowered = title.lower()
+    if any(term in lowered for term in ("play", "ensemble", "soprano", "tenor", "concert", "piano")):
+        return "live music"
+    if any(term in lowered for term in ("conversation", "with", "reading", "state of", "poetry", "book")):
+        return "talk"
+    return "culture"
 
 
 def _parse_public_records_html(html: str, source: CuratedVenueSource) -> list[CandidateEvent]:

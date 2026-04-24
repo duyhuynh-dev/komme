@@ -1,8 +1,10 @@
 from app.connectors.curated_venues import (
     ARTISTS_AND_FLEAS,
+    NINETYTWO_Y,
     PIONEER_WORKS,
     PUBLIC_RECORDS,
     _parse_json_ld_events,
+    _parse_ninetytwo_y_events,
     _parse_pioneer_works_calendar,
     _parse_public_records_html,
 )
@@ -65,6 +67,18 @@ JSON_LD_EVENTS_HTML = """
 </html>
 """
 
+NINETYTWO_Y_HTML = """
+<html>
+  <body>
+    <div>Featured Events at 92NY</div>
+    <div>In Person</div>
+    <div>May 6 | 7:00 PM</div>
+    <div>The Future of Being Jewish in New York: Julie Menin in Conversation</div>
+    <a href="https://www.92ny.org/event/future-of-being-jewish">View More</a>
+  </body>
+</html>
+"""
+
 
 class FakeResponse:
     def __init__(self, text: str) -> None:
@@ -119,3 +133,14 @@ def test_parse_json_ld_events_extracts_broader_cultural_candidate() -> None:
     assert candidate.max_price == 18
     assert "collector_marketplaces" in candidate.topic_keys
     assert "style_design_shopping" in candidate.topic_keys
+
+
+def test_parse_ninetytwo_y_events_extracts_talk_candidate() -> None:
+    candidates = _parse_ninetytwo_y_events(NINETYTWO_Y_HTML, NINETYTWO_Y)
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.venue_name == "92NY"
+    assert candidate.category == "talk"
+    assert candidate.ticket_url == "https://my.92ny.org/events"
+    assert "student_intellectual_scene" in candidate.topic_keys
