@@ -1,6 +1,7 @@
 import type {
   ArchiveResponse,
   AuthViewer,
+  AnchorSaveResponse,
   DigestPreviewResponse,
   DigestSendResponse,
   EmailPreferences,
@@ -194,7 +195,7 @@ export function getMapToken() {
 }
 
 export function saveAnchor(payload: LocationAnchorPayload) {
-  return request<{ ok: true }>("/v1/profile/anchor", {
+  return request<AnchorSaveResponse>("/v1/profile/anchor", {
     method: "POST",
     body: JSON.stringify(payload)
   });

@@ -19,6 +19,7 @@ from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestRespons
 from app.schemas.maps import MapTokenResponse
 from app.schemas.profile import (
     AnchorPayload,
+    AnchorSaveResponse,
     EmailPreferencePayload,
     EmailPreferenceResponse,
     InterestListResponse,
@@ -46,6 +47,7 @@ from app.services.digest import build_digest_preview, send_digest_preview, send_
 from app.services.ingestion import upsert_ingested_candidates
 from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import get_archive, get_map_recommendations, refresh_recommendations_for_user
+from app.services.recommendations import _build_map_context, _user_anchor_resolution
 from app.services.reddit_oauth import build_reddit_authorize_url
 from app.services.seed import bootstrap_user_with_mock_reddit
 from app.services.spotify_oauth import build_spotify_authorize_url, exchange_spotify_code, fetch_spotify_profile
@@ -392,12 +394,12 @@ async def profile_email_preferences_update(
     return await update_email_preferences(session, identity.user, payload)
 
 
-@router.post("/profile/anchor", response_model=OkResponse)
+@router.post("/profile/anchor", response_model=AnchorSaveResponse)
 async def profile_anchor(
     payload: AnchorPayload,
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
-) -> OkResponse:
+) -> AnchorSaveResponse:
     session.add(
         UserAnchorLocation(
             user_id=user.id,
@@ -411,7 +413,8 @@ async def profile_anchor(
     )
     await session.flush()
     await refresh_recommendations_for_user(session, user, force=True)
-    return OkResponse()
+    resolution = await _user_anchor_resolution(session, user.id)
+    return AnchorSaveResponse(mapContext=_build_map_context(resolution))
 
 
 @router.post("/profile/constraints", response_model=OkResponse)

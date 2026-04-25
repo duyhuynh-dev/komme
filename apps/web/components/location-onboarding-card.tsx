@@ -42,12 +42,15 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        await saveAnchor({
+        const response = await saveAnchor({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           source: "live"
         });
-        setStatus("Live location saved for this session. Exact coordinates are not persisted.");
+        setStatus(
+          response.mapContext.fallbackReason ??
+            "Live location saved for this session. Exact coordinates are not persisted.",
+        );
       },
       () => {
         setStatus("Location access denied. Save a ZIP or neighborhood to keep planning coarse and private.");
@@ -60,7 +63,7 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
   };
 
   const onSubmit = async (values: FormValues) => {
-    await saveAnchor({
+    const anchorResponse = await saveAnchor({
       neighborhood: values.neighborhood,
       zipCode: values.zipCode,
       source: values.neighborhood ? "neighborhood" : "zip"
@@ -73,7 +76,10 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
       radiusMiles: values.radiusMiles
     });
 
-    setStatus("Saved your coarse planning anchor. Travel hints will now use your ZIP or neighborhood centroid.");
+    setStatus(
+      anchorResponse.mapContext.fallbackReason ??
+        `Saved your coarse planning anchor. Pulse is now centered on ${anchorResponse.mapContext.activeAnchorLabel}.`,
+    );
   };
 
   return (

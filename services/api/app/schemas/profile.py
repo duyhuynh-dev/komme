@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field
+from app.schemas.common import OkResponse
+from app.schemas.recommendations import MapContext
 
 
 class InterestTopic(BaseModel):
@@ -34,6 +36,10 @@ class AnchorPayload(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     source: str
+
+
+class AnchorSaveResponse(OkResponse):
+    mapContext: MapContext = Field(default_factory=MapContext)
 
 
 class EmailPreferenceResponse(BaseModel):

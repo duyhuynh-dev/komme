@@ -12,6 +12,7 @@ from app.schemas.recommendations import (
     ArchiveResponse,
     ArchiveSnapshot,
     MapVenuePin,
+    MapContext,
     RecommendationsMapResponse,
     RecommendationReason,
     TravelEstimate,
@@ -25,6 +26,7 @@ DEFAULT_VIEWPORT = {
     "latitudeDelta": 0.22,
     "longitudeDelta": 0.22,
 }
+SERVICE_AREA_NAME = "New York City"
 NYC_SERVICE_AREA = {
     "min_latitude": 40.45,
     "max_latitude": 40.95,
@@ -74,6 +76,15 @@ class FeedbackSignals:
     dismissed_neighborhoods: dict[str, float] = field(default_factory=dict)
 
 
+@dataclass
+class AnchorResolution:
+    requested_anchor: UserAnchorLocation | None
+    active_anchor: UserAnchorLocation | None
+    requested_within_service_area: bool = True
+    used_fallback_anchor: bool = False
+    fallback_reason: str | None = None
+
+
 async def _latest_run(session: AsyncSession, user_id: str) -> RecommendationRun | None:
     return await session.scalar(
         select(RecommendationRun)
@@ -93,7 +104,20 @@ async def _user_anchor(session: AsyncSession, user_id: str) -> UserAnchorLocatio
             )
         ).all()
     )
-    return _select_active_anchor(anchors)
+    return _resolve_anchor(anchors).active_anchor
+
+
+async def _user_anchor_resolution(session: AsyncSession, user_id: str) -> AnchorResolution:
+    anchors = list(
+        (
+            await session.scalars(
+                select(UserAnchorLocation)
+                .where(UserAnchorLocation.user_id == user_id)
+                .order_by(desc(UserAnchorLocation.created_at))
+            )
+        ).all()
+    )
+    return _resolve_anchor(anchors)
 
 
 async def _user_constraints(session: AsyncSession, user_id: str) -> UserConstraint | None:
@@ -180,19 +204,111 @@ def _within_nyc_service_area(latitude: float, longitude: float) -> bool:
 
 
 def _select_active_anchor(anchors: list[UserAnchorLocation]) -> UserAnchorLocation | None:
+    return _resolve_anchor(anchors).active_anchor
+
+
+def _resolve_anchor(anchors: list[UserAnchorLocation]) -> AnchorResolution:
     if not anchors:
-        return None
+        return AnchorResolution(requested_anchor=None, active_anchor=None)
+
+    requested_anchor = anchors[0]
+    requested_within_service_area = True
+    if requested_anchor.latitude is not None and requested_anchor.longitude is not None:
+        requested_within_service_area = _within_nyc_service_area(
+            requested_anchor.latitude,
+            requested_anchor.longitude,
+        )
 
     for anchor in anchors:
         if anchor.latitude is not None and anchor.longitude is not None:
             if _within_nyc_service_area(anchor.latitude, anchor.longitude):
-                return anchor
+                return AnchorResolution(
+                    requested_anchor=requested_anchor,
+                    active_anchor=anchor,
+                    requested_within_service_area=requested_within_service_area,
+                    used_fallback_anchor=anchor is not requested_anchor,
+                    fallback_reason=_fallback_reason(requested_anchor, anchor)
+                    if anchor is not requested_anchor
+                    else None,
+                )
             continue
 
         if anchor.zip_code or anchor.neighborhood:
-            return anchor
+            return AnchorResolution(
+                requested_anchor=requested_anchor,
+                active_anchor=anchor,
+                requested_within_service_area=requested_within_service_area,
+                used_fallback_anchor=anchor is not requested_anchor,
+                fallback_reason=_fallback_reason(requested_anchor, anchor)
+                if anchor is not requested_anchor
+                else None,
+            )
 
-    return anchors[0]
+    fallback_reason = None
+    if (
+        requested_anchor.latitude is not None
+        and requested_anchor.longitude is not None
+        and not requested_within_service_area
+    ):
+        fallback_reason = (
+            f"Pulse is currently scoped to {SERVICE_AREA_NAME}, so live locations outside the city are not used yet."
+        )
+
+    return AnchorResolution(
+        requested_anchor=requested_anchor,
+        active_anchor=requested_anchor,
+        requested_within_service_area=requested_within_service_area,
+        used_fallback_anchor=False,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _fallback_reason(
+    requested_anchor: UserAnchorLocation | None,
+    active_anchor: UserAnchorLocation | None,
+) -> str | None:
+    if requested_anchor is None or active_anchor is None:
+        return None
+
+    if (
+        requested_anchor.source == "live"
+        and requested_anchor.latitude is not None
+        and requested_anchor.longitude is not None
+        and not _within_nyc_service_area(requested_anchor.latitude, requested_anchor.longitude)
+    ):
+        return (
+            f"Pulse is currently scoped to {SERVICE_AREA_NAME}, so the map stayed anchored to "
+            f"{_anchor_label(active_anchor)}."
+        )
+
+    return None
+
+
+def _anchor_label(anchor: UserAnchorLocation | None) -> str:
+    if anchor is None:
+        return "NYC"
+    if anchor.neighborhood:
+        return anchor.neighborhood
+    if anchor.zip_code:
+        return anchor.zip_code
+    if anchor.source == "live":
+        return "Current location"
+    return "NYC"
+
+
+def _build_map_context(resolution: AnchorResolution) -> MapContext:
+    active_anchor = resolution.active_anchor
+    requested_anchor = resolution.requested_anchor
+    return MapContext(
+        serviceArea=SERVICE_AREA_NAME,
+        activeAnchorLabel=_anchor_label(active_anchor),
+        activeAnchorSource=active_anchor.source if active_anchor else "default",
+        requestedAnchorLabel=_anchor_label(requested_anchor) if requested_anchor else None,
+        requestedAnchorSource=requested_anchor.source if requested_anchor else None,
+        requestedAnchorWithinServiceArea=resolution.requested_within_service_area,
+        usedFallbackAnchor=resolution.used_fallback_anchor,
+        fallbackReason=resolution.fallback_reason,
+    )
 
 
 def _anchor_coordinates(anchor: UserAnchorLocation | None) -> tuple[float, float]:
@@ -913,6 +1029,7 @@ def _empty_response(display_timezone: str = "America/New_York") -> Recommendatio
         generatedAt="",
         displayTimezone=display_timezone,
         userConstraint={},
+        mapContext=MapContext(serviceArea=SERVICE_AREA_NAME),
     )
 
 
@@ -988,6 +1105,7 @@ async def get_map_recommendations(
     user: User,
 ) -> RecommendationsMapResponse:
     display_timezone = _display_timezone(user)
+    anchor_resolution = await _user_anchor_resolution(session, user.id)
     run = await refresh_recommendations_for_user(session, user)
     if run is None:
         return _empty_response(display_timezone)
@@ -1004,7 +1122,7 @@ async def get_map_recommendations(
         generatedAt=run.created_at.isoformat(),
         displayTimezone=display_timezone,
         userConstraint={
-            "city": constraints.city if constraints else "New York City",
+            "city": constraints.city if constraints else SERVICE_AREA_NAME,
             "neighborhood": constraints.neighborhood if constraints else None,
             "zipCode": constraints.zip_code if constraints else None,
             "radiusMiles": constraints.radius_miles if constraints else 8,
@@ -1012,6 +1130,7 @@ async def get_map_recommendations(
             "preferredDays": constraints.preferred_days_csv.split(",") if constraints else ["Thursday", "Friday", "Saturday"],
             "socialMode": constraints.social_mode if constraints else "either",
         },
+        mapContext=_build_map_context(anchor_resolution),
     )
 
 

@@ -50,6 +50,17 @@ class MapViewport(BaseModel):
     longitudeDelta: float
 
 
+class MapContext(BaseModel):
+    serviceArea: str = "New York City"
+    activeAnchorLabel: str = "NYC"
+    activeAnchorSource: str = "default"
+    requestedAnchorLabel: str | None = None
+    requestedAnchorSource: str | None = None
+    requestedAnchorWithinServiceArea: bool = True
+    usedFallbackAnchor: bool = False
+    fallbackReason: str | None = None
+
+
 class RecommendationsMapResponse(BaseModel):
     viewport: MapViewport
     pins: list[MapVenuePin]
@@ -57,6 +68,7 @@ class RecommendationsMapResponse(BaseModel):
     generatedAt: str
     displayTimezone: str = "America/New_York"
     userConstraint: dict
+    mapContext: MapContext = Field(default_factory=MapContext)
 
 
 class ArchiveSnapshot(BaseModel):

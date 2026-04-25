@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from app.models.recommendation import RecommendationRun
 from app.models.user import UserAnchorLocation, UserConstraint
-from app.services.recommendations import _run_context_changed, _select_active_anchor
+from app.services.recommendations import _build_map_context, _resolve_anchor, _run_context_changed, _select_active_anchor
 from app.services.recommendations import _price_label
 from app.services.travel import estimate_travel_bands, haversine_miles
 
@@ -43,6 +43,31 @@ def test_select_active_anchor_skips_out_of_area_live_location() -> None:
 
     selected = _select_active_anchor([outside_live, neighborhood_anchor])
     assert selected is neighborhood_anchor
+
+
+def test_resolve_anchor_reports_fallback_reason_for_out_of_area_live_location() -> None:
+    outside_live = UserAnchorLocation(
+        user_id="user-1",
+        source="live",
+        latitude=41.5555,
+        longitude=-72.6603,
+        is_session_only=True,
+    )
+    neighborhood_anchor = UserAnchorLocation(
+        user_id="user-1",
+        source="neighborhood",
+        zip_code="10003",
+        neighborhood="East Village",
+    )
+
+    resolution = _resolve_anchor([outside_live, neighborhood_anchor])
+    context = _build_map_context(resolution)
+
+    assert context.activeAnchorLabel == "East Village"
+    assert context.usedFallbackAnchor is True
+    assert context.requestedAnchorWithinServiceArea is False
+    assert context.fallbackReason is not None
+    assert "East Village" in context.fallbackReason
 
 
 def test_run_context_changed_when_new_anchor_or_constraint_arrives() -> None:

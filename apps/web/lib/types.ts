@@ -66,6 +66,17 @@ export interface MapViewport {
   longitudeDelta: number;
 }
 
+export interface MapContext {
+  serviceArea: string;
+  activeAnchorLabel: string;
+  activeAnchorSource: string;
+  requestedAnchorLabel?: string | null;
+  requestedAnchorSource?: string | null;
+  requestedAnchorWithinServiceArea: boolean;
+  usedFallbackAnchor: boolean;
+  fallbackReason?: string | null;
+}
+
 export interface FeedbackReason {
   key: string;
   label: string;
@@ -126,6 +137,7 @@ export interface RecommendationsMapResponse {
   generatedAt: string;
   displayTimezone: string;
   userConstraint: UserConstraint;
+  mapContext: MapContext;
 }
 
 export interface ArchiveSnapshot {
@@ -149,6 +161,11 @@ export interface LocationAnchorPayload {
   latitude?: number;
   longitude?: number;
   source: "live" | "zip" | "neighborhood";
+}
+
+export interface AnchorSaveResponse {
+  ok: boolean;
+  mapContext: MapContext;
 }
 
 export interface SupplySyncResponse {

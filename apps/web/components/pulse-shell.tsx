@@ -150,9 +150,16 @@ export function PulseShell() {
         ? `${emailPreferencesQuery.data.digestDay} ${formatDigestTime(emailPreferencesQuery.data.digestTimeLocal)}`
         : "Digest paused"
       : null;
-  const locationSummary = mapQuery.data?.userConstraint?.neighborhood || mapQuery.data?.userConstraint?.zipCode || "NYC";
+  const locationSummary =
+    mapQuery.data?.mapContext?.activeAnchorLabel ||
+    mapQuery.data?.userConstraint?.neighborhood ||
+    mapQuery.data?.userConstraint?.zipCode ||
+    "NYC";
   const radiusSummary = mapQuery.data?.userConstraint?.radiusMiles ? `${mapQuery.data.userConstraint.radiusMiles} mi radius` : null;
-  const topbarMessage = surfaceStatus ?? (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
+  const topbarMessage =
+    surfaceStatus ??
+    mapQuery.data?.mapContext?.fallbackReason ??
+    (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
   const toggleRailModal = (target: "signals" | "spots") => {
     setActiveRailModal((current) => (current === target ? null : target));
   };
