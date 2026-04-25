@@ -503,6 +503,20 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
                     reasons_json=[],
                     created_at=saved_at + timedelta(hours=14),
                 ),
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
+                    action="ticket_click",
+                    reasons_json=[],
+                    created_at=saved_at + timedelta(hours=15),
+                ),
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
+                    action="archive_revisit",
+                    reasons_json=[],
+                    created_at=saved_at + timedelta(hours=20),
+                ),
             ]
         )
         await session.flush()
@@ -552,5 +566,9 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
         assert signals.exposed_venues[venue.id] > 0
         assert signals.opened_venues[venue.id] > signals.exposed_venues[venue.id]
         assert signals.opened_topics["underground_dance"] > 0
+        assert signals.ticket_click_venues[venue.id] > 0
+        assert signals.archive_revisit_venues[venue.id] > 0
+        assert signals.ticket_click_topics["underground_dance"] > 0
+        assert signals.archive_revisit_topics["underground_dance"] > 0
 
     await engine.dispose()

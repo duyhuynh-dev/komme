@@ -205,7 +205,9 @@ export function PulseShell() {
       venueName: card.venueName,
     });
   };
-  const recordInteractions = (events: Array<{ recommendationId: string; action: "exposed" | "opened" }>) => {
+  const recordInteractions = (
+    events: Array<{ recommendationId: string; action: "exposed" | "opened" | "ticket_click" | "archive_revisit" }>,
+  ) => {
     if (!events.length) {
       return;
     }
@@ -225,6 +227,12 @@ export function PulseShell() {
       .map((card) => ({ recommendationId: card.eventId, action: "exposed" as const }));
 
     recordInteractions(freshEvents);
+  };
+  const handleTrackInteraction = (
+    recommendationId: string,
+    action: "ticket_click",
+  ) => {
+    recordInteractions([{ recommendationId, action }]);
   };
 
   useEffect(() => {
@@ -364,6 +372,7 @@ export function PulseShell() {
               onToggleExpanded={() => toggleRailModal("spots")}
               onSelectVenue={setSelectedVenueId}
               onExposeCards={handleExposeCards}
+              onTrackInteraction={handleTrackInteraction}
               comparisonByVenueId={comparisonByVenueId}
               onSave={(card) => queueFeedback(card, "save")}
               onDismiss={(card) => queueFeedback(card, "dismiss")}
@@ -405,6 +414,7 @@ export function PulseShell() {
           selectedVenueId={selectedVenueId}
           onSelectVenue={setSelectedVenueId}
           onExposeCards={handleExposeCards}
+          onTrackInteraction={handleTrackInteraction}
           comparisonByVenueId={comparisonByVenueId}
           onSave={(card) => queueFeedback(card, "save")}
           onDismiss={(card) => queueFeedback(card, "dismiss")}

@@ -578,7 +578,7 @@ async def recommendation_interactions(
     if user is None:
         return OkResponse()
 
-    allowed_actions = {"exposed", "opened"}
+    allowed_actions = {"exposed", "opened", "ticket_click", "archive_revisit"}
     seen: set[tuple[str, str]] = set()
 
     for event in payload.events:

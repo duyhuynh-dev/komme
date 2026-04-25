@@ -201,7 +201,7 @@ export function submitFeedback(
 }
 
 export function submitRecommendationInteractions(
-  events: Array<{ recommendationId: string; action: "exposed" | "opened" }>,
+  events: Array<{ recommendationId: string; action: "exposed" | "opened" | "ticket_click" | "archive_revisit" }>,
 ) {
   return request<{ ok: true }>("/v1/recommendations/interactions", {
     method: "POST",

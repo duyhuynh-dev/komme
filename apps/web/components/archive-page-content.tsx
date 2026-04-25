@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { getArchive } from "@/lib/api";
+import { getArchive, submitRecommendationInteractions } from "@/lib/api";
 import type { ArchiveSnapshot, VenueRecommendationCard } from "@/lib/types";
 import { formatEventStart, formatRelativeTimestamp, formatTimestamp } from "@/lib/utils";
 
@@ -11,11 +12,13 @@ function SnapshotSection({
   subtitle,
   items,
   timezone,
+  onTrackInteraction,
 }: {
   title: string;
   subtitle: string;
   items: VenueRecommendationCard[];
   timezone: string;
+  onTrackInteraction?: (recommendationId: string, action: "ticket_click") => void;
 }) {
   return (
     <section className="rounded-[1.75rem] border border-stroke bg-white/75 p-5">
@@ -43,6 +46,17 @@ function SnapshotSection({
                   {travel.label}
                 </span>
               ))}
+              {item.ticketUrl ? (
+                <a
+                  href={item.ticketUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => onTrackInteraction?.(item.eventId, "ticket_click")}
+                  className="rounded-full border border-stroke/80 bg-white px-3 py-1 text-sm font-medium text-slate-700"
+                >
+                  Tickets
+                </a>
+              ) : null}
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
               <span className="rounded-full border border-stroke/80 bg-canvas px-3 py-1">
@@ -105,6 +119,40 @@ export function ArchivePageContent() {
     queryFn: getArchive
   });
   const timezone = archiveQuery.data?.displayTimezone ?? "America/New_York";
+  const archivedRecommendationIdsRef = useRef<Set<string>>(new Set());
+
+  const recordInteractions = (
+    events: Array<{ recommendationId: string; action: "archive_revisit" | "ticket_click" }>,
+  ) => {
+    if (!events.length) {
+      return;
+    }
+    void submitRecommendationInteractions(events).catch(() => {
+      // Archive interaction logging is best-effort only.
+    });
+  };
+
+  useEffect(() => {
+    const items = [
+      ...(archiveQuery.data?.items ?? []),
+      ...((archiveQuery.data?.history ?? []).flatMap((snapshot) => snapshot.items)),
+    ];
+    const freshEvents = items
+      .filter((item) => {
+        if (archivedRecommendationIdsRef.current.has(item.eventId)) {
+          return false;
+        }
+        archivedRecommendationIdsRef.current.add(item.eventId);
+        return true;
+      })
+      .map((item) => ({ recommendationId: item.eventId, action: "archive_revisit" as const }));
+
+    recordInteractions(freshEvents);
+  }, [archiveQuery.data?.items, archiveQuery.data?.history]);
+
+  const handleTrackInteraction = (recommendationId: string, action: "ticket_click") => {
+    recordInteractions([{ recommendationId, action }]);
+  };
 
   return (
     <main className="min-h-screen px-4 py-6 md:px-6">
@@ -126,6 +174,7 @@ export function ArchivePageContent() {
               subtitle="This is the live recommendation stack behind your map right now."
               items={archiveQuery.data.items}
               timezone={timezone}
+              onTrackInteraction={handleTrackInteraction}
             />
           )}
 
@@ -136,6 +185,7 @@ export function ArchivePageContent() {
               subtitle={snapshotSubtitle(snapshot, timezone)}
               items={snapshot.items}
               timezone={timezone}
+              onTrackInteraction={handleTrackInteraction}
             />
           ))}
 

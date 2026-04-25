@@ -63,6 +63,7 @@ export interface VenueRecommendationCard {
   eventId: string;
   startsAt: string;
   priceLabel: string;
+  ticketUrl?: string | null;
   scoreBand: ScoreBand;
   score: number;
   travel: TravelEstimate[];

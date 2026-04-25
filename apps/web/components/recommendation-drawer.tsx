@@ -12,6 +12,7 @@ export function RecommendationDrawer({
   selectedVenueId,
   onSelectVenue,
   onExposeCards,
+  onTrackInteraction,
   onSave,
   onDismiss,
   comparisonByVenueId = {},
@@ -26,6 +27,7 @@ export function RecommendationDrawer({
   selectedVenueId: string | null;
   onSelectVenue: (venueId: string) => void;
   onExposeCards?: (cards: VenueRecommendationCard[]) => void;
+  onTrackInteraction?: (recommendationId: string, action: "ticket_click") => void;
   onSave: (card: VenueRecommendationCard) => void;
   onDismiss: (card: VenueRecommendationCard) => void;
   comparisonByVenueId?: Record<string, RecommendationRunComparisonItem>;
@@ -232,7 +234,21 @@ export function RecommendationDrawer({
                 ))}
               </div>
 
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
+                {card.ticketUrl ? (
+                  <a
+                    href={card.ticketUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onTrackInteraction?.(card.eventId, "ticket_click");
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium text-slate-700"
+                  >
+                    Tickets
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   onClick={(event) => {

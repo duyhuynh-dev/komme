@@ -51,6 +51,7 @@ class VenueRecommendationCard(BaseModel):
     eventId: str
     startsAt: str
     priceLabel: str
+    ticketUrl: str | None = None
     scoreBand: str
     score: float
     travel: list[TravelEstimate] = Field(default_factory=list)
