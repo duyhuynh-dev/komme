@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { DigestSettingsCard } from "@/components/digest-settings-card";
@@ -77,6 +78,14 @@ export function SettingsDock({ showDigest = false }: { showDigest?: boolean }) {
           <div className="mt-4 grid gap-4">
             <LocationOnboardingCard compact />
             {showDigest ? <DigestSettingsCard compact /> : null}
+          </div>
+          <div className="mt-4 border-t border-stroke/80 pt-4">
+            <Link
+              href="/ops/recommendations"
+              className="inline-flex rounded-full border border-stroke bg-canvas px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+            >
+              Open recommendation ops
+            </Link>
           </div>
         </div>
       ) : null}

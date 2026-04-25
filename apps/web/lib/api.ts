@@ -8,6 +8,8 @@ import type {
   FeedbackReason,
   InterestTopic,
   LocationAnchorPayload,
+  RecommendationDebugSummary,
+  RecommendationRunComparison,
   RecommendationsMapResponse,
   SupplySyncResponse,
   TasteProfileResponse,
@@ -166,6 +168,14 @@ export function saveEmailPreferences(payload: EmailPreferences) {
 
 export function getArchive() {
   return request<ArchiveResponse>("/v1/recommendations/archive");
+}
+
+export function getRecommendationDebugSummary() {
+  return request<RecommendationDebugSummary>("/v1/recommendations/debug-summary");
+}
+
+export function getRecommendationRunComparison() {
+  return request<RecommendationRunComparison>("/v1/recommendations/run-comparison");
 }
 
 export function getInterests() {

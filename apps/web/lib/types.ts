@@ -168,6 +168,71 @@ export interface RecommendationsMapResponse {
   mapContext: MapContext;
 }
 
+export interface RecommendationDriverSummary {
+  key: string;
+  label: string;
+  impactLabel: string;
+  averageContribution: number;
+  venueCount: number;
+  topVenues: string[];
+}
+
+export interface RecommendationDebugVenue {
+  rank: number;
+  venueId: string;
+  venueName: string;
+  score: number;
+  scoreBand: ScoreBand;
+  scoreSummary?: string | null;
+  topDrivers: RecommendationScoreBreakdownItem[];
+}
+
+export interface RecommendationDebugSummary {
+  runId?: string | null;
+  generatedAt?: string | null;
+  rankingModel?: string | null;
+  contextHash?: string | null;
+  shortlistSize: number;
+  summary?: string | null;
+  mapContext: MapContext;
+  activeTopics: string[];
+  mutedTopics: string[];
+  topPositiveDrivers: RecommendationDriverSummary[];
+  topNegativeDrivers: RecommendationDriverSummary[];
+  venues: RecommendationDebugVenue[];
+}
+
+export interface RecommendationRunComparisonItem {
+  venueId: string;
+  venueName: string;
+  neighborhood: string;
+  currentRank?: number | null;
+  previousRank?: number | null;
+  rankDelta?: number | null;
+  currentScore?: number | null;
+  previousScore?: number | null;
+  scoreDelta?: number | null;
+  scoreBand?: ScoreBand | null;
+  scoreSummary?: string | null;
+  movement: "new" | "dropped" | "up" | "down" | "steady";
+}
+
+export interface RecommendationRunComparison {
+  currentRunId?: string | null;
+  previousRunId?: string | null;
+  currentGeneratedAt?: string | null;
+  previousGeneratedAt?: string | null;
+  currentContextHash?: string | null;
+  previousContextHash?: string | null;
+  summary?: string | null;
+  shortlistSize: number;
+  comparableVenueCount: number;
+  newEntrants: RecommendationRunComparisonItem[];
+  droppedVenues: RecommendationRunComparisonItem[];
+  movers: RecommendationRunComparisonItem[];
+  steadyLeaders: RecommendationRunComparisonItem[];
+}
+
 export interface ArchiveSnapshot {
   runId: string;
   kind: "live" | "preview" | "scheduled" | "snapshot";
