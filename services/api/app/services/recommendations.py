@@ -16,6 +16,7 @@ from app.schemas.recommendations import (
     RecommendationDebugSummary,
     RecommendationDebugVenue,
     RecommendationDriverSummary,
+    RecommendationFeedbackReasonSummary,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
     MapVenuePin,
@@ -78,6 +79,22 @@ BROAD_CULTURAL_THEME_KEYS = {
 REASON_META_KEY = "_pulseMeta"
 REASON_META_SCORE_SUMMARY = "score_summary"
 REASON_META_SCORE_BREAKDOWN = "score_breakdown"
+SAVE_FEEDBACK_REASON_KEYS = {
+    "easy_to_get_to",
+    "good_price",
+    "right_vibe",
+    "love_lineup",
+    "good_area",
+    "great_venue",
+}
+DISMISS_FEEDBACK_REASON_KEYS = {
+    "too_far",
+    "too_expensive",
+    "wrong_vibe",
+    "bad_timing",
+    "already_seen",
+    "not_trustworthy",
+}
 
 
 @dataclass
@@ -88,6 +105,11 @@ class FeedbackSignals:
     dismissed_topics: dict[str, float] = field(default_factory=dict)
     saved_neighborhoods: dict[str, float] = field(default_factory=dict)
     dismissed_neighborhoods: dict[str, float] = field(default_factory=dict)
+    saved_reasons: dict[str, float] = field(default_factory=dict)
+    dismissed_reasons: dict[str, float] = field(default_factory=dict)
+    saved_reason_counts: dict[str, int] = field(default_factory=dict)
+    dismissed_reason_counts: dict[str, int] = field(default_factory=dict)
+    reason_labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -230,6 +252,15 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
 
         for topic_key in topic_keys:
             _add_feedback_weight(topic_store, topic_key, weight)
+
+        reason_store = signals.saved_reasons if row.action == "save" else signals.dismissed_reasons
+        reason_count_store = (
+            signals.saved_reason_counts if row.action == "save" else signals.dismissed_reason_counts
+        )
+        for reason_key, reason_label in _feedback_reason_entries(row.reasons_json):
+            _add_feedback_weight(reason_store, reason_key, weight)
+            _increment_feedback_count(reason_count_store, reason_key)
+            signals.reason_labels[reason_key] = reason_label
 
     return signals
 
@@ -398,6 +429,35 @@ def _add_feedback_weight(store: dict[str, float], key: str | None, weight: float
     store[normalized_key] = store.get(normalized_key, 0.0) + weight
 
 
+def _increment_feedback_count(store: dict[str, int], key: str | None) -> None:
+    normalized_key = _normalize_text(key)
+    if not normalized_key:
+        return
+    store[normalized_key] = store.get(normalized_key, 0) + 1
+
+
+def _feedback_reason_label(key: str, label: str | None = None) -> str:
+    if label and label.strip():
+        return label.strip()
+    return key.replace("_", " ").strip().title()
+
+
+def _feedback_reason_entries(payload: list[dict] | None) -> list[tuple[str, str]]:
+    if not payload:
+        return []
+
+    allowed_keys = SAVE_FEEDBACK_REASON_KEYS | DISMISS_FEEDBACK_REASON_KEYS
+    entries: list[tuple[str, str]] = []
+    seen_keys: set[str] = set()
+    for item in payload:
+        key = _normalize_text(item.get("key")) if isinstance(item, dict) else ""
+        if not key or key not in allowed_keys or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        entries.append((key, _feedback_reason_label(key, item.get("label"))))
+    return entries
+
+
 def _average_feedback_weight(keys: list[str], store: dict[str, float]) -> float:
     normalized_keys = [_normalize_text(key) for key in keys if _normalize_text(key)]
     if not normalized_keys:
@@ -552,11 +612,112 @@ def _feedback_topic_labels(
     return labels
 
 
+def _reason_weight(store: dict[str, float], key: str) -> float:
+    return store.get(_normalize_text(key), 0.0)
+
+
+def _reason_feedback_adjustment(
+    *,
+    topic_labels: list[str],
+    transit_minutes: int,
+    budget_fit: float,
+    source_confidence: float,
+    feedback_signals: FeedbackSignals,
+) -> tuple[float, dict | None]:
+    adjustment = 0.0
+    strongest_reason: tuple[float, dict] | None = None
+
+    def record_reason(abs_contribution: float, title: str, detail: str) -> None:
+        nonlocal strongest_reason
+        reason = {"title": title, "detail": detail}
+        if strongest_reason is None or abs_contribution > strongest_reason[0]:
+            strongest_reason = (abs_contribution, reason)
+
+    saved_easy_weight = _reason_weight(feedback_signals.saved_reasons, "easy_to_get_to")
+    dismissed_far_weight = _reason_weight(feedback_signals.dismissed_reasons, "too_far")
+    saved_price_weight = _reason_weight(feedback_signals.saved_reasons, "good_price")
+    dismissed_price_weight = _reason_weight(feedback_signals.dismissed_reasons, "too_expensive")
+    saved_vibe_weight = _reason_weight(feedback_signals.saved_reasons, "right_vibe") + _reason_weight(
+        feedback_signals.saved_reasons, "love_lineup"
+    )
+    dismissed_vibe_weight = _reason_weight(feedback_signals.dismissed_reasons, "wrong_vibe")
+    dismissed_trust_weight = _reason_weight(feedback_signals.dismissed_reasons, "not_trustworthy")
+
+    if transit_minutes <= 30 and saved_easy_weight:
+        contribution = min(0.06, 0.015 + (saved_easy_weight * 0.025))
+        adjustment += contribution
+        record_reason(
+            contribution,
+            "Distance pattern",
+            "You often save easy-to-get-to spots, so faster trips now get a lift.",
+        )
+
+    if transit_minutes >= 40 and dismissed_far_weight:
+        contribution = min(0.10, 0.025 + (dismissed_far_weight * 0.03))
+        adjustment -= contribution
+        record_reason(
+            contribution,
+            "Distance pattern",
+            "You often dismiss long trips, so this commute holds the score back.",
+        )
+
+    if budget_fit >= 0.82 and saved_price_weight:
+        contribution = min(0.05, 0.012 + (saved_price_weight * 0.02))
+        adjustment += contribution
+        record_reason(
+            contribution,
+            "Budget pattern",
+            "You tend to save good-value picks, so budget-friendly options get a boost.",
+        )
+
+    if budget_fit <= 0.58 and dismissed_price_weight:
+        contribution = min(0.09, 0.02 + (dismissed_price_weight * 0.03))
+        adjustment -= contribution
+        record_reason(
+            contribution,
+            "Budget pattern",
+            "You often dismiss pricier picks, so this price point drags on the rank.",
+        )
+
+    if topic_labels and saved_vibe_weight:
+        contribution = min(0.06, 0.015 + (saved_vibe_weight * 0.02))
+        adjustment += contribution
+        record_reason(
+            contribution,
+            "Taste pattern",
+            f"You keep saving {_join_labels(topic_labels)} picks for the vibe, so this gets a lift.",
+        )
+
+    if topic_labels and dismissed_vibe_weight:
+        contribution = min(0.09, 0.02 + (dismissed_vibe_weight * 0.03))
+        adjustment -= contribution
+        record_reason(
+            contribution,
+            "Taste pattern",
+            f"You often dismiss {_join_labels(topic_labels)} picks as the wrong vibe, so this is ranked more cautiously.",
+        )
+
+    if source_confidence <= 0.76 and dismissed_trust_weight:
+        contribution = min(0.07, 0.015 + (dismissed_trust_weight * 0.025))
+        adjustment -= contribution
+        record_reason(
+            contribution,
+            "Trust pattern",
+            "You have been skeptical of lower-trust signals, so lighter-confidence sources now get discounted.",
+        )
+
+    return adjustment, strongest_reason[1] if strongest_reason is not None else None
+
+
 def _feedback_adjustment(
     topic_keys: list[str],
     profiles_by_key: dict[str, UserInterestProfile],
     venue: Venue,
     feedback_signals: FeedbackSignals,
+    *,
+    transit_minutes: int,
+    budget_fit: float,
+    source_confidence: float,
 ) -> tuple[float, dict | None]:
     adjustment = 0.0
 
@@ -612,6 +773,17 @@ def _feedback_adjustment(
             "title": "Area pattern",
             "detail": f"You have saved a few spots around {venue.neighborhood}, so this area gets a gentle boost.",
         }
+
+    reason_adjustment, reason_feedback = _reason_feedback_adjustment(
+        topic_labels=topic_labels,
+        transit_minutes=transit_minutes,
+        budget_fit=budget_fit,
+        source_confidence=source_confidence,
+        feedback_signals=feedback_signals,
+    )
+    adjustment += reason_adjustment
+    if reason_feedback is not None and (feedback_reason is None or abs(reason_adjustment) >= 0.04):
+        feedback_reason = reason_feedback
 
     return max(-0.38, min(0.22, adjustment)), feedback_reason
 
@@ -1061,6 +1233,29 @@ def _driver_summaries(
         key=lambda summary: summary.averageContribution,
     )
     return positive[:4], negative[:4]
+
+
+def _feedback_reason_summaries(
+    feedback_signals: FeedbackSignals,
+    *,
+    action: str,
+) -> list[RecommendationFeedbackReasonSummary]:
+    reason_weights = feedback_signals.saved_reasons if action == "save" else feedback_signals.dismissed_reasons
+    reason_counts = (
+        feedback_signals.saved_reason_counts if action == "save" else feedback_signals.dismissed_reason_counts
+    )
+    summaries = [
+        RecommendationFeedbackReasonSummary(
+            key=key,
+            label=feedback_signals.reason_labels.get(key, _feedback_reason_label(key)),
+            count=reason_counts.get(key, 0),
+            weightedStrength=round(weight, 3),
+        )
+        for key, weight in reason_weights.items()
+        if weight > 0
+    ]
+    summaries.sort(key=lambda item: (-item.weightedStrength, -item.count, item.label))
+    return summaries[:5]
 
 
 def _debug_summary_sentence(
@@ -1542,6 +1737,9 @@ async def refresh_recommendations_for_user(
             profiles_by_key=profiles_by_key,
             venue=venue,
             feedback_signals=feedback_signals,
+            transit_minutes=transit_minutes,
+            budget_fit=budget_fit,
+            source_confidence=source_confidence,
         )
         adjusted_score = _clamp_score(score + feedback_adjustment)
         matched_labels = [topic.label for topic in matched_topics]
@@ -1816,6 +2014,7 @@ async def get_recommendation_debug_summary(
             )
         ).all()
     )
+    feedback_signals = await _feedback_signals(session, user.id)
     _, items, _ = await _cards_for_run(session, run)
     positive_drivers, negative_drivers = _driver_summaries(items)
 
@@ -1835,6 +2034,8 @@ async def get_recommendation_debug_summary(
         mapContext=_build_map_context(anchor_resolution),
         activeTopics=_topic_labels(topic_rows, muted=False),
         mutedTopics=_topic_labels(topic_rows, muted=True),
+        topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
+        topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),
         topPositiveDrivers=positive_drivers,
         topNegativeDrivers=negative_drivers,
         venues=[

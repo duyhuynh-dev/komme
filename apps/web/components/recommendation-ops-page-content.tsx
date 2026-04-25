@@ -7,6 +7,7 @@ import { getRecommendationDebugSummary, getRecommendationRunComparison } from "@
 import type {
   RecommendationDebugSummary,
   RecommendationDriverSummary,
+  RecommendationFeedbackReasonSummary,
   RecommendationRunComparison,
   RecommendationRunComparisonItem,
   RecommendationScoreBreakdownItem,
@@ -57,6 +58,22 @@ function DriverChip({ driver }: { driver: RecommendationDriverSummary }) {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function FeedbackReasonChip({ item }: { item: RecommendationFeedbackReasonSummary }) {
+  return (
+    <div className="rounded-[1.25rem] border border-stroke/80 bg-canvas px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+          {item.count}x
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-slate-600">
+        Weighted strength {item.weightedStrength.toFixed(3)}
+      </p>
     </div>
   );
 }
@@ -294,6 +311,29 @@ export function RecommendationOpsPageContent() {
                     debugSummary.topNegativeDrivers.map((driver) => <DriverChip key={driver.key} driver={driver} />)
                   ) : (
                     <p className="text-sm text-slate-500">No strong negative drivers were detected.</p>
+                  )}
+                </div>
+              </div>
+            </SectionShell>
+
+            <SectionShell title="Feedback learning" subtitle="Recent save and dismiss reasons feeding the current ranker.">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Top save reasons</h3>
+                  {debugSummary.topSaveReasons.length ? (
+                    debugSummary.topSaveReasons.map((item) => <FeedbackReasonChip key={`save-${item.key}`} item={item} />)
+                  ) : (
+                    <p className="text-sm text-slate-500">No save reasons have been captured yet.</p>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Top dismiss reasons</h3>
+                  {debugSummary.topDismissReasons.length ? (
+                    debugSummary.topDismissReasons.map((item) => (
+                      <FeedbackReasonChip key={`dismiss-${item.key}`} item={item} />
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No dismiss reasons have been captured yet.</p>
                   )}
                 </div>
               </div>

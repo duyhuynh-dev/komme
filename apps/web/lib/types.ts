@@ -177,6 +177,13 @@ export interface RecommendationDriverSummary {
   topVenues: string[];
 }
 
+export interface RecommendationFeedbackReasonSummary {
+  key: string;
+  label: string;
+  count: number;
+  weightedStrength: number;
+}
+
 export interface RecommendationDebugVenue {
   rank: number;
   venueId: string;
@@ -197,6 +204,8 @@ export interface RecommendationDebugSummary {
   mapContext: MapContext;
   activeTopics: string[];
   mutedTopics: string[];
+  topSaveReasons: RecommendationFeedbackReasonSummary[];
+  topDismissReasons: RecommendationFeedbackReasonSummary[];
   topPositiveDrivers: RecommendationDriverSummary[];
   topNegativeDrivers: RecommendationDriverSummary[];
   venues: RecommendationDebugVenue[];

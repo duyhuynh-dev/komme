@@ -14,9 +14,10 @@ import {
   syncSupply,
   submitFeedback
 } from "@/lib/api";
-import type { InterestTopic } from "@/lib/types";
+import type { FeedbackReason, InterestTopic, VenueRecommendationCard } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
 import { AccountDock } from "@/components/account-dock";
+import { FeedbackReasonModal } from "@/components/feedback-reason-modal";
 import { InterestProfilePanel } from "@/components/interest-profile-panel";
 import { RailModal } from "@/components/rail-modal";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
@@ -30,6 +31,11 @@ export function PulseShell() {
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
   const [activeRailModal, setActiveRailModal] = useState<"signals" | "spots" | null>(null);
   const [surfaceStatus, setSurfaceStatus] = useState<string | null>(null);
+  const [pendingFeedback, setPendingFeedback] = useState<{
+    recommendationId: string;
+    action: "save" | "dismiss";
+    venueName: string;
+  } | null>(null);
   const identityKey = user?.id ?? "demo";
 
   const viewerQuery = useQuery({
@@ -65,15 +71,28 @@ export function PulseShell() {
   const feedbackMutation = useMutation({
     mutationFn: ({
       recommendationId,
-      action
+      action,
+      reasons,
     }: {
       recommendationId: string;
       action: "save" | "dismiss";
-    }) => submitFeedback(recommendationId, action, []),
-    onSuccess: () => {
+      reasons: FeedbackReason[];
+    }) => submitFeedback(recommendationId, action, reasons),
+    onSuccess: (_, variables) => {
+      setPendingFeedback(null);
+      setSurfaceStatus(
+        variables.action === "save"
+          ? "Saved. Pulse will use that feedback to sharpen future venue picks."
+          : "Hidden. Pulse will treat that signal as a stronger negative next run."
+      );
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       void queryClient.invalidateQueries({ queryKey: ["archive"] });
-    }
+      void queryClient.invalidateQueries({ queryKey: ["recommendation-debug-summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["recommendation-run-comparison"] });
+    },
+    onError: (error) => {
+      setSurfaceStatus(error instanceof Error ? error.message : "Unable to save feedback right now.");
+    },
   });
 
   const refreshMutation = useMutation({
@@ -162,6 +181,13 @@ export function PulseShell() {
     (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
   const toggleRailModal = (target: "signals" | "spots") => {
     setActiveRailModal((current) => (current === target ? null : target));
+  };
+  const queueFeedback = (card: VenueRecommendationCard, action: "save" | "dismiss") => {
+    setPendingFeedback({
+      recommendationId: card.eventId,
+      action,
+      venueName: card.venueName,
+    });
   };
 
   return (
@@ -278,12 +304,8 @@ export function PulseShell() {
               isExpanded={activeRailModal === "spots"}
               onToggleExpanded={() => toggleRailModal("spots")}
               onSelectVenue={setSelectedVenueId}
-              onSave={(card) =>
-                feedbackMutation.mutate({ recommendationId: card.eventId, action: "save" })
-              }
-              onDismiss={(card) =>
-                feedbackMutation.mutate({ recommendationId: card.eventId, action: "dismiss" })
-              }
+              onSave={(card) => queueFeedback(card, "save")}
+              onDismiss={(card) => queueFeedback(card, "dismiss")}
             />
           </div>
         </section>
@@ -321,14 +343,28 @@ export function PulseShell() {
           timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
           selectedVenueId={selectedVenueId}
           onSelectVenue={setSelectedVenueId}
-          onSave={(card) =>
-            feedbackMutation.mutate({ recommendationId: card.eventId, action: "save" })
-          }
-          onDismiss={(card) =>
-            feedbackMutation.mutate({ recommendationId: card.eventId, action: "dismiss" })
-          }
+          onSave={(card) => queueFeedback(card, "save")}
+          onDismiss={(card) => queueFeedback(card, "dismiss")}
         />
       </RailModal>
+
+      <FeedbackReasonModal
+        open={pendingFeedback !== null}
+        action={pendingFeedback?.action ?? null}
+        venueName={pendingFeedback?.venueName ?? null}
+        isSubmitting={feedbackMutation.isPending}
+        onClose={() => setPendingFeedback(null)}
+        onSubmit={(reasons) => {
+          if (!pendingFeedback) {
+            return;
+          }
+          feedbackMutation.mutate({
+            recommendationId: pendingFeedback.recommendationId,
+            action: pendingFeedback.action,
+            reasons,
+          });
+        }}
+      />
     </main>
   );
 }

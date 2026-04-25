@@ -108,6 +108,13 @@ class RecommendationDriverSummary(BaseModel):
     topVenues: list[str] = Field(default_factory=list)
 
 
+class RecommendationFeedbackReasonSummary(BaseModel):
+    key: str
+    label: str
+    count: int
+    weightedStrength: float
+
+
 class RecommendationDebugVenue(BaseModel):
     rank: int
     venueId: str
@@ -128,6 +135,8 @@ class RecommendationDebugSummary(BaseModel):
     mapContext: MapContext = Field(default_factory=MapContext)
     activeTopics: list[str] = Field(default_factory=list)
     mutedTopics: list[str] = Field(default_factory=list)
+    topSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
+    topDismissReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topPositiveDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
     topNegativeDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
     venues: list[RecommendationDebugVenue] = Field(default_factory=list)

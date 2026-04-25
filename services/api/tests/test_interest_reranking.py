@@ -10,6 +10,7 @@ from app.services.recommendations import (
     _deletable_run_ids,
     _derive_topic_keys,
     _feedback_adjustment,
+    _feedback_reason_summaries,
     _occurrence_is_rankable,
     _parse_occurrence_start,
     _score_band,
@@ -139,11 +140,120 @@ def test_feedback_adjustment_boosts_saved_venue_and_topics() -> None:
         profiles_by_key,
         venue,
         signals,
+        transit_minutes=22,
+        budget_fit=0.92,
+        source_confidence=0.86,
     )
 
     assert adjustment > 0
     assert feedback_reason is not None
     assert feedback_reason["title"] == "Saved before"
+
+
+def test_feedback_adjustment_penalizes_long_trip_when_too_far_reason_recurs() -> None:
+    profiles_by_key = {
+        "indie_live_music": UserInterestProfile(
+            user_id="user-1",
+            topic_key="indie_live_music",
+            label="Indie live music",
+            confidence=0.88,
+            boosted=False,
+            muted=False,
+        )
+    }
+    venue = Venue(
+        name="Elsewhere",
+        neighborhood="Bushwick",
+        address="599 Johnson Ave, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        latitude=40.7065,
+        longitude=-73.9235,
+    )
+    venue.id = "venue-2"
+    signals = FeedbackSignals(
+        dismissed_reasons={"too_far": 1.4},
+        dismissed_reason_counts={"too_far": 2},
+        reason_labels={"too_far": "Too far"},
+    )
+
+    adjustment, feedback_reason = _feedback_adjustment(
+        ["indie_live_music"],
+        profiles_by_key,
+        venue,
+        signals,
+        transit_minutes=52,
+        budget_fit=0.84,
+        source_confidence=0.86,
+    )
+
+    assert adjustment < 0
+    assert feedback_reason is not None
+    assert feedback_reason["title"] == "Distance pattern"
+
+
+def test_feedback_adjustment_boosts_budget_and_vibe_patterns() -> None:
+    profiles_by_key = {
+        "gallery_nights": UserInterestProfile(
+            user_id="user-1",
+            topic_key="gallery_nights",
+            label="Gallery nights",
+            confidence=0.84,
+            boosted=False,
+            muted=False,
+        )
+    }
+    venue = Venue(
+        name="Public Records",
+        neighborhood="Gowanus",
+        address="233 Butler St, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        latitude=40.6799,
+        longitude=-73.9839,
+    )
+    venue.id = "venue-3"
+    signals = FeedbackSignals(
+        saved_reasons={"good_price": 1.0, "right_vibe": 0.8},
+        saved_reason_counts={"good_price": 1, "right_vibe": 1},
+        reason_labels={"good_price": "Good price", "right_vibe": "Right vibe"},
+    )
+
+    adjustment, feedback_reason = _feedback_adjustment(
+        ["gallery_nights"],
+        profiles_by_key,
+        venue,
+        signals,
+        transit_minutes=24,
+        budget_fit=0.91,
+        source_confidence=0.9,
+    )
+
+    assert adjustment > 0
+    assert feedback_reason is not None
+    assert feedback_reason["title"] in {"Budget pattern", "Taste pattern"}
+
+
+def test_feedback_reason_summaries_sort_by_weight_and_preserve_labels() -> None:
+    signals = FeedbackSignals(
+        saved_reasons={"easy_to_get_to": 1.2, "good_price": 0.9},
+        saved_reason_counts={"easy_to_get_to": 2, "good_price": 1},
+        dismissed_reasons={"too_far": 1.4},
+        dismissed_reason_counts={"too_far": 3},
+        reason_labels={
+            "easy_to_get_to": "Easy to get to",
+            "good_price": "Good price",
+            "too_far": "Too far",
+        },
+    )
+
+    save_summaries = _feedback_reason_summaries(signals, action="save")
+    dismiss_summaries = _feedback_reason_summaries(signals, action="dismiss")
+
+    assert [item.key for item in save_summaries] == ["easy_to_get_to", "good_price"]
+    assert save_summaries[0].label == "Easy to get to"
+    assert dismiss_summaries[0].key == "too_far"
+    assert dismiss_summaries[0].count == 3
 
 
 def test_candidate_score_strong_match_beats_generic_event() -> None:
@@ -340,6 +450,9 @@ def test_feedback_adjustment_penalizes_dismissed_patterns() -> None:
         profiles_by_key,
         venue,
         signals,
+        transit_minutes=41,
+        budget_fit=0.86,
+        source_confidence=0.82,
     )
 
     assert adjustment < 0
