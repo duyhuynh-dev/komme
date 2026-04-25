@@ -242,6 +242,7 @@ export function RecommendationOpsPageContent() {
   const error = debugSummaryQuery.error ?? comparisonQuery.error;
   const debugSummary = debugSummaryQuery.data;
   const comparison = comparisonQuery.data;
+  const confirmedSaveReasons = debugSummary?.topConfirmedSaveReasons ?? [];
 
   return (
     <main className="min-h-screen px-4 py-6 md:px-6">
@@ -342,13 +343,23 @@ export function RecommendationOpsPageContent() {
             </SectionShell>
 
             <SectionShell title="Feedback learning" subtitle="Recent save and dismiss reasons feeding the current ranker.">
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-3">
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-slate-900">Top save reasons</h3>
                   {debugSummary.topSaveReasons.length ? (
                     debugSummary.topSaveReasons.map((item) => <FeedbackReasonChip key={`save-${item.key}`} item={item} />)
                   ) : (
                     <p className="text-sm text-slate-500">No save reasons have been captured yet.</p>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Confirmed save signals</h3>
+                  {confirmedSaveReasons.length ? (
+                    confirmedSaveReasons.map((item) => (
+                      <FeedbackReasonChip key={`confirmed-${item.key}`} item={item} />
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Pulse has not validated any save patterns yet.</p>
                   )}
                 </div>
                 <div className="space-y-4">

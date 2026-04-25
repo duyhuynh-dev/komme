@@ -212,6 +212,7 @@ export interface RecommendationDebugSummary {
   activeTopics: string[];
   mutedTopics: string[];
   topSaveReasons: RecommendationFeedbackReasonSummary[];
+  topConfirmedSaveReasons: RecommendationFeedbackReasonSummary[];
   topDismissReasons: RecommendationFeedbackReasonSummary[];
   topPositiveDrivers: RecommendationDriverSummary[];
   topNegativeDrivers: RecommendationDriverSummary[];

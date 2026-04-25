@@ -1,5 +1,12 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.db.base import Base
+from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
+from app.models.recommendation import DigestDelivery, FeedbackEvent, VenueRecommendation
+from app.models.user import User
 from app.models.recommendation import RecommendationRun
 from app.models.user import UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
@@ -17,6 +24,7 @@ from app.services.recommendations import (
     _context_hash,
     _deletable_run_ids,
     _driver_summaries,
+    _feedback_signals,
     _pack_reason_payload,
     _score_breakdown_items,
     _score_summary,
@@ -417,3 +425,104 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
     assert summary is not None
     assert "entered the shortlist" in summary
     assert "dropped out" in summary
+
+
+@pytest.mark.asyncio
+async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_digests() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="signals@example.com")
+        source = EventSource(name="ticketmaster", kind="api_connector")
+        venue = Venue(
+            name="Public Records",
+            neighborhood="Gowanus",
+            address="233 Butler St, Brooklyn, NY",
+            city="Brooklyn",
+            state="NY",
+            latitude=40.6787,
+            longitude=-73.9831,
+        )
+        event = CanonicalEvent(
+            source_id="pending",
+            source_event_key="ticketmaster:event-1",
+            title="Late Night Warehouse Set",
+            category="live music",
+            summary="All-night lineup",
+        )
+        session.add_all([user, source])
+        await session.flush()
+        event.source_id = source.id
+        session.add_all([venue, event])
+        await session.flush()
+
+        saved_at = datetime.now(tz=UTC) - timedelta(days=2)
+        occurrence = EventOccurrence(
+            event_id=event.id,
+            venue_id=venue.id,
+            starts_at="2026-04-28T01:00:00+00:00",
+            ticket_url="https://example.com/tickets",
+            metadata_json={"topicKeys": ["underground_dance"]},
+            created_at=saved_at,
+        )
+        session.add(occurrence)
+        await session.flush()
+
+        feedback = FeedbackEvent(
+            user_id=user.id,
+            recommendation_id=occurrence.id,
+            action="save",
+            reasons_json=[{"key": "easy_to_get_to", "label": "Easy to get to"}],
+            created_at=saved_at,
+        )
+        session.add(feedback)
+        await session.flush()
+
+        rerun_created_at = saved_at + timedelta(hours=12)
+        run = RecommendationRun(
+            user_id=user.id,
+            provider="catalog",
+            model_name="pulse-deterministic-v1",
+            viewport_json={},
+            created_at=rerun_created_at,
+        )
+        session.add(run)
+        await session.flush()
+
+        session.add(
+            VenueRecommendation(
+                run_id=run.id,
+                venue_id=venue.id,
+                event_occurrence_id=occurrence.id,
+                rank=2,
+                score=0.91,
+                reasons_json=[],
+                travel_json=[],
+                secondary_events_json=[],
+                created_at=rerun_created_at,
+            )
+        )
+        session.add(
+            DigestDelivery(
+                user_id=user.id,
+                recommendation_run_id=run.id,
+                provider="resend-scheduled",
+                status="sent",
+                created_at=rerun_created_at + timedelta(minutes=5),
+            )
+        )
+        await session.flush()
+
+        signals = await _feedback_signals(session, user.id)
+
+        assert signals.saved_reasons["easy_to_get_to"] > 0
+        assert signals.confirmed_saved_reasons["easy_to_get_to"] > 0
+        assert signals.confirmed_saved_reason_counts["easy_to_get_to"] == 1
+        assert signals.confirmed_saved_venues[venue.id] > 0
+        assert signals.confirmed_saved_topics["underground_dance"] > 0
+
+    await engine.dispose()

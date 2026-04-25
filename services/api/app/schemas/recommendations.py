@@ -143,6 +143,7 @@ class RecommendationDebugSummary(BaseModel):
     activeTopics: list[str] = Field(default_factory=list)
     mutedTopics: list[str] = Field(default_factory=list)
     topSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
+    topConfirmedSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topDismissReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topPositiveDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
     topNegativeDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
