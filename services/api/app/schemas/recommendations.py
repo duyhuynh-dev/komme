@@ -12,6 +12,21 @@ class TravelEstimate(BaseModel):
     minutes: int
 
 
+class RecommendationFreshness(BaseModel):
+    discoveredAt: str | None = None
+    lastVerifiedAt: str | None = None
+    freshnessLabel: str = "Recently refreshed"
+
+
+class RecommendationProvenance(BaseModel):
+    sourceName: str
+    sourceKind: str
+    sourceConfidence: float
+    sourceConfidenceLabel: str
+    sourceBaseUrl: str | None = None
+    hasTicketUrl: bool = False
+
+
 class SecondaryEvent(BaseModel):
     eventId: str
     title: str
@@ -31,6 +46,8 @@ class VenueRecommendationCard(BaseModel):
     score: float
     travel: list[TravelEstimate] = Field(default_factory=list)
     reasons: list[RecommendationReason] = Field(default_factory=list)
+    freshness: RecommendationFreshness = Field(default_factory=RecommendationFreshness)
+    provenance: RecommendationProvenance
     secondaryEvents: list[SecondaryEvent] = Field(default_factory=list)
 
 

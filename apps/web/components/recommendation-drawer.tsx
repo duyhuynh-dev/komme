@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Bookmark, MapPin, MoveRight, XCircle } from "lucide-react";
 import type { VenueRecommendationCard } from "@/lib/types";
-import { formatEventStart } from "@/lib/utils";
+import { formatEventStart, formatRelativeTimestamp } from "@/lib/utils";
 
 export function RecommendationDrawer({
   loading,
@@ -123,6 +123,19 @@ export function RecommendationDrawer({
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="h-4 w-4" />
                   {card.address}
+                </span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                  Source: {card.provenance.sourceName}
+                </span>
+                <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                  {card.provenance.sourceConfidenceLabel}
+                </span>
+                <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                  {card.freshness.freshnessLabel}
+                  {card.freshness.lastVerifiedAt ? ` · ${formatRelativeTimestamp(card.freshness.lastVerifiedAt)}` : ""}
                 </span>
               </div>
 

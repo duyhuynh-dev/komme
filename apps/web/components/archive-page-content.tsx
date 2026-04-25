@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { getArchive } from "@/lib/api";
 import type { ArchiveSnapshot, VenueRecommendationCard } from "@/lib/types";
-import { formatEventStart, formatTimestamp } from "@/lib/utils";
+import { formatEventStart, formatRelativeTimestamp, formatTimestamp } from "@/lib/utils";
 
 function SnapshotSection({
   title,
@@ -43,6 +43,18 @@ function SnapshotSection({
                   {travel.label}
                 </span>
               ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+              <span className="rounded-full border border-stroke/80 bg-canvas px-3 py-1">
+                {item.provenance.sourceName}
+              </span>
+              <span className="rounded-full border border-stroke/80 bg-canvas px-3 py-1">
+                {item.provenance.sourceConfidenceLabel}
+              </span>
+              <span className="rounded-full border border-stroke/80 bg-canvas px-3 py-1">
+                {item.freshness.freshnessLabel}
+                {item.freshness.lastVerifiedAt ? ` · ${formatRelativeTimestamp(item.freshness.lastVerifiedAt)}` : ""}
+              </span>
             </div>
           </article>
         ))}

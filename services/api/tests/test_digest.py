@@ -2,7 +2,12 @@ import httpx
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from app.schemas.recommendations import RecommendationReason, TravelEstimate, VenueRecommendationCard
+from app.schemas.recommendations import (
+    RecommendationProvenance,
+    RecommendationReason,
+    TravelEstimate,
+    VenueRecommendationCard,
+)
 from app.services.digest import (
     _digest_due_now,
     _digest_preheader,
@@ -35,6 +40,14 @@ def _sample_card(venue_name: str, neighborhood: str, event_title: str) -> VenueR
             RecommendationReason(title="Profile match", detail="This venue lines up with your indie live music signals."),
             RecommendationReason(title="Travel fit", detail="About 12 min by transit from your current NYC anchor."),
         ],
+        provenance=RecommendationProvenance(
+            sourceName="Curated venue calendars",
+            sourceKind="curated_calendar",
+            sourceConfidence=0.86,
+            sourceConfidenceLabel="High trust",
+            sourceBaseUrl="https://publicrecords.nyc/",
+            hasTicketUrl=True,
+        ),
         secondaryEvents=[],
     )
 

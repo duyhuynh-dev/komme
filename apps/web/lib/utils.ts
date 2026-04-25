@@ -63,3 +63,35 @@ export function formatEventStart(value: string, timezone = "America/New_York") {
 
   return `${weekday} ${month} ${day} · ${hour}:${minute} ${dayPeriod}`.trim();
 }
+
+export function formatRelativeTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  const diffMs = Date.now() - timestamp.getTime();
+  const diffMinutes = Math.round(diffMs / 60000);
+  if (diffMinutes < 1) {
+    return "just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return formatTimestamp(value) ?? value;
+}

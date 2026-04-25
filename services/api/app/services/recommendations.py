@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.events import CanonicalEvent, EventOccurrence, Venue
+from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.profile import UserInterestProfile
 from app.models.recommendation import DigestDelivery, FeedbackEvent, RecommendationRun, VenueRecommendation
 from app.models.user import User, UserAnchorLocation, UserConstraint
@@ -14,6 +14,8 @@ from app.schemas.recommendations import (
     MapVenuePin,
     MapContext,
     RecommendationsMapResponse,
+    RecommendationFreshness,
+    RecommendationProvenance,
     RecommendationReason,
     TravelEstimate,
     VenueRecommendationCard,
@@ -1055,7 +1057,8 @@ async def _cards_for_run(
         venue = await session.get(Venue, recommendation.venue_id)
         occurrence = await session.get(EventOccurrence, recommendation.event_occurrence_id)
         event = await session.get(CanonicalEvent, occurrence.event_id if occurrence else None)
-        if not venue or not occurrence or not event:
+        source = await session.get(EventSource, event.source_id if event else None)
+        if not venue or not occurrence or not event or not source:
             continue
 
         travel = recommendation.travel_json or estimate_travel_bands(
@@ -1082,6 +1085,8 @@ async def _cards_for_run(
             score=recommendation.score,
             travel=[TravelEstimate(**item) for item in travel],
             reasons=reasons,
+            freshness=_build_freshness(occurrence),
+            provenance=_build_provenance(source, occurrence),
             secondaryEvents=recommendation.secondary_events_json or [],
         )
         items.append(card)
@@ -1098,6 +1103,65 @@ async def _cards_for_run(
         )
 
     return pins, items, cards
+
+
+def _build_freshness(occurrence: EventOccurrence) -> RecommendationFreshness:
+    discovered_at = _iso_or_none(occurrence.created_at)
+    last_verified_at = _iso_or_none(occurrence.updated_at)
+    freshness_label = _freshness_label(occurrence.updated_at)
+    return RecommendationFreshness(
+        discoveredAt=discovered_at,
+        lastVerifiedAt=last_verified_at,
+        freshnessLabel=freshness_label,
+    )
+
+
+def _build_provenance(source: EventSource, occurrence: EventOccurrence) -> RecommendationProvenance:
+    metadata = occurrence.metadata_json or {}
+    confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
+    return RecommendationProvenance(
+        sourceName=_present_source_name(source.name),
+        sourceKind=source.kind,
+        sourceConfidence=round(confidence, 2),
+        sourceConfidenceLabel=_source_confidence_label(confidence, source.kind),
+        sourceBaseUrl=source.base_url,
+        hasTicketUrl=bool(occurrence.ticket_url),
+    )
+
+
+def _present_source_name(name: str) -> str:
+    if name == "ticketmaster":
+        return "Ticketmaster"
+    if name == "curated_venues":
+        return "Curated venue calendars"
+    return name.replace("_", " ").title()
+
+
+def _source_confidence_label(confidence: float, source_kind: str) -> str:
+    if source_kind == "curated_calendar" and confidence >= 0.8:
+        return "High trust"
+    if confidence >= 0.9:
+        return "High trust"
+    if confidence >= 0.78:
+        return "Solid signal"
+    return "Emerging signal"
+
+
+def _freshness_label(updated_at: datetime) -> str:
+    age = datetime.now(tz=UTC) - _timestamp_utc(updated_at)
+    if age <= timedelta(hours=6):
+        return "Verified recently"
+    if age <= timedelta(days=1):
+        return "Checked today"
+    if age <= timedelta(days=3):
+        return "Checked this week"
+    return "Needs refresh soon"
+
+
+def _iso_or_none(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return _timestamp_utc(value).isoformat()
 
 
 async def get_map_recommendations(

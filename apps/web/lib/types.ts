@@ -24,6 +24,21 @@ export interface RecommendationReason {
   detail: string;
 }
 
+export interface RecommendationFreshness {
+  discoveredAt?: string | null;
+  lastVerifiedAt?: string | null;
+  freshnessLabel: string;
+}
+
+export interface RecommendationProvenance {
+  sourceName: string;
+  sourceKind: string;
+  sourceConfidence: number;
+  sourceConfidenceLabel: string;
+  sourceBaseUrl?: string | null;
+  hasTicketUrl: boolean;
+}
+
 export interface TravelEstimate {
   mode: "walk" | "transit";
   label: string;
@@ -43,6 +58,8 @@ export interface VenueRecommendationCard {
   score: number;
   travel: TravelEstimate[];
   reasons: RecommendationReason[];
+  freshness: RecommendationFreshness;
+  provenance: RecommendationProvenance;
   secondaryEvents: Array<{
     eventId: string;
     title: string;
