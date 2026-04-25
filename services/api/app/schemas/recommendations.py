@@ -115,6 +115,13 @@ class RecommendationFeedbackReasonSummary(BaseModel):
     weightedStrength: float
 
 
+class RecommendationMovementCue(BaseModel):
+    key: str
+    label: str
+    delta: float
+    direction: str = "positive"
+
+
 class RecommendationDebugVenue(BaseModel):
     rank: int
     venueId: str
@@ -154,6 +161,7 @@ class RecommendationRunComparisonItem(BaseModel):
     scoreDelta: float | None = None
     scoreBand: str | None = None
     scoreSummary: str | None = None
+    movementCues: list[RecommendationMovementCue] = Field(default_factory=list)
     movement: str
 
 

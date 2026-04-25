@@ -8,6 +8,7 @@ import type {
   RecommendationDebugSummary,
   RecommendationDriverSummary,
   RecommendationFeedbackReasonSummary,
+  RecommendationMovementCue,
   RecommendationRunComparison,
   RecommendationRunComparisonItem,
   RecommendationScoreBreakdownItem,
@@ -113,6 +114,22 @@ function MovementChip({ movement }: { movement: RecommendationRunComparisonItem[
   );
 }
 
+function MovementCueChip({ cue }: { cue: RecommendationMovementCue }) {
+  return (
+    <span
+      className={[
+        "rounded-full border px-3 py-1 text-xs font-medium",
+        cue.direction === "negative"
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : "border-sky-200 bg-sky-50 text-sky-800",
+      ].join(" ")}
+      title={`Contribution delta ${cue.delta > 0 ? "+" : ""}${cue.delta.toFixed(3)}`}
+    >
+      {cue.label} {cue.direction === "positive" ? "\u2191" : "\u2193"}
+    </span>
+  );
+}
+
 function ComparisonTable({
   title,
   items,
@@ -162,7 +179,15 @@ function ComparisonTable({
                   </span>
                 ) : null}
               </div>
-              {item.scoreSummary ? <p className="mt-3 text-sm leading-6 text-slate-700">{item.scoreSummary}</p> : null}
+              {item.movementCues.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.movementCues.map((cue) => (
+                    <MovementCueChip key={`${item.venueId}-${cue.key}`} cue={cue} />
+                  ))}
+                </div>
+              ) : item.scoreSummary ? (
+                <p className="mt-3 text-sm leading-6 text-slate-600">{item.scoreSummary}</p>
+              ) : null}
             </div>
           ))}
         </div>

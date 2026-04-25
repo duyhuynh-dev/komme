@@ -184,6 +184,13 @@ export interface RecommendationFeedbackReasonSummary {
   weightedStrength: number;
 }
 
+export interface RecommendationMovementCue {
+  key: string;
+  label: string;
+  delta: number;
+  direction: "positive" | "negative";
+}
+
 export interface RecommendationDebugVenue {
   rank: number;
   venueId: string;
@@ -223,6 +230,7 @@ export interface RecommendationRunComparisonItem {
   scoreDelta?: number | null;
   scoreBand?: ScoreBand | null;
   scoreSummary?: string | null;
+  movementCues: RecommendationMovementCue[];
   movement: "new" | "dropped" | "up" | "down" | "steady";
 }
 

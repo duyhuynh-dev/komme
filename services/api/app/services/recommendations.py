@@ -17,6 +17,7 @@ from app.schemas.recommendations import (
     RecommendationDebugVenue,
     RecommendationDriverSummary,
     RecommendationFeedbackReasonSummary,
+    RecommendationMovementCue,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
     MapVenuePin,
@@ -1315,6 +1316,40 @@ def _rank_lookup(items: list[VenueRecommendationCard]) -> dict[str, tuple[int, V
     }
 
 
+def _movement_cues(
+    current_card: VenueRecommendationCard | None,
+    previous_card: VenueRecommendationCard | None,
+) -> list[RecommendationMovementCue]:
+    if current_card is None and previous_card is None:
+        return []
+
+    current_factors = {factor.key: factor for factor in current_card.scoreBreakdown} if current_card else {}
+    previous_factors = {factor.key: factor for factor in previous_card.scoreBreakdown} if previous_card else {}
+    cues: list[RecommendationMovementCue] = []
+
+    for key in set(current_factors) | set(previous_factors):
+        current_factor = current_factors.get(key)
+        previous_factor = previous_factors.get(key)
+        current_contribution = current_factor.contribution if current_factor is not None else 0.0
+        previous_contribution = previous_factor.contribution if previous_factor is not None else 0.0
+        delta = round(current_contribution - previous_contribution, 3)
+        if abs(delta) < 0.03:
+            continue
+
+        factor = current_factor or previous_factor
+        cues.append(
+            RecommendationMovementCue(
+                key=key,
+                label=factor.label,
+                delta=delta,
+                direction="positive" if delta >= 0 else "negative",
+            )
+        )
+
+    cues.sort(key=lambda item: abs(item.delta), reverse=True)
+    return cues[:2]
+
+
 def _comparison_item(
     *,
     current_rank: int | None,
@@ -1346,6 +1381,7 @@ def _comparison_item(
         scoreDelta=score_delta,
         scoreBand=current_card.scoreBand if current_card is not None else previous_card.scoreBand if previous_card is not None else None,
         scoreSummary=current_card.scoreSummary if current_card is not None else previous_card.scoreSummary if previous_card is not None else None,
+        movementCues=_movement_cues(current_card, previous_card),
         movement=movement,
     )
 

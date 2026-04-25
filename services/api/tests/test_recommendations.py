@@ -277,7 +277,24 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.92,
             score_band="high",
             score_summary="Led by profile fit.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="profile_fit",
+                    label="Profile fit",
+                    impactLabel="driving this pick",
+                    detail="Matched the strongest themes.",
+                    contribution=0.42,
+                    direction="positive",
+                ),
+                RecommendationScoreBreakdownItem(
+                    key="feedback",
+                    label="Recent feedback",
+                    impactLabel="soft drag",
+                    detail="Recent dismisses created a small drag.",
+                    contribution=-0.04,
+                    direction="negative",
+                ),
+            ],
         ),
         _sample_card(
             venue_id="venue-b",
@@ -285,7 +302,16 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.88,
             score_band="high",
             score_summary="Led by source trust.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="source_trust",
+                    label="Source trust",
+                    impactLabel="helping",
+                    detail="Backed by a strong source.",
+                    contribution=0.05,
+                    direction="positive",
+                ),
+            ],
         ),
         _sample_card(
             venue_id="venue-c",
@@ -293,7 +319,16 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.84,
             score_band="medium",
             score_summary="Led by travel fit.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="distance_fit",
+                    label="Travel fit",
+                    impactLabel="helping",
+                    detail="Quick trip from the anchor.",
+                    contribution=0.08,
+                    direction="positive",
+                ),
+            ],
         ),
     ]
     current_items = [
@@ -303,7 +338,24 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.91,
             score_band="high",
             score_summary="Led by profile fit.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="profile_fit",
+                    label="Profile fit",
+                    impactLabel="strong support",
+                    detail="Matched active themes.",
+                    contribution=0.36,
+                    direction="positive",
+                ),
+                RecommendationScoreBreakdownItem(
+                    key="source_trust",
+                    label="Source trust",
+                    impactLabel="helping",
+                    detail="Backed by a strong source.",
+                    contribution=0.05,
+                    direction="positive",
+                ),
+            ],
         ),
         _sample_card(
             venue_id="venue-a",
@@ -311,7 +363,24 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.9,
             score_band="high",
             score_summary="Led by source trust.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="profile_fit",
+                    label="Profile fit",
+                    impactLabel="strong support",
+                    detail="Matched the strongest themes.",
+                    contribution=0.34,
+                    direction="positive",
+                ),
+                RecommendationScoreBreakdownItem(
+                    key="feedback",
+                    label="Recent feedback",
+                    impactLabel="helping",
+                    detail="Recent saves nudged it up.",
+                    contribution=0.05,
+                    direction="positive",
+                ),
+            ],
         ),
         _sample_card(
             venue_id="venue-d",
@@ -319,7 +388,16 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
             score=0.83,
             score_band="medium",
             score_summary="Led by category overlap.",
-            score_breakdown=[],
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="category_fit",
+                    label="Category overlap",
+                    impactLabel="helping",
+                    detail="Category echoed active interests.",
+                    contribution=0.06,
+                    direction="positive",
+                ),
+            ],
         ),
     ]
 
@@ -328,6 +406,7 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
     assert new_entrants[0].venueId == "venue-d"
     assert dropped_venues[0].venueId == "venue-c"
     assert {item.venueId for item in movers} == {"venue-a", "venue-b"}
+    assert any(cue.key == "feedback" and cue.direction == "positive" for cue in movers[0].movementCues + movers[1].movementCues)
     assert steady_leaders == []
 
     summary = _comparison_summary_sentence(
