@@ -1,7 +1,12 @@
 "use client";
 
-import { Clock3, Route, Sparkles } from "lucide-react";
-import { buildTonightPlannerPanelState, plannerSupportLabel } from "@/lib/tonight-planner";
+import { CircleCheck, Clock3, Route, Sparkles } from "lucide-react";
+import {
+  buildTonightPlannerPanelState,
+  plannerFallbackActionLabel,
+  plannerStopActionLabel,
+  plannerSupportLabel,
+} from "@/lib/tonight-planner";
 import type { TonightPlannerFallbackOption, TonightPlannerResponse, TonightPlannerStop } from "@/lib/types";
 import { formatEventStart } from "@/lib/utils";
 
@@ -38,12 +43,18 @@ export function TonightPlannerPanel({
   timezone,
   selectedVenueId,
   onSelectVenue,
+  onCommitStop,
+  onSwapFallback,
+  actionPending,
 }: {
   loading: boolean;
   planner: TonightPlannerResponse | null | undefined;
   timezone: string;
   selectedVenueId: string | null;
   onSelectVenue: (venueId: string) => void;
+  onCommitStop: (stop: TonightPlannerStop) => void;
+  onSwapFallback: (option: TonightPlannerFallbackOption) => void;
+  actionPending: boolean;
 }) {
   const panelState = buildTonightPlannerPanelState(planner);
 
@@ -68,6 +79,19 @@ export function TonightPlannerPanel({
         <p className="mt-1 text-sm leading-6 text-slate-500">
           {loading ? "Pulse is sequencing the live shortlist into a workable night..." : panelState.summary}
         </p>
+        {panelState.executionNote ? (
+          <div
+            className={[
+              "mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
+              panelState.executionStatus === "swapped"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-teal-200 bg-teal-50 text-teal-900",
+            ].join(" ")}
+          >
+            <CircleCheck className="h-3.5 w-3.5" />
+            {panelState.executionNote}
+          </div>
+        ) : null}
       </div>
 
       {loading ? (
@@ -145,6 +169,26 @@ export function TonightPlannerPanel({
                   {plannerSupportLabel(stop)}
                 </div>
 
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCommitStop(stop);
+                    }}
+                    disabled={actionPending}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition disabled:opacity-60",
+                      stop.selected
+                        ? "border border-teal-200 bg-teal-50 text-teal-900"
+                        : "bg-accent text-white",
+                    ].join(" ")}
+                  >
+                    <CircleCheck className="h-4 w-4" />
+                    {plannerStopActionLabel(stop)}
+                  </button>
+                </div>
+
                 {stop.fallbacks.length ? (
                   <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/80 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-800">Swap if needed</p>
@@ -155,7 +199,9 @@ export function TonightPlannerPanel({
                           option={option}
                           timezone={timezone}
                           selected={selectedVenueId === option.venueId}
+                          actionPending={actionPending}
                           onSelectVenue={onSelectVenue}
+                          onSwapFallback={onSwapFallback}
                         />
                       ))}
                     </div>
@@ -176,22 +222,21 @@ function FallbackOptionButton({
   option,
   timezone,
   selected,
+  actionPending,
   onSelectVenue,
+  onSwapFallback,
 }: {
   option: TonightPlannerFallbackOption;
   timezone: string;
   selected: boolean;
+  actionPending: boolean;
   onSelectVenue: (venueId: string) => void;
+  onSwapFallback: (option: TonightPlannerFallbackOption) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectVenue(option.venueId);
-      }}
+    <div
       className={[
-        "w-full rounded-2xl border px-3 py-3 text-left transition",
+        "rounded-2xl border px-3 py-3 text-left transition",
         selected ? "border-accent bg-white" : "border-amber-200 bg-white/80 hover:bg-white",
       ].join(" ")}
     >
@@ -208,6 +253,34 @@ function FallbackOptionButton({
         {option.hopLabel ? <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">{option.hopLabel}</span> : null}
       </div>
       <p className="mt-2 text-xs leading-5 text-amber-900">{option.fallbackReason}</p>
-    </button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectVenue(option.venueId);
+          }}
+          className="rounded-full border border-stroke bg-white px-3 py-2 text-xs font-medium text-slate-700"
+        >
+          Focus on map
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSwapFallback(option);
+          }}
+          disabled={actionPending}
+          className={[
+            "rounded-full px-3 py-2 text-xs font-medium transition disabled:opacity-60",
+            option.selected
+              ? "border border-amber-200 bg-amber-100 text-amber-900"
+              : "bg-amber-500 text-white",
+          ].join(" ")}
+        >
+          {plannerFallbackActionLabel(option.selected)}
+        </button>
+      </div>
+    </div>
   );
 }

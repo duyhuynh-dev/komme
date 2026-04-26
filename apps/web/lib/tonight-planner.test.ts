@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildTonightPlannerPanelState, plannerSupportLabel } from "./tonight-planner.ts";
+import {
+  buildTonightPlannerPanelState,
+  plannerFallbackActionLabel,
+  plannerStopActionLabel,
+  plannerSupportLabel,
+} from "./tonight-planner.ts";
 import type { TonightPlannerResponse } from "./types";
 
 test("buildTonightPlannerPanelState returns a populated planner view model", () => {
@@ -10,6 +15,8 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
     title: "Tonight planner",
     summary: "Open in Bushwick, anchor the night at Elsewhere, and keep Good Room ready if timing shifts.",
     planningNote: "Built from the live shortlist.",
+    executionStatus: "locked",
+    executionNote: "Elsewhere is currently locked into tonight's plan.",
     stops: [
       {
         role: "pregame",
@@ -27,6 +34,7 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
         confidence: "high",
         confidenceLabel: "Strong fit",
         confidenceReason: "Timing and travel line up cleanly.",
+        selected: false,
         fallbacks: [],
       },
       {
@@ -45,6 +53,7 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
         confidence: "high",
         confidenceLabel: "Confident anchor",
         confidenceReason: "Best mix of timing and trust.",
+        selected: true,
         fallbacks: [
           {
             venueId: "backup-venue",
@@ -57,6 +66,7 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
             scoreBand: "high",
             hopLabel: "15 min transit",
             fallbackReason: "Use this if Elsewhere feels thin.",
+            selected: false,
           },
         ],
       },
@@ -68,6 +78,8 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
   assert.equal(state.mode, "plan");
   assert.equal(state.headline, "2 stops ready");
   assert.equal(state.fallbackCount, 1);
+  assert.equal(state.executionStatus, "locked");
+  assert.equal(state.executionNote, "Elsewhere is currently locked into tonight's plan.");
   assert.equal(state.stops[1].venueName, "Elsewhere");
 });
 
@@ -77,6 +89,8 @@ test("buildTonightPlannerPanelState returns the empty planner copy when no viabl
     title: "Tonight planner",
     summary: "Pulse needs more tonight options before it can sketch a route.",
     planningNote: "Refresh after new events land.",
+    executionStatus: "idle",
+    executionNote: null,
     stops: [],
   };
 
@@ -104,6 +118,7 @@ test("plannerSupportLabel surfaces swap counts before the confidence note", () =
     confidence: "watch",
     confidenceLabel: "Keep a backup ready",
     confidenceReason: "Timing pushes late into the night.",
+    selected: false,
     fallbacks: [
       {
         venueId: "alt-venue",
@@ -116,6 +131,7 @@ test("plannerSupportLabel surfaces swap counts before the confidence note", () =
         scoreBand: "high",
         hopLabel: "16 min transit",
         fallbackReason: "Use this if the main late option slides too late.",
+        selected: true,
       },
       {
         venueId: "alt-venue-2",
@@ -128,6 +144,7 @@ test("plannerSupportLabel surfaces swap counts before the confidence note", () =
         scoreBand: "high",
         hopLabel: "18 min transit",
         fallbackReason: "Use this if you want a steadier close.",
+        selected: false,
       },
     ],
   };
@@ -136,4 +153,11 @@ test("plannerSupportLabel surfaces swap counts before the confidence note", () =
     plannerSupportLabel(stop),
     "2 swaps ready · Timing pushes late into the night.",
   );
+});
+
+test("planner action labels reflect active planner execution state", () => {
+  assert.equal(plannerStopActionLabel({ selected: true } as never), "Locked tonight");
+  assert.equal(plannerStopActionLabel({ selected: false } as never), "Lock this stop");
+  assert.equal(plannerFallbackActionLabel(true), "Swap active");
+  assert.equal(plannerFallbackActionLabel(false), "Use this swap");
 });

@@ -43,6 +43,8 @@ def build_tonight_planner(
     budget_level: str = "under_75",
     timezone: str = "America/New_York",
     now_utc: datetime | None = None,
+    selected_recommendation_id: str | None = None,
+    selected_action: str | None = None,
 ) -> TonightPlannerResponse:
     if not items:
         return TonightPlannerResponse(
@@ -222,12 +224,18 @@ def build_tonight_planner(
     else:
         planning_note = "Tonight looks thin in the live shortlist, so Pulse kept the plan light and surfaced backup options."
 
-    return TonightPlannerResponse(
+    planner = TonightPlannerResponse(
         status=status,
         summary=summary,
         planningNote=planning_note,
         stops=stops,
     )
+    _apply_execution_state(
+        planner,
+        selected_recommendation_id=selected_recommendation_id,
+        selected_action=selected_action,
+    )
+    return planner
 
 
 def _planner_timezone(timezone_name: str) -> ZoneInfo:
@@ -583,6 +591,40 @@ def _planner_summary(stops: list[TonightPlannerStop]) -> str:
     if trailing and trailing.role == "backup":
         return f"Center the night on {main_event.venueName} and keep {trailing.venueName} ready as the pivot."
     return f"{main_event.venueName} is the clearest anchor from the current shortlist tonight."
+
+
+def _apply_execution_state(
+    planner: TonightPlannerResponse,
+    *,
+    selected_recommendation_id: str | None,
+    selected_action: str | None,
+) -> None:
+    if not selected_recommendation_id:
+        return
+
+    selected_stop: TonightPlannerStop | None = None
+    selected_fallback: TonightPlannerFallbackOption | None = None
+
+    for stop in planner.stops:
+        if stop.eventId == selected_recommendation_id:
+            stop.selected = True
+            selected_stop = stop
+        for fallback in stop.fallbacks:
+            if fallback.eventId == selected_recommendation_id:
+                fallback.selected = True
+                selected_fallback = fallback
+
+    if selected_fallback is not None or selected_action == "planner_swap":
+        planner.executionStatus = "swapped"
+        if selected_fallback is not None:
+            planner.executionNote = f"{selected_fallback.venueName} is currently your active planner swap."
+        elif selected_stop is not None:
+            planner.executionNote = f"{selected_stop.venueName} is currently carrying the active swap."
+        return
+
+    if selected_stop is not None:
+        planner.executionStatus = "locked"
+        planner.executionNote = f"{selected_stop.venueName} is currently locked into tonight's plan."
 
 
 def _minutes_between(left: datetime, right: datetime) -> int:

@@ -6,6 +6,8 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 DIGEST_CLICK_FEEDBACK_ACTION = "digest_click"
 DIGEST_SECURITY_CLICK_FEEDBACK_ACTION = "digest_security_click"
+PLANNER_COMMIT_FEEDBACK_ACTION = "planner_commit"
+PLANNER_SWAP_FEEDBACK_ACTION = "planner_swap"
 
 
 class RecommendationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):

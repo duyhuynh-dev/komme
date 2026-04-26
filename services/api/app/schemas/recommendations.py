@@ -101,6 +101,7 @@ class TonightPlannerFallbackOption(BaseModel):
     scoreBand: str
     hopLabel: str | None = None
     fallbackReason: str
+    selected: bool = False
 
 
 class TonightPlannerStop(BaseModel):
@@ -119,6 +120,7 @@ class TonightPlannerStop(BaseModel):
     confidence: str = "medium"
     confidenceLabel: str
     confidenceReason: str
+    selected: bool = False
     fallbacks: list[TonightPlannerFallbackOption] = Field(default_factory=list)
 
 
@@ -127,6 +129,8 @@ class TonightPlannerResponse(BaseModel):
     title: str = "Tonight planner"
     summary: str | None = None
     planningNote: str | None = None
+    executionStatus: str = "idle"
+    executionNote: str | None = None
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
 

@@ -10,6 +10,8 @@ from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venu
 from app.models.profile import UserInterestProfile
 from app.models.recommendation import (
     DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    PLANNER_COMMIT_FEEDBACK_ACTION,
+    PLANNER_SWAP_FEEDBACK_ACTION,
     DigestDelivery,
     FeedbackEvent,
     RecommendationRun,
@@ -54,6 +56,7 @@ NYC_SERVICE_AREA = {
 }
 RECOMMENDATION_MAX_AGE = timedelta(minutes=30)
 FEEDBACK_LOOKBACK_WINDOW = timedelta(days=28)
+PLANNER_EXECUTION_LOOKBACK_WINDOW = timedelta(hours=36)
 OCCURRENCE_LOOKBACK_WINDOW = timedelta(hours=2)
 OCCURRENCE_LOOKAHEAD_WINDOW = timedelta(days=60)
 RECOMMENDATION_RUN_HISTORY_LIMIT = 3
@@ -208,6 +211,20 @@ async def _user_anchor_resolution(session: AsyncSession, user_id: str) -> Anchor
 
 async def _user_constraints(session: AsyncSession, user_id: str) -> UserConstraint | None:
     return await session.scalar(select(UserConstraint).where(UserConstraint.user_id == user_id).limit(1))
+
+
+async def _latest_planner_execution(session: AsyncSession, user_id: str) -> FeedbackEvent | None:
+    since = datetime.now(tz=UTC) - PLANNER_EXECUTION_LOOKBACK_WINDOW
+    return await session.scalar(
+        select(FeedbackEvent)
+        .where(
+            FeedbackEvent.user_id == user_id,
+            FeedbackEvent.created_at >= since,
+            FeedbackEvent.action.in_([PLANNER_COMMIT_FEEDBACK_ACTION, PLANNER_SWAP_FEEDBACK_ACTION]),
+        )
+        .order_by(desc(FeedbackEvent.created_at), desc(FeedbackEvent.id))
+        .limit(1)
+    )
 
 
 async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSignals:
@@ -2324,11 +2341,16 @@ async def get_map_recommendations(
     if not items:
         return _empty_response(display_timezone)
 
+    latest_planner_execution = await _latest_planner_execution(session, user.id)
     tonight_planner = build_tonight_planner(
         items,
         pins,
         budget_level=constraints.budget_level if constraints else "under_75",
         timezone=display_timezone,
+        selected_recommendation_id=(
+            latest_planner_execution.recommendation_id if latest_planner_execution is not None else None
+        ),
+        selected_action=latest_planner_execution.action if latest_planner_execution is not None else None,
     )
 
     return RecommendationsMapResponse(

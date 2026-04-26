@@ -117,6 +117,7 @@ export interface TonightPlannerFallbackOption {
   scoreBand: ScoreBand;
   hopLabel?: string | null;
   fallbackReason: string;
+  selected: boolean;
 }
 
 export interface TonightPlannerStop {
@@ -135,6 +136,7 @@ export interface TonightPlannerStop {
   confidence: "high" | "medium" | "watch";
   confidenceLabel: string;
   confidenceReason: string;
+  selected: boolean;
   fallbacks: TonightPlannerFallbackOption[];
 }
 
@@ -143,6 +145,8 @@ export interface TonightPlannerResponse {
   title: string;
   summary?: string | null;
   planningNote?: string | null;
+  executionStatus: "idle" | "locked" | "swapped";
+  executionNote?: string | null;
   stops: TonightPlannerStop[];
 }
 

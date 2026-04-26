@@ -1,12 +1,21 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.api.routes import recommendation_interactions
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
-from app.models.recommendation import RecommendationRun, VenueRecommendation
+from app.models.recommendation import (
+    PLANNER_COMMIT_FEEDBACK_ACTION,
+    PLANNER_SWAP_FEEDBACK_ACTION,
+    FeedbackEvent,
+    RecommendationRun,
+    VenueRecommendation,
+)
 from app.models.user import User, UserConstraint
+from app.schemas.recommendations import RecommendationInteractionsPayload
 from app.schemas.recommendations import (
     MapVenuePin,
     RecommendationFreshness,
@@ -112,7 +121,7 @@ def test_build_tonight_planner_sequences_pregame_main_and_late_option() -> None:
             venue_id="late-venue",
             venue_name="Mood Ring",
             neighborhood="Bushwick",
-            starts_at="2026-04-26T03:10:00+00:00",
+            starts_at="2026-04-26T03:55:00+00:00",
             score=0.75,
             score_band="high",
             price_label="$22",
@@ -227,6 +236,146 @@ def test_build_tonight_planner_adds_fallbacks_for_late_low_confidence_stop() -> 
     assert "late" in late_stop.fallbacks[0].fallbackReason.lower()
 
 
+def test_build_tonight_planner_marks_locked_stop_and_active_swap() -> None:
+    now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
+    items = [
+        _planner_card(
+            venue_id="pregame-venue",
+            venue_name="Night Cafe",
+            neighborhood="Lower East Side",
+            starts_at="2026-04-25T23:15:00+00:00",
+            score=0.78,
+            score_band="high",
+            price_label="$18",
+            source_confidence=0.84,
+            transit_minutes=12,
+        ),
+        _planner_card(
+            venue_id="main-venue",
+            venue_name="Elsewhere",
+            neighborhood="Bushwick",
+            starts_at="2026-04-26T01:00:00+00:00",
+            score=0.92,
+            score_band="high",
+            price_label="$35",
+            source_confidence=0.91,
+            transit_minutes=24,
+        ),
+        _planner_card(
+            venue_id="late-venue",
+            venue_name="Mood Ring",
+            neighborhood="Bushwick",
+            starts_at="2026-04-26T03:55:00+00:00",
+            score=0.75,
+            score_band="high",
+            price_label="$22",
+            source_confidence=0.83,
+            transit_minutes=26,
+        ),
+        _planner_card(
+            venue_id="backup-venue",
+            venue_name="Good Room",
+            neighborhood="Greenpoint",
+            starts_at="2026-04-26T01:20:00+00:00",
+            score=0.8,
+            score_band="high",
+            price_label="$28",
+            source_confidence=0.88,
+            transit_minutes=22,
+        ),
+    ]
+    pins = [
+        _planner_pin(venue_id="pregame-venue", venue_name="Night Cafe", latitude=40.7206, longitude=-73.9874),
+        _planner_pin(venue_id="main-venue", venue_name="Elsewhere", latitude=40.7082, longitude=-73.9232),
+        _planner_pin(venue_id="late-venue", venue_name="Mood Ring", latitude=40.7136, longitude=-73.9318),
+        _planner_pin(venue_id="backup-venue", venue_name="Good Room", latitude=40.7278, longitude=-73.9524),
+    ]
+    baseline_planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level="under_75",
+        timezone="America/New_York",
+        now_utc=now_utc,
+    )
+    swap_target = next(
+        fallback
+        for stop in baseline_planner.stops
+        for fallback in stop.fallbacks
+    )
+
+    locked_planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level="under_75",
+        timezone="America/New_York",
+        now_utc=now_utc,
+        selected_recommendation_id="main-venue-event",
+        selected_action=PLANNER_COMMIT_FEEDBACK_ACTION,
+    )
+    swapped_planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level="under_75",
+        timezone="America/New_York",
+        now_utc=now_utc,
+        selected_recommendation_id=swap_target.eventId,
+        selected_action=PLANNER_SWAP_FEEDBACK_ACTION,
+    )
+
+    locked_main_stop = next(stop for stop in locked_planner.stops if stop.role == "main_event")
+    swapped_backup = next(
+        fallback
+        for stop in swapped_planner.stops
+        for fallback in stop.fallbacks
+        if fallback.eventId == swap_target.eventId
+    )
+
+    assert locked_planner.executionStatus == "locked"
+    assert locked_main_stop.selected is True
+    assert "Elsewhere" in (locked_planner.executionNote or "")
+    assert swapped_planner.executionStatus == "swapped"
+    assert swapped_backup.selected is True
+    assert swap_target.venueName in (swapped_planner.executionNote or "")
+
+
+@pytest.mark.asyncio
+async def test_recommendation_interactions_accept_planner_actions() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-actions@example.com")
+        session.add(user)
+        await session.flush()
+
+        payload = RecommendationInteractionsPayload(
+            events=[
+                {"recommendationId": "rec-1", "action": PLANNER_COMMIT_FEEDBACK_ACTION},
+                {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
+                {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
+                {"recommendationId": "rec-3", "action": "unknown_action"},
+            ]
+        )
+
+        await recommendation_interactions(
+            payload=payload,
+            session=session,
+            user=user,
+        )
+        await session.commit()
+
+        feedback_rows = list((await session.scalars(select(FeedbackEvent))).all())
+
+        assert len(feedback_rows) == 2
+        assert {row.action for row in feedback_rows} == {
+            PLANNER_COMMIT_FEEDBACK_ACTION,
+            PLANNER_SWAP_FEEDBACK_ACTION,
+        }
+
+
 @pytest.mark.asyncio
 async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
@@ -308,6 +457,14 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
                 created_at=datetime.now(tz=UTC),
             )
         )
+        session.add(
+            FeedbackEvent(
+                user_id=user.id,
+                recommendation_id=occurrence.id,
+                action=PLANNER_COMMIT_FEEDBACK_ACTION,
+                created_at=datetime.now(tz=UTC),
+            )
+        )
         await session.commit()
 
         async def fake_refresh(*_args, **_kwargs) -> RecommendationRun:
@@ -322,15 +479,20 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
             budget_level: str,
             timezone: str,
             now_utc: datetime | None = None,
+            selected_recommendation_id: str | None = None,
+            selected_action: str | None = None,
         ) -> TonightPlannerResponse:
             captured["item_count"] = len(items)
             captured["pin_count"] = len(pins)
             captured["budget_level"] = budget_level
             captured["timezone"] = timezone
             captured["now_utc"] = now_utc
+            captured["selected_recommendation_id"] = selected_recommendation_id
+            captured["selected_action"] = selected_action
             return TonightPlannerResponse(
                 status="ready",
                 summary="Test planner",
+                executionStatus="idle",
                 stops=[
                     TonightPlannerStop(
                         role="main_event",
@@ -348,6 +510,7 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
                         confidence="high",
                         confidenceLabel="Confident anchor",
                         confidenceReason="Test confidence",
+                        selected=False,
                         fallbacks=[],
                     )
                 ],
@@ -363,5 +526,7 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
         assert captured["pin_count"] == 1
         assert captured["budget_level"] == "under_30"
         assert captured["timezone"] == "America/New_York"
+        assert captured["selected_recommendation_id"] == occurrence.id
+        assert captured["selected_action"] == PLANNER_COMMIT_FEEDBACK_ACTION
 
     await engine.dispose()

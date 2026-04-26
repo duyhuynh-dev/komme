@@ -6,6 +6,8 @@ export interface TonightPlannerPanelState {
   headline: string;
   summary: string;
   planningNote: string | null;
+  executionStatus: TonightPlannerResponse["executionStatus"];
+  executionNote: string | null;
   stopCountLabel: string | null;
   fallbackCount: number;
   stops: TonightPlannerStop[];
@@ -23,6 +25,8 @@ export function buildTonightPlannerPanelState(
         planner?.summary ??
         "Pulse will sketch a 2-3 stop route once tonight has enough viable options in the current shortlist.",
       planningNote: planner?.planningNote ?? null,
+      executionStatus: planner?.executionStatus ?? "idle",
+      executionNote: planner?.executionNote ?? null,
       stopCountLabel: null,
       fallbackCount: 0,
       stops: [],
@@ -40,6 +44,8 @@ export function buildTonightPlannerPanelState(
       planner.summary ??
       "Pulse turned the current shortlist into a lightweight plan for tonight.",
     planningNote: planner.planningNote ?? null,
+    executionStatus: planner.executionStatus,
+    executionNote: planner.executionNote ?? null,
     stopCountLabel,
     fallbackCount,
     stops: planner.stops,
@@ -53,4 +59,12 @@ export function plannerSupportLabel(stop: TonightPlannerStop): string {
 
   const swapLabel = stop.fallbacks.length === 1 ? "1 swap ready" : `${stop.fallbacks.length} swaps ready`;
   return `${swapLabel} · ${stop.confidenceReason}`;
+}
+
+export function plannerStopActionLabel(stop: TonightPlannerStop): string {
+  return stop.selected ? "Locked tonight" : "Lock this stop";
+}
+
+export function plannerFallbackActionLabel(selected: boolean): string {
+  return selected ? "Swap active" : "Use this swap";
 }

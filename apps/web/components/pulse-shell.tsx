@@ -104,6 +104,27 @@ export function PulseShell() {
     },
   });
 
+  const plannerActionMutation = useMutation({
+    mutationFn: ({
+      recommendationId,
+      action,
+    }: {
+      recommendationId: string;
+      action: "planner_commit" | "planner_swap";
+    }) => submitRecommendationInteractions([{ recommendationId, action }]),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
+      setSurfaceStatus(
+        variables.action === "planner_commit"
+          ? "Tonight planner locked your chosen stop."
+          : "Tonight planner switched to your selected backup."
+      );
+    },
+    onError: (error) => {
+      setSurfaceStatus(error instanceof Error ? error.message : "Unable to update the tonight planner right now.");
+    },
+  });
+
   const refreshMutation = useMutation({
     mutationFn: refreshRecommendations,
     onMutate: () => {
@@ -207,7 +228,10 @@ export function PulseShell() {
     });
   };
   const recordInteractions = (
-    events: Array<{ recommendationId: string; action: "exposed" | "opened" | "ticket_click" | "archive_revisit" }>,
+    events: Array<{
+      recommendationId: string;
+      action: "exposed" | "opened" | "ticket_click" | "archive_revisit" | "planner_commit" | "planner_swap";
+    }>,
   ) => {
     if (!events.length) {
       return;
@@ -369,6 +393,21 @@ export function PulseShell() {
               timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
               selectedVenueId={selectedVenueId}
               onSelectVenue={setSelectedVenueId}
+              actionPending={plannerActionMutation.isPending}
+              onCommitStop={(stop) => {
+                setSelectedVenueId(stop.venueId);
+                plannerActionMutation.mutate({
+                  recommendationId: stop.eventId,
+                  action: "planner_commit",
+                });
+              }}
+              onSwapFallback={(option) => {
+                setSelectedVenueId(option.venueId);
+                plannerActionMutation.mutate({
+                  recommendationId: option.eventId,
+                  action: "planner_swap",
+                });
+              }}
             />
 
             <RecommendationDrawer
