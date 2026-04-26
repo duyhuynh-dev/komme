@@ -108,16 +108,19 @@ export function PulseShell() {
     mutationFn: ({
       recommendationId,
       action,
+      successMessage,
     }: {
       recommendationId: string;
       action: "planner_commit" | "planner_swap";
-    }) => submitRecommendationInteractions([{ recommendationId, action }]),
-    onSuccess: async (_, variables) => {
+      successMessage?: string;
+    }) => submitRecommendationInteractions([{ recommendationId, action }]).then(() => ({ action, successMessage })),
+    onSuccess: async ({ action, successMessage }) => {
       await queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       setSurfaceStatus(
-        variables.action === "planner_commit"
-          ? "Tonight planner locked your chosen stop."
-          : "Tonight planner switched to your selected backup."
+        successMessage ??
+          (action === "planner_commit"
+            ? "Tonight planner locked your chosen stop."
+            : "Tonight planner switched to your selected backup.")
       );
     },
     onError: (error) => {
@@ -442,6 +445,14 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
+                });
+              }}
+              onApplyReroute={(option) => {
+                setSelectedVenueId(option.venueId);
+                plannerActionMutation.mutate({
+                  recommendationId: option.eventId,
+                  action: "planner_swap",
+                  successMessage: `Pulse rerouted tonight toward ${option.venueName}.`,
                 });
               }}
               onMarkOutcome={(action) => {

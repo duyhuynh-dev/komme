@@ -4,11 +4,17 @@ import { CircleCheck, Clock3, Route, Sparkles } from "lucide-react";
 import {
   buildTonightPlannerPanelState,
   plannerFallbackActionLabel,
+  plannerRerouteButtonLabel,
   plannerOutcomePrompt,
   plannerStopActionLabel,
   plannerSupportLabel,
 } from "@/lib/tonight-planner";
-import type { TonightPlannerFallbackOption, TonightPlannerResponse, TonightPlannerStop } from "@/lib/types";
+import type {
+  TonightPlannerFallbackOption,
+  TonightPlannerResponse,
+  TonightPlannerRerouteOption,
+  TonightPlannerStop,
+} from "@/lib/types";
 import { formatEventStart } from "@/lib/utils";
 
 function roleTone(role: TonightPlannerStop["role"]) {
@@ -49,6 +55,7 @@ export function TonightPlannerPanel({
   actionPending,
   outcomePending,
   onMarkOutcome,
+  onApplyReroute,
 }: {
   loading: boolean;
   planner: TonightPlannerResponse | null | undefined;
@@ -60,6 +67,7 @@ export function TonightPlannerPanel({
   actionPending: boolean;
   outcomePending: boolean;
   onMarkOutcome: (action: "planner_attended" | "planner_skipped") => void;
+  onApplyReroute: (option: TonightPlannerRerouteOption) => void;
 }) {
   const panelState = buildTonightPlannerPanelState(planner);
   const outcomePrompt = plannerOutcomePrompt(
@@ -138,6 +146,59 @@ export function TonightPlannerPanel({
                 </button>
               </div>
             </div>
+          </div>
+        ) : null}
+        {panelState.outcomeStatus === "skipped" ? (
+          <div className="mt-3 rounded-[1.5rem] border border-amber-200 bg-amber-50/80 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-800">Live reroute</p>
+                <p className="mt-1 text-sm leading-6 text-amber-900">
+                  {panelState.rerouteNote ??
+                    "Pulse is checking the current shortlist for the cleanest next move tonight."}
+                </p>
+              </div>
+              {panelState.rerouteOption ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!panelState.rerouteOption) {
+                      return;
+                    }
+                    onApplyReroute(panelState.rerouteOption);
+                  }}
+                  disabled={actionPending}
+                  className="rounded-full bg-amber-500 px-3 py-2 text-xs font-medium text-white transition disabled:opacity-60"
+                >
+                  {plannerRerouteButtonLabel(panelState.rerouteOption)}
+                </button>
+              ) : null}
+            </div>
+            {panelState.rerouteOption ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-white/85 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-900">{panelState.rerouteOption.venueName}</span>
+                  <span className="rounded-full border border-stroke/80 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                    {panelState.rerouteOption.roleLabel ?? panelState.rerouteOption.sourceKind.replace("_", " ")}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{panelState.rerouteOption.eventTitle}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                  <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                    {formatEventStart(panelState.rerouteOption.startsAt, timezone)}
+                  </span>
+                  <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                    {panelState.rerouteOption.priceLabel}
+                  </span>
+                  {panelState.rerouteOption.hopLabel ? (
+                    <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                      {panelState.rerouteOption.hopLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-amber-900">{panelState.rerouteOption.rerouteReason}</p>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

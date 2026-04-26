@@ -341,6 +341,7 @@ def test_build_tonight_planner_marks_execution_and_outcome_state() -> None:
     assert locked_planner.activeTargetEventId == "main-venue-event"
     assert locked_planner.activeTargetVenueName == "Elsewhere"
     assert locked_planner.outcomeStatus == "attended"
+    assert locked_planner.rerouteStatus == "idle"
     assert "Elsewhere" in (locked_planner.executionNote or "")
     assert "Elsewhere" in (locked_planner.outcomeNote or "")
     assert swapped_planner.executionStatus == "swapped"
@@ -348,8 +349,84 @@ def test_build_tonight_planner_marks_execution_and_outcome_state() -> None:
     assert swapped_planner.activeTargetEventId == swap_target.eventId
     assert swapped_planner.activeTargetVenueName == swap_target.venueName
     assert swapped_planner.outcomeStatus == "skipped"
+    assert swapped_planner.rerouteStatus == "unavailable"
     assert swap_target.venueName in (swapped_planner.executionNote or "")
     assert swap_target.venueName in (swapped_planner.outcomeNote or "")
+
+
+def test_build_tonight_planner_suggests_reroute_after_skipped_stop() -> None:
+    now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
+    items = [
+        _planner_card(
+            venue_id="pregame-venue",
+            venue_name="Night Cafe",
+            neighborhood="Lower East Side",
+            starts_at="2026-04-25T23:15:00+00:00",
+            score=0.78,
+            score_band="high",
+            price_label="$18",
+            source_confidence=0.84,
+            transit_minutes=12,
+        ),
+        _planner_card(
+            venue_id="main-venue",
+            venue_name="Elsewhere",
+            neighborhood="Bushwick",
+            starts_at="2026-04-26T01:00:00+00:00",
+            score=0.92,
+            score_band="high",
+            price_label="$35",
+            source_confidence=0.91,
+            transit_minutes=24,
+        ),
+        _planner_card(
+            venue_id="late-venue",
+            venue_name="Mood Ring",
+            neighborhood="Bushwick",
+            starts_at="2026-04-26T03:55:00+00:00",
+            score=0.75,
+            score_band="high",
+            price_label="$22",
+            source_confidence=0.83,
+            transit_minutes=26,
+        ),
+        _planner_card(
+            venue_id="backup-venue",
+            venue_name="Good Room",
+            neighborhood="Greenpoint",
+            starts_at="2026-04-26T01:20:00+00:00",
+            score=0.8,
+            score_band="high",
+            price_label="$28",
+            source_confidence=0.88,
+            transit_minutes=22,
+        ),
+    ]
+    pins = [
+        _planner_pin(venue_id="pregame-venue", venue_name="Night Cafe", latitude=40.7206, longitude=-73.9874),
+        _planner_pin(venue_id="main-venue", venue_name="Elsewhere", latitude=40.7082, longitude=-73.9232),
+        _planner_pin(venue_id="late-venue", venue_name="Mood Ring", latitude=40.7136, longitude=-73.9318),
+        _planner_pin(venue_id="backup-venue", venue_name="Good Room", latitude=40.7278, longitude=-73.9524),
+    ]
+
+    planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level="under_75",
+        timezone="America/New_York",
+        now_utc=now_utc,
+        selected_recommendation_id="main-venue-event",
+        selected_action=PLANNER_COMMIT_FEEDBACK_ACTION,
+        outcome_recommendation_id="main-venue-event",
+        outcome_action=PLANNER_SKIPPED_FEEDBACK_ACTION,
+    )
+
+    assert planner.outcomeStatus == "skipped"
+    assert planner.rerouteStatus == "available"
+    assert planner.rerouteOption is not None
+    assert planner.rerouteOption.venueName == "Mood Ring"
+    assert planner.rerouteOption.sourceKind == "next_stop"
+    assert "jump ahead" in (planner.rerouteNote or "").lower()
 
 
 @pytest.mark.asyncio
@@ -527,6 +604,9 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
                 activeTargetVenueName=venue.name,
                 outcomeStatus="attended",
                 outcomeNote=f"{venue.name} is confirmed as part of tonight's plan.",
+                rerouteStatus="idle",
+                rerouteNote=None,
+                rerouteOption=None,
                 stops=[
                     TonightPlannerStop(
                         role="main_event",

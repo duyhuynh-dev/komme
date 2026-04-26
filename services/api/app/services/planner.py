@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.schemas.recommendations import (
     MapVenuePin,
     TonightPlannerFallbackOption,
+    TonightPlannerRerouteOption,
     TonightPlannerResponse,
     TonightPlannerStop,
     VenueRecommendationCard,
@@ -242,6 +243,7 @@ def build_tonight_planner(
         outcome_recommendation_id=outcome_recommendation_id,
         outcome_action=outcome_action,
     )
+    _apply_reroute_state(planner)
     return planner
 
 
@@ -633,7 +635,7 @@ def _apply_execution_state(
         if selected_fallback is not None:
             planner.executionNote = f"{selected_fallback.venueName} is currently your active planner swap."
         elif selected_stop is not None:
-            planner.executionNote = f"{selected_stop.venueName} is currently carrying the active swap."
+            planner.executionNote = f"Pulse rerouted tonight toward {selected_stop.venueName}."
         return
 
     if selected_stop is not None:
@@ -660,6 +662,143 @@ def _apply_outcome_state(
     elif outcome_action == "planner_skipped":
         planner.outcomeStatus = "skipped"
         planner.outcomeNote = f"{planner.activeTargetVenueName} was marked as passed tonight."
+
+
+def _apply_reroute_state(planner: TonightPlannerResponse) -> None:
+    if planner.outcomeStatus != "skipped" or not planner.activeTargetEventId:
+        return
+
+    reroute_option = _find_reroute_option(planner, skipped_event_id=planner.activeTargetEventId)
+    if reroute_option is None:
+        planner.rerouteStatus = "unavailable"
+        planner.rerouteNote = "Pulse could not find a clean replacement from the current shortlist right now."
+        return
+
+    planner.rerouteStatus = "available"
+    planner.rerouteOption = reroute_option
+    if reroute_option.sourceKind == "fallback":
+        planner.rerouteNote = f"Pulse would pivot to {reroute_option.venueName} next to keep the night moving."
+    else:
+        planner.rerouteNote = f"Pulse would jump ahead to {reroute_option.venueName} and keep the rest of tonight on track."
+
+
+def _find_reroute_option(
+    planner: TonightPlannerResponse,
+    *,
+    skipped_event_id: str,
+) -> TonightPlannerRerouteOption | None:
+    for index, stop in enumerate(planner.stops):
+        if stop.eventId == skipped_event_id:
+            reroute = _reroute_from_stop_skip(planner.stops, stop_index=index)
+            if reroute is not None:
+                return reroute
+            break
+
+        if any(fallback.eventId == skipped_event_id for fallback in stop.fallbacks):
+            reroute = _reroute_from_fallback_skip(planner.stops, stop_index=index, skipped_event_id=skipped_event_id)
+            if reroute is not None:
+                return reroute
+            break
+
+    return None
+
+
+def _reroute_from_stop_skip(
+    stops: list[TonightPlannerStop],
+    *,
+    stop_index: int,
+) -> TonightPlannerRerouteOption | None:
+    skipped_stop = stops[stop_index]
+    for fallback in skipped_stop.fallbacks:
+        if not fallback.selected:
+            return _reroute_from_fallback_option(
+                fallback,
+                reason=f"Fallback keeps the plan moving after {skipped_stop.venueName} was passed.",
+            )
+
+    next_stop = _next_reroute_stop(stops, start_index=stop_index + 1, skipped_event_id=skipped_stop.eventId)
+    if next_stop is not None:
+        return _reroute_from_stop(
+            next_stop,
+            reason=f"Jump ahead after {skipped_stop.venueName} dropped out of tonight's route.",
+        )
+    return None
+
+
+def _reroute_from_fallback_skip(
+    stops: list[TonightPlannerStop],
+    *,
+    stop_index: int,
+    skipped_event_id: str,
+) -> TonightPlannerRerouteOption | None:
+    parent_stop = stops[stop_index]
+    for fallback in parent_stop.fallbacks:
+        if fallback.eventId != skipped_event_id and not fallback.selected:
+            return _reroute_from_fallback_option(
+                fallback,
+                reason=f"Pulse found another swap path after {parent_stop.venueName} missed this pivot.",
+            )
+
+    next_stop = _next_reroute_stop(stops, start_index=stop_index + 1, skipped_event_id=skipped_event_id)
+    if next_stop is not None:
+        return _reroute_from_stop(
+            next_stop,
+            reason=f"Jump ahead after the current swap fell through near {parent_stop.venueName}.",
+        )
+    return None
+
+
+def _next_reroute_stop(
+    stops: list[TonightPlannerStop],
+    *,
+    start_index: int,
+    skipped_event_id: str,
+) -> TonightPlannerStop | None:
+    for stop in stops[start_index:]:
+        if stop.eventId != skipped_event_id:
+            return stop
+    return None
+
+
+def _reroute_from_stop(
+    stop: TonightPlannerStop,
+    *,
+    reason: str,
+) -> TonightPlannerRerouteOption:
+    return TonightPlannerRerouteOption(
+        venueId=stop.venueId,
+        venueName=stop.venueName,
+        eventId=stop.eventId,
+        eventTitle=stop.eventTitle,
+        neighborhood=stop.neighborhood,
+        startsAt=stop.startsAt,
+        priceLabel=stop.priceLabel,
+        scoreBand=stop.scoreBand,
+        hopLabel=stop.hopLabel,
+        roleLabel=stop.roleLabel,
+        sourceKind="next_stop",
+        rerouteReason=reason,
+    )
+
+
+def _reroute_from_fallback_option(
+    fallback: TonightPlannerFallbackOption,
+    *,
+    reason: str,
+) -> TonightPlannerRerouteOption:
+    return TonightPlannerRerouteOption(
+        venueId=fallback.venueId,
+        venueName=fallback.venueName,
+        eventId=fallback.eventId,
+        eventTitle=fallback.eventTitle,
+        neighborhood=fallback.neighborhood,
+        startsAt=fallback.startsAt,
+        priceLabel=fallback.priceLabel,
+        scoreBand=fallback.scoreBand,
+        hopLabel=fallback.hopLabel,
+        sourceKind="fallback",
+        rerouteReason=reason,
+    )
 
 
 def _minutes_between(left: datetime, right: datetime) -> int:

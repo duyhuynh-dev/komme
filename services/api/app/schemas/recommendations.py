@@ -104,6 +104,21 @@ class TonightPlannerFallbackOption(BaseModel):
     selected: bool = False
 
 
+class TonightPlannerRerouteOption(BaseModel):
+    venueId: str
+    venueName: str
+    eventId: str
+    eventTitle: str
+    neighborhood: str
+    startsAt: str
+    priceLabel: str
+    scoreBand: str
+    hopLabel: str | None = None
+    roleLabel: str | None = None
+    sourceKind: str = "next_stop"
+    rerouteReason: str
+
+
 class TonightPlannerStop(BaseModel):
     role: str
     roleLabel: str
@@ -135,6 +150,9 @@ class TonightPlannerResponse(BaseModel):
     activeTargetVenueName: str | None = None
     outcomeStatus: str = "idle"
     outcomeNote: str | None = None
+    rerouteStatus: str = "idle"
+    rerouteNote: str | None = None
+    rerouteOption: TonightPlannerRerouteOption | None = None
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
 

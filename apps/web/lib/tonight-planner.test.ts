@@ -5,6 +5,7 @@ import {
   buildTonightPlannerPanelState,
   plannerFallbackActionLabel,
   plannerOutcomePrompt,
+  plannerRerouteButtonLabel,
   plannerStopActionLabel,
   plannerSupportLabel,
 } from "./tonight-planner.ts";
@@ -22,6 +23,9 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
     activeTargetVenueName: "Elsewhere",
     outcomeStatus: "pending",
     outcomeNote: null,
+    rerouteStatus: "idle",
+    rerouteNote: null,
+    rerouteOption: null,
     stops: [
       {
         role: "pregame",
@@ -89,6 +93,8 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
   assert.equal(state.activeTargetVenueName, "Elsewhere");
   assert.equal(state.outcomeStatus, "pending");
   assert.equal(state.outcomeNote, null);
+  assert.equal(state.rerouteStatus, "idle");
+  assert.equal(state.rerouteOption, null);
   assert.equal(state.stops[1].venueName, "Elsewhere");
 });
 
@@ -104,6 +110,9 @@ test("buildTonightPlannerPanelState returns the empty planner copy when no viabl
     activeTargetVenueName: null,
     outcomeStatus: "idle",
     outcomeNote: null,
+    rerouteStatus: "idle",
+    rerouteNote: null,
+    rerouteOption: null,
     stops: [],
   };
 
@@ -185,4 +194,10 @@ test("plannerOutcomePrompt guides pending and completed planner outcomes", () =>
     "Elsewhere is confirmed as part of tonight's plan.",
   );
   assert.equal(plannerOutcomePrompt(null, "idle", null), null);
+});
+
+test("plannerRerouteButtonLabel reflects the reroute source", () => {
+  assert.equal(plannerRerouteButtonLabel(null), "Switch now");
+  assert.equal(plannerRerouteButtonLabel({ sourceKind: "fallback" } as never), "Use this pivot");
+  assert.equal(plannerRerouteButtonLabel({ sourceKind: "next_stop" } as never), "Jump ahead");
 });

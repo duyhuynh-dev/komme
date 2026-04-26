@@ -1,4 +1,4 @@
-import type { TonightPlannerResponse, TonightPlannerStop } from "./types";
+import type { TonightPlannerRerouteOption, TonightPlannerResponse, TonightPlannerStop } from "./types";
 
 export interface TonightPlannerPanelState {
   mode: "empty" | "plan";
@@ -12,6 +12,9 @@ export interface TonightPlannerPanelState {
   activeTargetVenueName: string | null;
   outcomeStatus: TonightPlannerResponse["outcomeStatus"];
   outcomeNote: string | null;
+  rerouteStatus: TonightPlannerResponse["rerouteStatus"];
+  rerouteNote: string | null;
+  rerouteOption: TonightPlannerRerouteOption | null;
   stopCountLabel: string | null;
   fallbackCount: number;
   stops: TonightPlannerStop[];
@@ -35,6 +38,9 @@ export function buildTonightPlannerPanelState(
       activeTargetVenueName: planner?.activeTargetVenueName ?? null,
       outcomeStatus: planner?.outcomeStatus ?? "idle",
       outcomeNote: planner?.outcomeNote ?? null,
+      rerouteStatus: planner?.rerouteStatus ?? "idle",
+      rerouteNote: planner?.rerouteNote ?? null,
+      rerouteOption: planner?.rerouteOption ?? null,
       stopCountLabel: null,
       fallbackCount: 0,
       stops: [],
@@ -58,6 +64,9 @@ export function buildTonightPlannerPanelState(
     activeTargetVenueName: planner.activeTargetVenueName ?? null,
     outcomeStatus: planner.outcomeStatus,
     outcomeNote: planner.outcomeNote ?? null,
+    rerouteStatus: planner.rerouteStatus,
+    rerouteNote: planner.rerouteNote ?? null,
+    rerouteOption: planner.rerouteOption ?? null,
     stopCountLabel,
     fallbackCount,
     stops: planner.stops,
@@ -93,4 +102,11 @@ export function plannerOutcomePrompt(
     return outcomeNote;
   }
   return `Let Pulse know whether ${activeTargetVenueName} actually made tonight's plan.`;
+}
+
+export function plannerRerouteButtonLabel(option: TonightPlannerRerouteOption | null): string {
+  if (!option) {
+    return "Switch now";
+  }
+  return option.sourceKind === "fallback" ? "Use this pivot" : "Jump ahead";
 }

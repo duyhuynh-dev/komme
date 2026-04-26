@@ -120,6 +120,21 @@ export interface TonightPlannerFallbackOption {
   selected: boolean;
 }
 
+export interface TonightPlannerRerouteOption {
+  venueId: string;
+  venueName: string;
+  eventId: string;
+  eventTitle: string;
+  neighborhood: string;
+  startsAt: string;
+  priceLabel: string;
+  scoreBand: ScoreBand;
+  hopLabel?: string | null;
+  roleLabel?: string | null;
+  sourceKind: "fallback" | "next_stop";
+  rerouteReason: string;
+}
+
 export interface TonightPlannerStop {
   role: "pregame" | "main_event" | "late_option" | "backup";
   roleLabel: string;
@@ -151,6 +166,9 @@ export interface TonightPlannerResponse {
   activeTargetVenueName?: string | null;
   outcomeStatus: "idle" | "pending" | "attended" | "skipped";
   outcomeNote?: string | null;
+  rerouteStatus: "idle" | "available" | "unavailable";
+  rerouteNote?: string | null;
+  rerouteOption?: TonightPlannerRerouteOption | null;
   stops: TonightPlannerStop[];
 }
 
