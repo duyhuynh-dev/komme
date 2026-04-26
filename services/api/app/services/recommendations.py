@@ -36,6 +36,7 @@ from app.schemas.recommendations import (
     TravelEstimate,
     VenueRecommendationCard,
 )
+from app.services.planner import build_tonight_planner
 from app.services.travel import estimate_travel_bands
 
 DEFAULT_VIEWPORT = {
@@ -2323,6 +2324,13 @@ async def get_map_recommendations(
     if not items:
         return _empty_response(display_timezone)
 
+    tonight_planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level=constraints.budget_level if constraints else "under_75",
+        timezone=display_timezone,
+    )
+
     return RecommendationsMapResponse(
         viewport=run.viewport_json,
         pins=pins,
@@ -2339,6 +2347,7 @@ async def get_map_recommendations(
             "socialMode": constraints.social_mode if constraints else "either",
         },
         mapContext=_build_map_context(anchor_resolution),
+        tonightPlanner=tonight_planner,
     )
 
 

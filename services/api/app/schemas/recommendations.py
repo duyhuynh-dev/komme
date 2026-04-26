@@ -90,6 +90,46 @@ class MapContext(BaseModel):
     fallbackReason: str | None = None
 
 
+class TonightPlannerFallbackOption(BaseModel):
+    venueId: str
+    venueName: str
+    eventId: str
+    eventTitle: str
+    neighborhood: str
+    startsAt: str
+    priceLabel: str
+    scoreBand: str
+    hopLabel: str | None = None
+    fallbackReason: str
+
+
+class TonightPlannerStop(BaseModel):
+    role: str
+    roleLabel: str
+    venueId: str
+    venueName: str
+    eventId: str
+    eventTitle: str
+    neighborhood: str
+    startsAt: str
+    priceLabel: str
+    scoreBand: str
+    hopLabel: str | None = None
+    roleReason: str
+    confidence: str = "medium"
+    confidenceLabel: str
+    confidenceReason: str
+    fallbacks: list[TonightPlannerFallbackOption] = Field(default_factory=list)
+
+
+class TonightPlannerResponse(BaseModel):
+    status: str = "empty"
+    title: str = "Tonight planner"
+    summary: str | None = None
+    planningNote: str | None = None
+    stops: list[TonightPlannerStop] = Field(default_factory=list)
+
+
 class RecommendationsMapResponse(BaseModel):
     viewport: MapViewport
     pins: list[MapVenuePin]
@@ -98,6 +138,7 @@ class RecommendationsMapResponse(BaseModel):
     displayTimezone: str = "America/New_York"
     userConstraint: dict
     mapContext: MapContext = Field(default_factory=MapContext)
+    tonightPlanner: TonightPlannerResponse = Field(default_factory=TonightPlannerResponse)
 
 
 class RecommendationDriverSummary(BaseModel):

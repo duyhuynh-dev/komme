@@ -6,6 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:planner": "node --test --experimental-strip-types --experimental-default-type=module lib/tonight-planner.test.ts",
     "test": "echo \"No web tests configured yet\""
   },
   "dependencies": {

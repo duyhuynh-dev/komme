@@ -106,6 +106,46 @@ export interface MapContext {
   fallbackReason?: string | null;
 }
 
+export interface TonightPlannerFallbackOption {
+  venueId: string;
+  venueName: string;
+  eventId: string;
+  eventTitle: string;
+  neighborhood: string;
+  startsAt: string;
+  priceLabel: string;
+  scoreBand: ScoreBand;
+  hopLabel?: string | null;
+  fallbackReason: string;
+}
+
+export interface TonightPlannerStop {
+  role: "pregame" | "main_event" | "late_option" | "backup";
+  roleLabel: string;
+  venueId: string;
+  venueName: string;
+  eventId: string;
+  eventTitle: string;
+  neighborhood: string;
+  startsAt: string;
+  priceLabel: string;
+  scoreBand: ScoreBand;
+  hopLabel?: string | null;
+  roleReason: string;
+  confidence: "high" | "medium" | "watch";
+  confidenceLabel: string;
+  confidenceReason: string;
+  fallbacks: TonightPlannerFallbackOption[];
+}
+
+export interface TonightPlannerResponse {
+  status: "ready" | "limited" | "empty";
+  title: string;
+  summary?: string | null;
+  planningNote?: string | null;
+  stops: TonightPlannerStop[];
+}
+
 export interface FeedbackReason {
   key: string;
   label: string;
@@ -167,6 +207,7 @@ export interface RecommendationsMapResponse {
   displayTimezone: string;
   userConstraint: UserConstraint;
   mapContext: MapContext;
+  tonightPlanner: TonightPlannerResponse;
 }
 
 export interface RecommendationDriverSummary {

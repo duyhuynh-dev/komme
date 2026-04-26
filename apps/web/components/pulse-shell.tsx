@@ -25,6 +25,7 @@ import { RailModal } from "@/components/rail-modal";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
 import { SettingsDock } from "@/components/settings-dock";
+import { TonightPlannerPanel } from "@/components/tonight-planner-panel";
 import { formatDigestTime } from "@/lib/utils";
 
 export function PulseShell() {
@@ -345,7 +346,7 @@ export function PulseShell() {
             </div>
           </div>
 
-          <div className="grid min-h-0 gap-4 xl:grid-rows-[minmax(0,0.92fr)_minmax(22rem,1.08fr)]">
+          <div className="grid min-h-0 gap-4 xl:grid-rows-[auto_auto_minmax(22rem,1fr)]">
             <InterestProfilePanel
               topics={interestsQuery.data?.topics ?? []}
               isLoading={interestsQuery.isLoading}
@@ -360,6 +361,14 @@ export function PulseShell() {
                 }
                 applyTopicAction(topic, action);
               }}
+            />
+
+            <TonightPlannerPanel
+              loading={mapQuery.isLoading}
+              planner={mapQuery.data?.tonightPlanner}
+              timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
+              selectedVenueId={selectedVenueId}
+              onSelectVenue={setSelectedVenueId}
             />
 
             <RecommendationDrawer
