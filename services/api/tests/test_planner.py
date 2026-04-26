@@ -8,7 +8,9 @@ from app.api.routes import recommendation_interactions
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.recommendation import (
+    PLANNER_ATTENDED_FEEDBACK_ACTION,
     PLANNER_COMMIT_FEEDBACK_ACTION,
+    PLANNER_SKIPPED_FEEDBACK_ACTION,
     PLANNER_SWAP_FEEDBACK_ACTION,
     FeedbackEvent,
     RecommendationRun,
@@ -236,7 +238,7 @@ def test_build_tonight_planner_adds_fallbacks_for_late_low_confidence_stop() -> 
     assert "late" in late_stop.fallbacks[0].fallbackReason.lower()
 
 
-def test_build_tonight_planner_marks_locked_stop_and_active_swap() -> None:
+def test_build_tonight_planner_marks_execution_and_outcome_state() -> None:
     now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
     items = [
         _planner_card(
@@ -311,6 +313,8 @@ def test_build_tonight_planner_marks_locked_stop_and_active_swap() -> None:
         now_utc=now_utc,
         selected_recommendation_id="main-venue-event",
         selected_action=PLANNER_COMMIT_FEEDBACK_ACTION,
+        outcome_recommendation_id="main-venue-event",
+        outcome_action=PLANNER_ATTENDED_FEEDBACK_ACTION,
     )
     swapped_planner = build_tonight_planner(
         items,
@@ -320,6 +324,8 @@ def test_build_tonight_planner_marks_locked_stop_and_active_swap() -> None:
         now_utc=now_utc,
         selected_recommendation_id=swap_target.eventId,
         selected_action=PLANNER_SWAP_FEEDBACK_ACTION,
+        outcome_recommendation_id=swap_target.eventId,
+        outcome_action=PLANNER_SKIPPED_FEEDBACK_ACTION,
     )
 
     locked_main_stop = next(stop for stop in locked_planner.stops if stop.role == "main_event")
@@ -332,10 +338,18 @@ def test_build_tonight_planner_marks_locked_stop_and_active_swap() -> None:
 
     assert locked_planner.executionStatus == "locked"
     assert locked_main_stop.selected is True
+    assert locked_planner.activeTargetEventId == "main-venue-event"
+    assert locked_planner.activeTargetVenueName == "Elsewhere"
+    assert locked_planner.outcomeStatus == "attended"
     assert "Elsewhere" in (locked_planner.executionNote or "")
+    assert "Elsewhere" in (locked_planner.outcomeNote or "")
     assert swapped_planner.executionStatus == "swapped"
     assert swapped_backup.selected is True
+    assert swapped_planner.activeTargetEventId == swap_target.eventId
+    assert swapped_planner.activeTargetVenueName == swap_target.venueName
+    assert swapped_planner.outcomeStatus == "skipped"
     assert swap_target.venueName in (swapped_planner.executionNote or "")
+    assert swap_target.venueName in (swapped_planner.outcomeNote or "")
 
 
 @pytest.mark.asyncio
@@ -356,6 +370,8 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
                 {"recommendationId": "rec-1", "action": PLANNER_COMMIT_FEEDBACK_ACTION},
                 {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
                 {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
+                {"recommendationId": "rec-2", "action": PLANNER_ATTENDED_FEEDBACK_ACTION},
+                {"recommendationId": "rec-3", "action": PLANNER_SKIPPED_FEEDBACK_ACTION},
                 {"recommendationId": "rec-3", "action": "unknown_action"},
             ]
         )
@@ -369,9 +385,11 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
 
         feedback_rows = list((await session.scalars(select(FeedbackEvent))).all())
 
-        assert len(feedback_rows) == 2
+        assert len(feedback_rows) == 4
         assert {row.action for row in feedback_rows} == {
+            PLANNER_ATTENDED_FEEDBACK_ACTION,
             PLANNER_COMMIT_FEEDBACK_ACTION,
+            PLANNER_SKIPPED_FEEDBACK_ACTION,
             PLANNER_SWAP_FEEDBACK_ACTION,
         }
 
@@ -465,6 +483,14 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
                 created_at=datetime.now(tz=UTC),
             )
         )
+        session.add(
+            FeedbackEvent(
+                user_id=user.id,
+                recommendation_id=occurrence.id,
+                action=PLANNER_ATTENDED_FEEDBACK_ACTION,
+                created_at=datetime.now(tz=UTC) + timedelta(minutes=1),
+            )
+        )
         await session.commit()
 
         async def fake_refresh(*_args, **_kwargs) -> RecommendationRun:
@@ -481,6 +507,8 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
             now_utc: datetime | None = None,
             selected_recommendation_id: str | None = None,
             selected_action: str | None = None,
+            outcome_recommendation_id: str | None = None,
+            outcome_action: str | None = None,
         ) -> TonightPlannerResponse:
             captured["item_count"] = len(items)
             captured["pin_count"] = len(pins)
@@ -489,10 +517,16 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
             captured["now_utc"] = now_utc
             captured["selected_recommendation_id"] = selected_recommendation_id
             captured["selected_action"] = selected_action
+            captured["outcome_recommendation_id"] = outcome_recommendation_id
+            captured["outcome_action"] = outcome_action
             return TonightPlannerResponse(
                 status="ready",
                 summary="Test planner",
                 executionStatus="idle",
+                activeTargetEventId=occurrence.id,
+                activeTargetVenueName=venue.name,
+                outcomeStatus="attended",
+                outcomeNote=f"{venue.name} is confirmed as part of tonight's plan.",
                 stops=[
                     TonightPlannerStop(
                         role="main_event",
@@ -528,5 +562,7 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
         assert captured["timezone"] == "America/New_York"
         assert captured["selected_recommendation_id"] == occurrence.id
         assert captured["selected_action"] == PLANNER_COMMIT_FEEDBACK_ACTION
+        assert captured["outcome_recommendation_id"] == occurrence.id
+        assert captured["outcome_action"] == PLANNER_ATTENDED_FEEDBACK_ACTION
 
     await engine.dispose()

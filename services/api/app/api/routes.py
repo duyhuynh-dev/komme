@@ -623,6 +623,8 @@ async def recommendation_interactions(
         "archive_revisit",
         "planner_commit",
         "planner_swap",
+        "planner_attended",
+        "planner_skipped",
     }
     seen: set[tuple[str, str]] = set()
 

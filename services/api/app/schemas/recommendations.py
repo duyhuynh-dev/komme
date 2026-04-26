@@ -131,6 +131,10 @@ class TonightPlannerResponse(BaseModel):
     planningNote: str | None = None
     executionStatus: str = "idle"
     executionNote: str | None = None
+    activeTargetEventId: str | None = None
+    activeTargetVenueName: str | None = None
+    outcomeStatus: str = "idle"
+    outcomeNote: str | None = None
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
 

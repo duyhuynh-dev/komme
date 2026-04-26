@@ -147,6 +147,10 @@ export interface TonightPlannerResponse {
   planningNote?: string | null;
   executionStatus: "idle" | "locked" | "swapped";
   executionNote?: string | null;
+  activeTargetEventId?: string | null;
+  activeTargetVenueName?: string | null;
+  outcomeStatus: "idle" | "pending" | "attended" | "skipped";
+  outcomeNote?: string | null;
   stops: TonightPlannerStop[];
 }
 

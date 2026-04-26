@@ -8,6 +8,8 @@ DIGEST_CLICK_FEEDBACK_ACTION = "digest_click"
 DIGEST_SECURITY_CLICK_FEEDBACK_ACTION = "digest_security_click"
 PLANNER_COMMIT_FEEDBACK_ACTION = "planner_commit"
 PLANNER_SWAP_FEEDBACK_ACTION = "planner_swap"
+PLANNER_ATTENDED_FEEDBACK_ACTION = "planner_attended"
+PLANNER_SKIPPED_FEEDBACK_ACTION = "planner_skipped"
 
 
 class RecommendationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):

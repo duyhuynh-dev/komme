@@ -4,6 +4,7 @@ import { CircleCheck, Clock3, Route, Sparkles } from "lucide-react";
 import {
   buildTonightPlannerPanelState,
   plannerFallbackActionLabel,
+  plannerOutcomePrompt,
   plannerStopActionLabel,
   plannerSupportLabel,
 } from "@/lib/tonight-planner";
@@ -46,6 +47,8 @@ export function TonightPlannerPanel({
   onCommitStop,
   onSwapFallback,
   actionPending,
+  outcomePending,
+  onMarkOutcome,
 }: {
   loading: boolean;
   planner: TonightPlannerResponse | null | undefined;
@@ -55,8 +58,15 @@ export function TonightPlannerPanel({
   onCommitStop: (stop: TonightPlannerStop) => void;
   onSwapFallback: (option: TonightPlannerFallbackOption) => void;
   actionPending: boolean;
+  outcomePending: boolean;
+  onMarkOutcome: (action: "planner_attended" | "planner_skipped") => void;
 }) {
   const panelState = buildTonightPlannerPanelState(planner);
+  const outcomePrompt = plannerOutcomePrompt(
+    panelState.activeTargetVenueName,
+    panelState.outcomeStatus,
+    panelState.outcomeNote,
+  );
 
   return (
     <section className="rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
@@ -90,6 +100,44 @@ export function TonightPlannerPanel({
           >
             <CircleCheck className="h-3.5 w-3.5" />
             {panelState.executionNote}
+          </div>
+        ) : null}
+        {panelState.activeTargetVenueName && outcomePrompt ? (
+          <div className="mt-3 rounded-[1.5rem] border border-stroke/80 bg-white/80 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Tonight outcome</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{outcomePrompt}</p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onMarkOutcome("planner_attended")}
+                  disabled={outcomePending}
+                  className={[
+                    "rounded-full px-3 py-2 text-xs font-medium transition disabled:opacity-60",
+                    panelState.outcomeStatus === "attended"
+                      ? "border border-teal-200 bg-teal-50 text-teal-900"
+                      : "bg-accent text-white",
+                  ].join(" ")}
+                >
+                  Made it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMarkOutcome("planner_skipped")}
+                  disabled={outcomePending}
+                  className={[
+                    "rounded-full px-3 py-2 text-xs font-medium transition disabled:opacity-60",
+                    panelState.outcomeStatus === "skipped"
+                      ? "border border-slate-200 bg-slate-100 text-slate-700"
+                      : "border border-stroke bg-white text-slate-700",
+                  ].join(" ")}
+                >
+                  Passed
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>

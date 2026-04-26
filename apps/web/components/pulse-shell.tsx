@@ -125,6 +125,33 @@ export function PulseShell() {
     },
   });
 
+  const plannerOutcomeMutation = useMutation({
+    mutationFn: ({
+      recommendationId,
+      action,
+      venueName,
+    }: {
+      recommendationId: string;
+      action: "planner_attended" | "planner_skipped";
+      venueName: string;
+    }) => submitRecommendationInteractions([{ recommendationId, action }]).then(() => ({ action, venueName })),
+    onSuccess: async ({ action, venueName }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
+        queryClient.invalidateQueries({ queryKey: ["recommendation-debug-summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["recommendation-run-comparison"] }),
+      ]);
+      setSurfaceStatus(
+        action === "planner_attended"
+          ? `Marked ${venueName} as part of tonight's plan.`
+          : `Marked ${venueName} as passed tonight.`
+      );
+    },
+    onError: (error) => {
+      setSurfaceStatus(error instanceof Error ? error.message : "Unable to save tonight's outcome right now.");
+    },
+  });
+
   const refreshMutation = useMutation({
     mutationFn: refreshRecommendations,
     onMutate: () => {
@@ -230,7 +257,15 @@ export function PulseShell() {
   const recordInteractions = (
     events: Array<{
       recommendationId: string;
-      action: "exposed" | "opened" | "ticket_click" | "archive_revisit" | "planner_commit" | "planner_swap";
+      action:
+        | "exposed"
+        | "opened"
+        | "ticket_click"
+        | "archive_revisit"
+        | "planner_commit"
+        | "planner_swap"
+        | "planner_attended"
+        | "planner_skipped";
     }>,
   ) => {
     if (!events.length) {
@@ -394,6 +429,7 @@ export function PulseShell() {
               selectedVenueId={selectedVenueId}
               onSelectVenue={setSelectedVenueId}
               actionPending={plannerActionMutation.isPending}
+              outcomePending={plannerOutcomeMutation.isPending}
               onCommitStop={(stop) => {
                 setSelectedVenueId(stop.venueId);
                 plannerActionMutation.mutate({
@@ -406,6 +442,18 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
+                });
+              }}
+              onMarkOutcome={(action) => {
+                const recommendationId = mapQuery.data?.tonightPlanner?.activeTargetEventId;
+                const venueName = mapQuery.data?.tonightPlanner?.activeTargetVenueName;
+                if (!recommendationId || !venueName) {
+                  return;
+                }
+                plannerOutcomeMutation.mutate({
+                  recommendationId,
+                  action,
+                  venueName,
                 });
               }}
             />

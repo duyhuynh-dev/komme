@@ -45,6 +45,8 @@ def build_tonight_planner(
     now_utc: datetime | None = None,
     selected_recommendation_id: str | None = None,
     selected_action: str | None = None,
+    outcome_recommendation_id: str | None = None,
+    outcome_action: str | None = None,
 ) -> TonightPlannerResponse:
     if not items:
         return TonightPlannerResponse(
@@ -234,6 +236,11 @@ def build_tonight_planner(
         planner,
         selected_recommendation_id=selected_recommendation_id,
         selected_action=selected_action,
+    )
+    _apply_outcome_state(
+        planner,
+        outcome_recommendation_id=outcome_recommendation_id,
+        outcome_action=outcome_action,
     )
     return planner
 
@@ -614,6 +621,13 @@ def _apply_execution_state(
                 fallback.selected = True
                 selected_fallback = fallback
 
+    if selected_fallback is not None:
+        planner.activeTargetEventId = selected_fallback.eventId
+        planner.activeTargetVenueName = selected_fallback.venueName
+    elif selected_stop is not None:
+        planner.activeTargetEventId = selected_stop.eventId
+        planner.activeTargetVenueName = selected_stop.venueName
+
     if selected_fallback is not None or selected_action == "planner_swap":
         planner.executionStatus = "swapped"
         if selected_fallback is not None:
@@ -625,6 +639,27 @@ def _apply_execution_state(
     if selected_stop is not None:
         planner.executionStatus = "locked"
         planner.executionNote = f"{selected_stop.venueName} is currently locked into tonight's plan."
+
+
+def _apply_outcome_state(
+    planner: TonightPlannerResponse,
+    *,
+    outcome_recommendation_id: str | None,
+    outcome_action: str | None,
+) -> None:
+    if not planner.activeTargetEventId or not planner.activeTargetVenueName:
+        return
+
+    planner.outcomeStatus = "pending"
+    if outcome_recommendation_id != planner.activeTargetEventId or not outcome_action:
+        return
+
+    if outcome_action == "planner_attended":
+        planner.outcomeStatus = "attended"
+        planner.outcomeNote = f"{planner.activeTargetVenueName} is confirmed as part of tonight's plan."
+    elif outcome_action == "planner_skipped":
+        planner.outcomeStatus = "skipped"
+        planner.outcomeNote = f"{planner.activeTargetVenueName} was marked as passed tonight."
 
 
 def _minutes_between(left: datetime, right: datetime) -> int:

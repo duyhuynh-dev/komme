@@ -8,6 +8,10 @@ export interface TonightPlannerPanelState {
   planningNote: string | null;
   executionStatus: TonightPlannerResponse["executionStatus"];
   executionNote: string | null;
+  activeTargetEventId: string | null;
+  activeTargetVenueName: string | null;
+  outcomeStatus: TonightPlannerResponse["outcomeStatus"];
+  outcomeNote: string | null;
   stopCountLabel: string | null;
   fallbackCount: number;
   stops: TonightPlannerStop[];
@@ -27,6 +31,10 @@ export function buildTonightPlannerPanelState(
       planningNote: planner?.planningNote ?? null,
       executionStatus: planner?.executionStatus ?? "idle",
       executionNote: planner?.executionNote ?? null,
+      activeTargetEventId: planner?.activeTargetEventId ?? null,
+      activeTargetVenueName: planner?.activeTargetVenueName ?? null,
+      outcomeStatus: planner?.outcomeStatus ?? "idle",
+      outcomeNote: planner?.outcomeNote ?? null,
       stopCountLabel: null,
       fallbackCount: 0,
       stops: [],
@@ -46,6 +54,10 @@ export function buildTonightPlannerPanelState(
     planningNote: planner.planningNote ?? null,
     executionStatus: planner.executionStatus,
     executionNote: planner.executionNote ?? null,
+    activeTargetEventId: planner.activeTargetEventId ?? null,
+    activeTargetVenueName: planner.activeTargetVenueName ?? null,
+    outcomeStatus: planner.outcomeStatus,
+    outcomeNote: planner.outcomeNote ?? null,
     stopCountLabel,
     fallbackCount,
     stops: planner.stops,
@@ -67,4 +79,18 @@ export function plannerStopActionLabel(stop: TonightPlannerStop): string {
 
 export function plannerFallbackActionLabel(selected: boolean): string {
   return selected ? "Swap active" : "Use this swap";
+}
+
+export function plannerOutcomePrompt(
+  activeTargetVenueName: string | null,
+  outcomeStatus: TonightPlannerResponse["outcomeStatus"],
+  outcomeNote: string | null,
+): string | null {
+  if (!activeTargetVenueName) {
+    return null;
+  }
+  if (outcomeStatus !== "pending" && outcomeNote) {
+    return outcomeNote;
+  }
+  return `Let Pulse know whether ${activeTargetVenueName} actually made tonight's plan.`;
 }

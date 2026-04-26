@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   buildTonightPlannerPanelState,
   plannerFallbackActionLabel,
+  plannerOutcomePrompt,
   plannerStopActionLabel,
   plannerSupportLabel,
 } from "./tonight-planner.ts";
@@ -17,6 +18,10 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
     planningNote: "Built from the live shortlist.",
     executionStatus: "locked",
     executionNote: "Elsewhere is currently locked into tonight's plan.",
+    activeTargetEventId: "main-event",
+    activeTargetVenueName: "Elsewhere",
+    outcomeStatus: "pending",
+    outcomeNote: null,
     stops: [
       {
         role: "pregame",
@@ -80,6 +85,10 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
   assert.equal(state.fallbackCount, 1);
   assert.equal(state.executionStatus, "locked");
   assert.equal(state.executionNote, "Elsewhere is currently locked into tonight's plan.");
+  assert.equal(state.activeTargetEventId, "main-event");
+  assert.equal(state.activeTargetVenueName, "Elsewhere");
+  assert.equal(state.outcomeStatus, "pending");
+  assert.equal(state.outcomeNote, null);
   assert.equal(state.stops[1].venueName, "Elsewhere");
 });
 
@@ -91,6 +100,10 @@ test("buildTonightPlannerPanelState returns the empty planner copy when no viabl
     planningNote: "Refresh after new events land.",
     executionStatus: "idle",
     executionNote: null,
+    activeTargetEventId: null,
+    activeTargetVenueName: null,
+    outcomeStatus: "idle",
+    outcomeNote: null,
     stops: [],
   };
 
@@ -160,4 +173,16 @@ test("planner action labels reflect active planner execution state", () => {
   assert.equal(plannerStopActionLabel({ selected: false } as never), "Lock this stop");
   assert.equal(plannerFallbackActionLabel(true), "Swap active");
   assert.equal(plannerFallbackActionLabel(false), "Use this swap");
+});
+
+test("plannerOutcomePrompt guides pending and completed planner outcomes", () => {
+  assert.equal(
+    plannerOutcomePrompt("Elsewhere", "pending", null),
+    "Let Pulse know whether Elsewhere actually made tonight's plan.",
+  );
+  assert.equal(
+    plannerOutcomePrompt("Elsewhere", "attended", "Elsewhere is confirmed as part of tonight's plan."),
+    "Elsewhere is confirmed as part of tonight's plan.",
+  );
+  assert.equal(plannerOutcomePrompt(null, "idle", null), null);
 });

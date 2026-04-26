@@ -234,6 +234,47 @@ def test_feedback_adjustment_boosts_budget_and_vibe_patterns() -> None:
     assert feedback_reason["title"] in {"Budget pattern", "Taste pattern"}
 
 
+def test_feedback_adjustment_boosts_completed_planner_outcomes() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.94,
+            boosted=False,
+            muted=False,
+        )
+    }
+    venue = Venue(
+        name="Elsewhere",
+        neighborhood="Bushwick",
+        address="599 Johnson Ave, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        latitude=40.7063,
+        longitude=-73.9232,
+    )
+    venue.id = "venue-4"
+    signals = FeedbackSignals(
+        planner_attended_venues={"venue-4": 1.1},
+        planner_attended_topics={"underground_dance": 0.95},
+    )
+
+    adjustment, feedback_reason = _feedback_adjustment(
+        ["underground_dance"],
+        profiles_by_key,
+        venue,
+        signals,
+        transit_minutes=26,
+        budget_fit=0.9,
+        source_confidence=0.88,
+    )
+
+    assert adjustment > 0
+    assert feedback_reason is not None
+    assert feedback_reason["title"] == "Went before"
+
+
 def test_feedback_reason_summaries_sort_by_weight_and_preserve_labels() -> None:
     signals = FeedbackSignals(
         saved_reasons={"easy_to_get_to": 1.2, "good_price": 0.9},

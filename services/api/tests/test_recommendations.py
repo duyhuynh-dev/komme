@@ -7,6 +7,8 @@ from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.recommendation import (
     DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    PLANNER_ATTENDED_FEEDBACK_ACTION,
+    PLANNER_SKIPPED_FEEDBACK_ACTION,
     DigestDelivery,
     FeedbackEvent,
     RecommendationRun,
@@ -646,5 +648,78 @@ async def test_feedback_signals_ignore_digest_security_clicks_from_learning() ->
 
         assert signals.digest_click_venues.get(venue.id, 0.0) == 0.0
         assert signals.digest_click_topics.get("underground_dance", 0.0) == 0.0
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_feedback_signals_capture_planner_attendance_without_turning_skips_into_negative_learning() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-outcomes@example.com")
+        source = EventSource(name="ticketmaster", kind="api_connector")
+        venue = Venue(
+            name="Elsewhere",
+            neighborhood="Bushwick",
+            address="599 Johnson Ave, Brooklyn, NY",
+            city="Brooklyn",
+            state="NY",
+            latitude=40.7082,
+            longitude=-73.9232,
+        )
+        event = CanonicalEvent(
+            source_id="pending",
+            source_event_key="ticketmaster:event-2",
+            title="Warehouse Headliner",
+            category="live music",
+            summary="Peak-time headline set",
+        )
+        session.add_all([user, source])
+        await session.flush()
+        event.source_id = source.id
+        session.add_all([venue, event])
+        await session.flush()
+
+        occurrence = EventOccurrence(
+            event_id=event.id,
+            venue_id=venue.id,
+            starts_at="2026-04-28T01:00:00+00:00",
+            ticket_url="https://example.com/tickets",
+            metadata_json={"topicKeys": ["underground_dance"]},
+        )
+        session.add(occurrence)
+        await session.flush()
+
+        session.add_all(
+            [
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
+                    action=PLANNER_ATTENDED_FEEDBACK_ACTION,
+                    reasons_json=[],
+                    created_at=datetime.now(tz=UTC) - timedelta(hours=5),
+                ),
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
+                    action=PLANNER_SKIPPED_FEEDBACK_ACTION,
+                    reasons_json=[],
+                    created_at=datetime.now(tz=UTC) - timedelta(hours=3),
+                ),
+            ]
+        )
+        await session.flush()
+
+        signals = await _feedback_signals(session, user.id)
+
+        assert signals.planner_attended_venues[venue.id] > 0
+        assert signals.planner_attended_topics["underground_dance"] > 0
+        assert signals.dismissed_venues.get(venue.id, 0.0) == 0.0
+        assert signals.dismissed_topics.get("underground_dance", 0.0) == 0.0
 
     await engine.dispose()

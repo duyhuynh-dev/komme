@@ -10,7 +10,9 @@ from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venu
 from app.models.profile import UserInterestProfile
 from app.models.recommendation import (
     DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    PLANNER_ATTENDED_FEEDBACK_ACTION,
     PLANNER_COMMIT_FEEDBACK_ACTION,
+    PLANNER_SKIPPED_FEEDBACK_ACTION,
     PLANNER_SWAP_FEEDBACK_ACTION,
     DigestDelivery,
     FeedbackEvent,
@@ -113,6 +115,7 @@ class FeedbackSignals:
     saved_venues: dict[str, float] = field(default_factory=dict)
     dismissed_venues: dict[str, float] = field(default_factory=dict)
     confirmed_saved_venues: dict[str, float] = field(default_factory=dict)
+    planner_attended_venues: dict[str, float] = field(default_factory=dict)
     opened_venues: dict[str, float] = field(default_factory=dict)
     exposed_venues: dict[str, float] = field(default_factory=dict)
     digest_click_venues: dict[str, float] = field(default_factory=dict)
@@ -121,6 +124,7 @@ class FeedbackSignals:
     saved_topics: dict[str, float] = field(default_factory=dict)
     dismissed_topics: dict[str, float] = field(default_factory=dict)
     confirmed_saved_topics: dict[str, float] = field(default_factory=dict)
+    planner_attended_topics: dict[str, float] = field(default_factory=dict)
     opened_topics: dict[str, float] = field(default_factory=dict)
     exposed_topics: dict[str, float] = field(default_factory=dict)
     digest_click_topics: dict[str, float] = field(default_factory=dict)
@@ -221,6 +225,20 @@ async def _latest_planner_execution(session: AsyncSession, user_id: str) -> Feed
             FeedbackEvent.user_id == user_id,
             FeedbackEvent.created_at >= since,
             FeedbackEvent.action.in_([PLANNER_COMMIT_FEEDBACK_ACTION, PLANNER_SWAP_FEEDBACK_ACTION]),
+        )
+        .order_by(desc(FeedbackEvent.created_at), desc(FeedbackEvent.id))
+        .limit(1)
+    )
+
+
+async def _latest_planner_outcome(session: AsyncSession, user_id: str) -> FeedbackEvent | None:
+    since = datetime.now(tz=UTC) - PLANNER_EXECUTION_LOOKBACK_WINDOW
+    return await session.scalar(
+        select(FeedbackEvent)
+        .where(
+            FeedbackEvent.user_id == user_id,
+            FeedbackEvent.created_at >= since,
+            FeedbackEvent.action.in_([PLANNER_ATTENDED_FEEDBACK_ACTION, PLANNER_SKIPPED_FEEDBACK_ACTION]),
         )
         .order_by(desc(FeedbackEvent.created_at), desc(FeedbackEvent.id))
         .limit(1)
@@ -365,7 +383,14 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
                 _increment_feedback_count(reason_count_store, reason_key)
                 signals.reason_labels[reason_key] = reason_label
 
-        if row.action in {"opened", "exposed", "digest_click", "ticket_click", "archive_revisit"}:
+        if row.action in {
+            "opened",
+            "exposed",
+            "digest_click",
+            "ticket_click",
+            "archive_revisit",
+            PLANNER_ATTENDED_FEEDBACK_ACTION,
+        }:
             interaction_weight = _interaction_signal_weight(row.action, created_at=row.created_at)
             if row.action == "opened":
                 venue_store = signals.opened_venues
@@ -379,6 +404,9 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
             elif row.action == "ticket_click":
                 venue_store = signals.ticket_click_venues
                 topic_store = signals.ticket_click_topics
+            elif row.action == PLANNER_ATTENDED_FEEDBACK_ACTION:
+                venue_store = signals.planner_attended_venues
+                topic_store = signals.planner_attended_topics
             else:
                 venue_store = signals.archive_revisit_venues
                 topic_store = signals.archive_revisit_topics
@@ -601,6 +629,8 @@ def _interaction_signal_weight(action: str, *, created_at: datetime) -> float:
         base_weight = 0.82
     elif action == "ticket_click":
         base_weight = 1.1
+    elif action == PLANNER_ATTENDED_FEEDBACK_ACTION:
+        base_weight = 1.6
     return round(base_weight * _feedback_recency_weight(created_at), 3)
 
 
@@ -923,6 +953,7 @@ def _feedback_adjustment(
     saved_venue_weight = feedback_signals.saved_venues.get(_normalize_text(venue.id), 0.0)
     dismissed_venue_weight = feedback_signals.dismissed_venues.get(_normalize_text(venue.id), 0.0)
     confirmed_saved_venue_weight = feedback_signals.confirmed_saved_venues.get(_normalize_text(venue.id), 0.0)
+    planner_attended_venue_weight = feedback_signals.planner_attended_venues.get(_normalize_text(venue.id), 0.0)
     opened_venue_weight = feedback_signals.opened_venues.get(_normalize_text(venue.id), 0.0)
     exposed_venue_weight = feedback_signals.exposed_venues.get(_normalize_text(venue.id), 0.0)
     digest_click_venue_weight = feedback_signals.digest_click_venues.get(_normalize_text(venue.id), 0.0)
@@ -931,6 +962,7 @@ def _feedback_adjustment(
     saved_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.saved_topics)
     dismissed_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.dismissed_topics)
     confirmed_saved_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.confirmed_saved_topics)
+    planner_attended_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.planner_attended_topics)
     opened_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.opened_topics)
     exposed_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.exposed_topics)
     digest_click_topic_weight = _average_feedback_weight(topic_keys, feedback_signals.digest_click_topics)
@@ -948,6 +980,8 @@ def _feedback_adjustment(
         adjustment -= min(0.34, 0.18 + (dismissed_venue_weight * 0.08))
     if confirmed_saved_venue_weight:
         adjustment += min(0.10, 0.03 + (confirmed_saved_venue_weight * 0.04))
+    if planner_attended_venue_weight:
+        adjustment += min(0.16, 0.05 + (planner_attended_venue_weight * 0.055))
     if opened_venue_weight:
         adjustment += min(0.09, 0.02 + (opened_venue_weight * 0.045))
     if digest_click_venue_weight:
@@ -960,6 +994,7 @@ def _feedback_adjustment(
     topic_delta = saved_topic_weight - dismissed_topic_weight
     adjustment += max(-0.12, min(0.12, topic_delta * 0.10))
     adjustment += max(0.0, min(0.08, confirmed_saved_topic_weight * 0.05))
+    adjustment += max(0.0, min(0.10, planner_attended_topic_weight * 0.055))
     adjustment += max(0.0, min(0.06, opened_topic_weight * 0.035))
     adjustment += max(0.0, min(0.09, digest_click_topic_weight * 0.045))
     adjustment += max(0.0, min(0.08, ticket_click_topic_weight * 0.04))
@@ -971,21 +1006,28 @@ def _feedback_adjustment(
         exposed_venue_weight
         - (opened_venue_weight * 0.9)
         - (saved_venue_weight * 0.75)
-        - (confirmed_saved_venue_weight * 0.6),
+        - (confirmed_saved_venue_weight * 0.6)
+        - (planner_attended_venue_weight * 0.8),
     )
     topic_exposure_drag = max(
         0.0,
         exposed_topic_weight
         - (opened_topic_weight * 0.9)
         - (saved_topic_weight * 0.6)
-        - (confirmed_saved_topic_weight * 0.5),
+        - (confirmed_saved_topic_weight * 0.5)
+        - (planner_attended_topic_weight * 0.65),
     )
     adjustment -= min(0.055, (exposure_drag * 0.025) + (topic_exposure_drag * 0.015))
 
     feedback_reason: dict | None = None
     topic_labels = _feedback_topic_labels(topic_keys, profiles_by_key)
 
-    if confirmed_saved_venue_weight >= 0.35:
+    if planner_attended_venue_weight >= 0.35:
+        feedback_reason = {
+            "title": "Went before",
+            "detail": f"You marked {venue.name} as part of a real night out, so Pulse now trusts it as higher-confidence intent.",
+        }
+    elif confirmed_saved_venue_weight >= 0.35:
         feedback_reason = {
             "title": "Validated save",
             "detail": f"You saved {venue.name} and it kept surviving later runs, so Pulse now trusts that signal more.",
@@ -1024,6 +1066,11 @@ def _feedback_adjustment(
         feedback_reason = {
             "title": "Dismiss pattern",
             "detail": f"You often dismiss {_join_labels(topic_labels)} picks, so this is ranked more cautiously.",
+        }
+    elif planner_attended_topic_weight >= 0.35 and topic_labels:
+        feedback_reason = {
+            "title": "Night-out pattern",
+            "detail": f"You actually made it to {_join_labels(topic_labels)} picks, so Pulse now treats that theme as stronger real-world intent.",
         }
     elif confirmed_saved_topic_weight >= 0.35 and topic_labels:
         feedback_reason = {
@@ -2342,6 +2389,7 @@ async def get_map_recommendations(
         return _empty_response(display_timezone)
 
     latest_planner_execution = await _latest_planner_execution(session, user.id)
+    latest_planner_outcome = await _latest_planner_outcome(session, user.id)
     tonight_planner = build_tonight_planner(
         items,
         pins,
@@ -2351,6 +2399,10 @@ async def get_map_recommendations(
             latest_planner_execution.recommendation_id if latest_planner_execution is not None else None
         ),
         selected_action=latest_planner_execution.action if latest_planner_execution is not None else None,
+        outcome_recommendation_id=(
+            latest_planner_outcome.recommendation_id if latest_planner_outcome is not None else None
+        ),
+        outcome_action=latest_planner_outcome.action if latest_planner_outcome is not None else None,
     )
 
     return RecommendationsMapResponse(
