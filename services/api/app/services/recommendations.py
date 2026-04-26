@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.profile import UserInterestProfile
-from app.models.recommendation import DigestDelivery, FeedbackEvent, RecommendationRun, VenueRecommendation
+from app.models.recommendation import (
+    DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    DigestDelivery,
+    FeedbackEvent,
+    RecommendationRun,
+    VenueRecommendation,
+)
 from app.models.user import User, UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
     ArchiveResponse,
@@ -217,7 +223,11 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
     if not feedback_rows:
         return FeedbackSignals()
 
-    occurrence_ids = {row.recommendation_id for row in feedback_rows}
+    learning_rows = [row for row in feedback_rows if row.action != DIGEST_SECURITY_CLICK_FEEDBACK_ACTION]
+    if not learning_rows:
+        return FeedbackSignals()
+
+    occurrence_ids = {row.recommendation_id for row in learning_rows}
     occurrences = list(
         (
             await session.scalars(
@@ -241,7 +251,7 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
     )
     venues_by_id = {venue.id: venue for venue in venues}
     events_by_id = {event.id: event for event in events}
-    saved_rows = [row for row in feedback_rows if row.action == "save"]
+    saved_rows = [row for row in learning_rows if row.action == "save"]
     saved_venue_ids = {
         occurrence.venue_id
         for row in saved_rows
@@ -301,7 +311,7 @@ async def _feedback_signals(session: AsyncSession, user_id: str) -> FeedbackSign
 
     signals = FeedbackSignals()
 
-    for row in feedback_rows:
+    for row in learning_rows:
         occurrence = occurrences_by_id.get(row.recommendation_id)
         if occurrence is None:
             continue

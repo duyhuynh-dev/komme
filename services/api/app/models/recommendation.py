@@ -4,6 +4,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
+DIGEST_CLICK_FEEDBACK_ACTION = "digest_click"
+DIGEST_SECURITY_CLICK_FEEDBACK_ACTION = "digest_security_click"
+
 
 class RecommendationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "recommendation_runs"

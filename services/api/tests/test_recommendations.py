@@ -5,9 +5,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
-from app.models.recommendation import DigestDelivery, FeedbackEvent, VenueRecommendation
+from app.models.recommendation import (
+    DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    DigestDelivery,
+    FeedbackEvent,
+    RecommendationRun,
+    VenueRecommendation,
+)
 from app.models.user import User
-from app.models.recommendation import RecommendationRun
 from app.models.user import UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
     RecommendationFreshness,
@@ -579,5 +584,67 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
         assert signals.digest_click_topics["underground_dance"] > 0
         assert signals.ticket_click_topics["underground_dance"] > 0
         assert signals.archive_revisit_topics["underground_dance"] > 0
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_feedback_signals_ignore_digest_security_clicks_from_learning() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="signals@example.com")
+        source = EventSource(name="ticketmaster", kind="api_connector")
+        venue = Venue(
+            name="Public Records",
+            neighborhood="Gowanus",
+            address="233 Butler St, Brooklyn, NY",
+            city="Brooklyn",
+            state="NY",
+            latitude=40.6787,
+            longitude=-73.9831,
+        )
+        event = CanonicalEvent(
+            source_id="pending",
+            source_event_key="ticketmaster:event-1",
+            title="Late Night Warehouse Set",
+            category="live music",
+            summary="All-night lineup",
+        )
+        session.add_all([user, source])
+        await session.flush()
+        event.source_id = source.id
+        session.add_all([venue, event])
+        await session.flush()
+
+        occurrence = EventOccurrence(
+            event_id=event.id,
+            venue_id=venue.id,
+            starts_at="2026-04-28T01:00:00+00:00",
+            ticket_url="https://example.com/tickets",
+            metadata_json={"topicKeys": ["underground_dance"]},
+        )
+        session.add(occurrence)
+        await session.flush()
+
+        session.add(
+            FeedbackEvent(
+                user_id=user.id,
+                recommendation_id=occurrence.id,
+                action=DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+                reasons_json=[],
+                created_at=datetime.now(tz=UTC) - timedelta(hours=2),
+            )
+        )
+        await session.flush()
+
+        signals = await _feedback_signals(session, user.id)
+
+        assert signals.digest_click_venues.get(venue.id, 0.0) == 0.0
+        assert signals.digest_click_topics.get("underground_dance", 0.0) == 0.0
 
     await engine.dispose()

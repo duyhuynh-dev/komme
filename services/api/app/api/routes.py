@@ -52,6 +52,7 @@ from app.services.auth import (
 )
 from app.services.digest import (
     build_digest_preview,
+    classify_digest_click_feedback_action,
     digest_click_fallback_url,
     parse_digest_click_token,
     safe_digest_destination_url,
@@ -546,6 +547,7 @@ async def digest_send_preview(
 @router.get("/digest/click")
 async def digest_click(
     token: str,
+    request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     fallback_url = digest_click_fallback_url()
@@ -555,12 +557,13 @@ async def digest_click(
         return RedirectResponse(fallback_url, status_code=status.HTTP_302_FOUND)
 
     destination_url = safe_digest_destination_url(payload.destination_url)
+    feedback_action = classify_digest_click_feedback_action(request.headers)
     try:
         session.add(
             FeedbackEvent(
                 user_id=payload.user_id,
                 recommendation_id=payload.recommendation_id,
-                action="digest_click",
+                action=feedback_action,
                 reasons_json=[],
             )
         )

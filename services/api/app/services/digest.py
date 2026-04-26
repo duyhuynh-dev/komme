@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
@@ -13,7 +14,12 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.recommendation import DigestDelivery, RecommendationRun
+from app.models.recommendation import (
+    DIGEST_CLICK_FEEDBACK_ACTION,
+    DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    DigestDelivery,
+    RecommendationRun,
+)
 from app.models.user import EmailPreference, User
 from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.recommendations import VenueRecommendationCard
@@ -38,6 +44,23 @@ SCHEDULED_DIGEST_PROVIDER = "resend-scheduled"
 PREVIEW_DIGEST_PROVIDER = "resend-preview"
 DIGEST_CLICK_PURPOSE = "digest-click"
 DIGEST_CLICK_TTL_SECONDS = 60 * 60 * 24 * 21
+_DIGEST_SECURITY_SCAN_USER_AGENT_FRAGMENTS = (
+    "proofpoint",
+    "url defense",
+    "mimecast",
+    "barracuda",
+    "symantec",
+    "ironport",
+    "cisco secure email",
+    "fireeye",
+    "python-requests",
+    "python-httpx",
+    "go-http-client",
+    "curl/",
+    "wget/",
+)
+_DIGEST_SECURITY_SCAN_HINT_HEADERS = ("purpose", "x-purpose", "sec-purpose")
+_DIGEST_SECURITY_SCAN_HINT_VALUES = ("prefetch", "preview")
 
 
 async def build_digest_preview(session: AsyncSession, user: User) -> DigestPreviewPayload:
@@ -352,6 +375,25 @@ def parse_digest_click_token(token: str) -> DigestClickPayload:
         recommendation_id=recommendation_id,
         destination_url=destination_url,
     )
+
+
+def classify_digest_click_feedback_action(headers: Mapping[str, str] | None) -> str:
+    normalized_headers = {
+        str(key).lower(): str(value).strip().lower()
+        for key, value in (headers.items() if headers is not None else ())
+    }
+    user_agent = normalized_headers.get("user-agent", "")
+
+    # Keep this conservative so Pulse only suppresses clicks with strong automation signals.
+    if any(fragment in user_agent for fragment in _DIGEST_SECURITY_SCAN_USER_AGENT_FRAGMENTS):
+        return DIGEST_SECURITY_CLICK_FEEDBACK_ACTION
+
+    for header in _DIGEST_SECURITY_SCAN_HINT_HEADERS:
+        header_value = normalized_headers.get(header, "")
+        if any(token in header_value for token in _DIGEST_SECURITY_SCAN_HINT_VALUES):
+            return DIGEST_SECURITY_CLICK_FEEDBACK_ACTION
+
+    return DIGEST_CLICK_FEEDBACK_ACTION
 
 
 def digest_click_fallback_url() -> str:

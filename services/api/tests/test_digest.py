@@ -1,9 +1,19 @@
 import httpx
 import pytest
 from datetime import UTC, datetime
+from starlette.requests import Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from zoneinfo import ZoneInfo
 
+from app.api.routes import digest_click
 from app.core.config import Settings
+from app.db.base import Base
+from app.models.recommendation import (
+    DIGEST_CLICK_FEEDBACK_ACTION,
+    DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+    FeedbackEvent,
+)
 from app.schemas.recommendations import (
     RecommendationProvenance,
     RecommendationReason,
@@ -53,6 +63,24 @@ def _sample_card(venue_name: str, neighborhood: str, event_title: str) -> VenueR
             hasTicketUrl=True,
         ),
         secondaryEvents=[],
+    )
+
+
+def _request_with_headers(headers: dict[str, str]) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "https",
+            "path": "/v1/digest/click",
+            "raw_path": b"/v1/digest/click",
+            "query_string": b"",
+            "headers": [(key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 443),
+            "root_path": "",
+        }
     )
 
 
@@ -128,6 +156,80 @@ def test_digest_click_token_round_trip_preserves_user_recommendation_and_destina
     assert payload.user_id == "user-123"
     assert payload.recommendation_id == "rec-456"
     assert payload.destination_url == "https://example.com/tickets"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("headers", "expected_action"),
+    [
+        (
+            {
+                "user-agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+                ),
+                "sec-fetch-user": "?1",
+            },
+            DIGEST_CLICK_FEEDBACK_ACTION,
+        ),
+        (
+            {"user-agent": "Proofpoint URL Defense"},
+            DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+        ),
+        (
+            {
+                "user-agent": "Mozilla/5.0",
+                "purpose": "prefetch",
+            },
+            DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
+        ),
+    ],
+)
+async def test_digest_click_route_records_expected_feedback_action(
+    monkeypatch: pytest.MonkeyPatch,
+    headers: dict[str, str],
+    expected_action: str,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.digest.get_settings",
+        lambda: Settings(
+            pulse_session_secret="digest-click-secret-32-chars-long!",
+            web_app_url="https://pulse-app.duckdns.org",
+        ),
+    )
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="duy@example.com")
+        session.add(user)
+        await session.flush()
+
+        token = build_digest_click_token(
+            user.id,
+            "rec-456",
+            "https://example.com/tickets",
+        )
+        response = await digest_click(
+            token=token,
+            request=_request_with_headers(headers),
+            session=session,
+        )
+
+        assert response.status_code == 302
+        assert response.headers["location"] == "https://example.com/tickets"
+
+    async with session_factory() as session:
+        feedback_events = list((await session.scalars(select(FeedbackEvent))).all())
+
+        assert len(feedback_events) == 1
+        assert feedback_events[0].action == expected_action
+        assert feedback_events[0].recommendation_id == "rec-456"
+
+    await engine.dispose()
 
 
 def test_provider_error_detail_prefers_json_message() -> None:
