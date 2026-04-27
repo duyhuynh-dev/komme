@@ -7,6 +7,7 @@ from app.services.recommendations import (
     _archive_kind,
     _archive_title,
     _candidate_score,
+    _candidate_score_with_components,
     _deletable_run_ids,
     _derive_topic_keys,
     _feedback_adjustment,
@@ -14,7 +15,9 @@ from app.services.recommendations import (
     _occurrence_is_rankable,
     _parse_occurrence_start,
     _score_band,
+    _score_breakdown_items,
     _select_ranked_venues,
+    _stale_interest_provider_keys,
     _topic_source_summaries,
 )
 from datetime import UTC, datetime, timedelta
@@ -137,6 +140,112 @@ def test_topic_source_summaries_show_spotify_ranking_influence() -> None:
     assert summaries[0].stale is True
     assert summaries[0].healthReason == "Latest provider sync failed: Spotify connection expired. Reconnect Spotify and try again."
     assert summaries[1].sourceProvider == "manual"
+
+
+def test_stale_spotify_interest_is_suppressed_while_manual_stays_active() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.92,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        ),
+        "gallery_nights": UserInterestProfile(
+            user_id="user-1",
+            topic_key="gallery_nights",
+            label="Gallery nights",
+            confidence=0.72,
+            source_provider="manual",
+            boosted=False,
+            muted=False,
+        ),
+    }
+
+    healthy_spotify_score, healthy_spotify_topics, _ = _candidate_score(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=28,
+        budget_fit=0.9,
+    )
+    stale_spotify_score, stale_spotify_topics, _ = _candidate_score(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=28,
+        budget_fit=0.9,
+        stale_provider_keys={"spotify"},
+    )
+    stale_manual_score, stale_manual_topics, _ = _candidate_score(
+        ["gallery_nights"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=28,
+        budget_fit=0.9,
+        stale_provider_keys={"spotify"},
+    )
+
+    assert healthy_spotify_score > stale_spotify_score
+    assert [topic.label for topic in healthy_spotify_topics] == ["Underground dance"]
+    assert stale_spotify_topics == []
+    assert stale_manual_score > stale_spotify_score
+    assert [topic.label for topic in stale_manual_topics] == ["Gallery nights"]
+
+
+def test_stale_spotify_adjustment_is_exposed_in_score_breakdown() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.92,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        )
+    }
+
+    _, matched_topics, muted_topics, components = _candidate_score_with_components(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=28,
+        budget_fit=0.9,
+        stale_provider_keys={"spotify"},
+    )
+    breakdown = _score_breakdown_items(
+        components=components,
+        matched_labels=[topic.label for topic in matched_topics],
+        muted_labels=[topic.label for topic in muted_topics],
+        feedback_adjustment=0.0,
+        feedback_reason=None,
+    )
+    stale_items = [item for item in breakdown if item["key"] == "stale_provider_guard"]
+
+    assert stale_items
+    assert stale_items[0]["direction"] == "negative"
+    assert stale_items[0]["contribution"] < 0
+    assert "Latest Spotify sync failed" in stale_items[0]["detail"]
+    assert "Underground dance" in stale_items[0]["detail"]
+
+
+def test_stale_interest_provider_keys_only_marks_failed_spotify() -> None:
+    spotify_failed = ProfileRun(user_id="user-1", provider="spotify", model_name="spotify", status="failed")
+    manual_failed = ProfileRun(user_id="user-1", provider="manual", model_name="manual", status="failed")
+    reddit_completed = ProfileRun(user_id="user-1", provider="reddit_export", model_name="reddit", status="completed")
+
+    stale_keys = _stale_interest_provider_keys(
+        {
+            "spotify": spotify_failed,
+            "manual": manual_failed,
+            "reddit_export": reddit_completed,
+        }
+    )
+
+    assert stale_keys == {"spotify"}
 
 
 def test_score_band_thresholds_match_ranking_copy() -> None:

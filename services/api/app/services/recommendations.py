@@ -168,6 +168,8 @@ class CandidateScoreComponents:
     weighted_distance: float
     weighted_budget: float
     weighted_source: float
+    stale_provider_adjustment: float = 0.0
+    stale_provider_labels: list[str] = field(default_factory=list)
 
 
 async def _latest_run(session: AsyncSession, user_id: str) -> RecommendationRun | None:
@@ -692,20 +694,32 @@ def _topic_weight(topic: UserInterestProfile) -> float:
     return min(0.99, base)
 
 
+def _topic_is_from_stale_provider(topic: UserInterestProfile, stale_provider_keys: set[str]) -> bool:
+    return topic.source_provider == "spotify" and topic.source_provider in stale_provider_keys
+
+
 def _interest_fit(
     topic_keys: list[str],
     profiles_by_key: dict[str, UserInterestProfile],
-) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile]]:
+    *,
+    stale_provider_keys: set[str] | None = None,
+) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile], list[UserInterestProfile]]:
+    stale_provider_keys = stale_provider_keys or set()
     if not topic_keys:
-        return (0.34, [], [])
+        return (0.34, [], [], [])
 
     matched_topics: list[UserInterestProfile] = []
     muted_topics: list[UserInterestProfile] = []
+    stale_topics: list[UserInterestProfile] = []
     weights: list[float] = []
 
     for key in topic_keys:
         topic = profiles_by_key.get(key)
         if topic is None:
+            continue
+
+        if _topic_is_from_stale_provider(topic, stale_provider_keys):
+            stale_topics.append(topic)
             continue
 
         if topic.muted:
@@ -715,7 +729,7 @@ def _interest_fit(
         weights.append(_topic_weight(topic))
 
     if not weights:
-        return (0.34, [], [])
+        return (0.34, [], [], stale_topics)
 
     average_weight = sum(weights) / len(weights)
     strongest_weight = max(weights)
@@ -726,14 +740,17 @@ def _interest_fit(
     elif muted_topics:
         score -= 0.12 * len(muted_topics)
 
-    return (_clamp_score(score), matched_topics, muted_topics)
+    return (_clamp_score(score), matched_topics, muted_topics, stale_topics)
 
 
 def _category_affinity(
     category: str,
     tags: list[str],
     profiles_by_key: dict[str, UserInterestProfile],
+    *,
+    stale_provider_keys: set[str] | None = None,
 ) -> float:
+    stale_provider_keys = stale_provider_keys or set()
     blob = " ".join(
         filter(
             None,
@@ -748,7 +765,7 @@ def _category_affinity(
 
     matching_weights: list[float] = []
     for topic_key, topic in profiles_by_key.items():
-        if topic.muted:
+        if topic.muted or _topic_is_from_stale_provider(topic, stale_provider_keys):
             continue
         hints = TOPIC_CATEGORY_HINTS.get(topic_key, [])
         if any(hint in blob for hint in hints):
@@ -1201,6 +1218,7 @@ def _candidate_score(
     *,
     category: str = "",
     tags: list[str] | None = None,
+    stale_provider_keys: set[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile]]:
     score, matched_topics, muted_topics, _ = _candidate_score_with_components(
         topic_keys,
@@ -1210,6 +1228,7 @@ def _candidate_score(
         budget_fit,
         category=category,
         tags=tags,
+        stale_provider_keys=stale_provider_keys,
     )
     return score, matched_topics, muted_topics
 
@@ -1223,9 +1242,21 @@ def _candidate_score_with_components(
     *,
     category: str = "",
     tags: list[str] | None = None,
+    stale_provider_keys: set[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile], CandidateScoreComponents]:
-    interest_fit, matched_topics, muted_topics = _interest_fit(topic_keys, profiles_by_key)
-    category_fit = _category_affinity(category, tags or [], profiles_by_key)
+    stale_provider_keys = stale_provider_keys or set()
+    baseline_interest_fit, _, _, _ = _interest_fit(topic_keys, profiles_by_key)
+    interest_fit, matched_topics, muted_topics, stale_topics = _interest_fit(
+        topic_keys,
+        profiles_by_key,
+        stale_provider_keys=stale_provider_keys,
+    )
+    category_fit = _category_affinity(
+        category,
+        tags or [],
+        profiles_by_key,
+        stale_provider_keys=stale_provider_keys,
+    )
     distance_fit = _distance_fit(transit_minutes)
     weighted_interest = interest_fit * 0.64
     weighted_category = category_fit * 0.15
@@ -1255,6 +1286,10 @@ def _candidate_score_with_components(
             weighted_distance=weighted_distance,
             weighted_budget=weighted_budget,
             weighted_source=weighted_source,
+            stale_provider_adjustment=round((interest_fit - baseline_interest_fit) * 0.64, 3)
+            if stale_topics
+            else 0.0,
+            stale_provider_labels=sorted({topic.label for topic in stale_topics}),
         ),
     )
 
@@ -1348,6 +1383,22 @@ def _score_breakdown_items(
                 "contribution": round(components.weighted_category, 3),
                 "direction": "positive",
                 "summaryLabel": "category overlap",
+            }
+        )
+
+    if components.stale_provider_adjustment <= -0.015 and components.stale_provider_labels:
+        items.append(
+            {
+                "key": "stale_provider_guard",
+                "label": "Provider freshness",
+                "impactLabel": _impact_label(components.stale_provider_adjustment),
+                "detail": (
+                    "Latest Spotify sync failed, so Pulse suppressed stale "
+                    f"{_join_labels(components.stale_provider_labels)} signals for this run."
+                ),
+                "contribution": components.stale_provider_adjustment,
+                "direction": "negative",
+                "summaryLabel": "stale Spotify taste",
             }
         )
 
@@ -1504,6 +1555,14 @@ def _latest_profile_runs_by_provider(runs: list[ProfileRun]) -> dict[str, Profil
         if current is None or _timestamp_utc(run.created_at) > _timestamp_utc(current.created_at):
             latest[run.provider] = run
     return latest
+
+
+def _stale_interest_provider_keys(latest_runs_by_provider: dict[str, ProfileRun]) -> set[str]:
+    return {
+        provider
+        for provider, run in latest_runs_by_provider.items()
+        if provider == "spotify" and run.status != "completed"
+    }
 
 
 def _profile_run_health_reason(run: ProfileRun | None) -> str | None:
@@ -2124,6 +2183,22 @@ async def _catalog_changed_since(
     return _timestamp_utc(latest_occurrence_update) > _timestamp_utc(run.created_at)
 
 
+async def _profile_runs_changed_since(
+    session: AsyncSession,
+    user_id: str,
+    run: RecommendationRun,
+) -> bool:
+    latest_profile_run_update = await session.scalar(
+        select(ProfileRun.created_at)
+        .where(ProfileRun.user_id == user_id)
+        .order_by(desc(ProfileRun.created_at))
+        .limit(1)
+    )
+    if latest_profile_run_update is None:
+        return False
+    return _timestamp_utc(latest_profile_run_update) > _timestamp_utc(run.created_at)
+
+
 async def _replace_user_runs(session: AsyncSession, user_id: str) -> None:
     runs = await _latest_runs(
         session,
@@ -2174,6 +2249,7 @@ async def refresh_recommendations_for_user(
         and not _run_is_stale(existing_run)
         and not _run_context_changed(existing_run, anchor, constraints)
         and not await _catalog_changed_since(session, existing_run)
+        and not await _profile_runs_changed_since(session, user.id, existing_run)
     ):
         return existing_run
 
@@ -2183,6 +2259,21 @@ async def refresh_recommendations_for_user(
         await session.scalars(select(UserInterestProfile).where(UserInterestProfile.user_id == user.id))
     ).all()
     profiles_by_key = {row.topic_key: row for row in topic_rows}
+    profile_runs = list(
+        (
+            await session.scalars(
+                select(ProfileRun)
+                .where(ProfileRun.user_id == user.id)
+                .order_by(ProfileRun.created_at.desc())
+            )
+        ).all()
+    )
+    stale_provider_keys = _stale_interest_provider_keys(_latest_profile_runs_by_provider(profile_runs))
+    effective_profiles_by_key = {
+        key: topic
+        for key, topic in profiles_by_key.items()
+        if not _topic_is_from_stale_provider(topic, stale_provider_keys)
+    }
     feedback_signals = await _feedback_signals(session, user.id)
 
     occurrence_rows = (
@@ -2218,6 +2309,7 @@ async def refresh_recommendations_for_user(
             budget_fit,
             category=event.category,
             tags=metadata.get("tags", []),
+            stale_provider_keys=stale_provider_keys,
         )
         feedback_adjustment, feedback_reason = _feedback_adjustment(
             topic_keys=topic_keys,
@@ -2248,7 +2340,7 @@ async def refresh_recommendations_for_user(
             "score_band": _score_band(adjusted_score),
             "category": event.category,
             "topic_keys": topic_keys,
-            "dominant_topic_key": _dominant_topic_key(topic_keys, profiles_by_key),
+            "dominant_topic_key": _dominant_topic_key(topic_keys, effective_profiles_by_key),
             "reasons": _reason_items(
                 matched_topics=matched_topics,
                 muted_topics=muted_topics,
@@ -2281,7 +2373,7 @@ async def refresh_recommendations_for_user(
         reverse=True,
     )
 
-    selected_ranked_venues = _select_ranked_venues(ranked_venues, profiles_by_key, limit=8)
+    selected_ranked_venues = _select_ranked_venues(ranked_venues, effective_profiles_by_key, limit=8)
 
     for rank, entries in enumerate(selected_ranked_venues, start=1):
         primary = entries[0]
