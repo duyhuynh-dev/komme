@@ -165,6 +165,12 @@ class TonightPlannerResponse(BaseModel):
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
 
+EventPlanFallbackOption = TonightPlannerFallbackOption
+EventPlanRerouteOption = TonightPlannerRerouteOption
+EventPlanStop = TonightPlannerStop
+EventPlanResponse = TonightPlannerResponse
+
+
 class RecommendationsMapResponse(BaseModel):
     viewport: MapViewport
     pins: list[MapVenuePin]
@@ -174,6 +180,7 @@ class RecommendationsMapResponse(BaseModel):
     userConstraint: dict
     mapContext: MapContext = Field(default_factory=MapContext)
     tonightPlanner: TonightPlannerResponse = Field(default_factory=TonightPlannerResponse)
+    eventPlan: EventPlanResponse = Field(default_factory=EventPlanResponse)
 
 
 class RecommendationDriverSummary(BaseModel):

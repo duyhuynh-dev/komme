@@ -2438,6 +2438,7 @@ async def get_map_recommendations(
         },
         mapContext=_build_map_context(anchor_resolution),
         tonightPlanner=tonight_planner,
+        eventPlan=tonight_planner,
     )
 
 

@@ -247,6 +247,7 @@ export function PulseShell() {
     surfaceStatus ??
     mapQuery.data?.mapContext?.fallbackReason ??
     (!isAuthenticated ? "Open Profile to sign in, save this map, and keep setup tucked behind Settings." : null);
+  const eventPlan = mapQuery.data?.eventPlan ?? mapQuery.data?.tonightPlanner;
   const comparisonByVenueId: Record<string, RecommendationRunComparisonItem> = {};
   for (const item of [
     ...(comparisonQuery.data?.newEntrants ?? []),
@@ -437,7 +438,7 @@ export function PulseShell() {
 
             <TonightPlannerPanel
               loading={mapQuery.isLoading}
-              planner={mapQuery.data?.tonightPlanner}
+              planner={eventPlan}
               timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
               selectedVenueId={selectedVenueId}
               onSelectVenue={setSelectedVenueId}
@@ -448,7 +449,7 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: stop.eventId,
                   action: "planner_commit",
-                  plannerSessionId: mapQuery.data?.tonightPlanner.sessionId,
+                  plannerSessionId: eventPlan?.sessionId,
                   metadata: { venueId: stop.venueId, venueName: stop.venueName, role: stop.role },
                 });
               }}
@@ -457,7 +458,7 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
-                  plannerSessionId: mapQuery.data?.tonightPlanner.sessionId,
+                  plannerSessionId: eventPlan?.sessionId,
                   metadata: { venueId: option.venueId, venueName: option.venueName, sourceKind: "fallback" },
                 });
               }}
@@ -466,14 +467,14 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
-                  plannerSessionId: mapQuery.data?.tonightPlanner.sessionId,
+                  plannerSessionId: eventPlan?.sessionId,
                   metadata: { venueId: option.venueId, venueName: option.venueName, sourceKind: option.sourceKind },
                   successMessage: `Pulse rerouted tonight toward ${option.venueName}.`,
                 });
               }}
               onMarkOutcome={(action) => {
-                const recommendationId = mapQuery.data?.tonightPlanner?.activeTargetEventId;
-                const venueName = mapQuery.data?.tonightPlanner?.activeTargetVenueName;
+                const recommendationId = eventPlan?.activeTargetEventId;
+                const venueName = eventPlan?.activeTargetVenueName;
                 if (!recommendationId || !venueName) {
                   return;
                 }
@@ -481,7 +482,7 @@ export function PulseShell() {
                   recommendationId,
                   action,
                   venueName,
-                  plannerSessionId: mapQuery.data?.tonightPlanner.sessionId,
+                  plannerSessionId: eventPlan?.sessionId,
                   metadata: { venueName },
                 });
               }}

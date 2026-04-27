@@ -1236,6 +1236,9 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
         assert response.tonightPlanner.sessionStatus == "active"
         assert response.tonightPlanner.activeStop is not None
         assert response.tonightPlanner.remainingStops[0].eventId == occurrence.id
+        assert response.eventPlan.sessionId == response.tonightPlanner.sessionId
+        assert response.eventPlan.remainingStops[0].eventId == occurrence.id
+        assert response.eventPlan.summary == "Test planner"
         assert len(planner_sessions) == 1
         assert planner_session_events[0].event_type == PLANNER_EVENT_SESSION_CREATED
         assert captured["item_count"] == 1

@@ -181,6 +181,11 @@ export interface TonightPlannerResponse {
   stops: TonightPlannerStop[];
 }
 
+export type EventPlanFallbackOption = TonightPlannerFallbackOption;
+export type EventPlanRerouteOption = TonightPlannerRerouteOption;
+export type EventPlanStop = TonightPlannerStop;
+export type EventPlanResponse = TonightPlannerResponse;
+
 export interface FeedbackReason {
   key: string;
   label: string;
@@ -243,6 +248,7 @@ export interface RecommendationsMapResponse {
   userConstraint: UserConstraint;
   mapContext: MapContext;
   tonightPlanner: TonightPlannerResponse;
+  eventPlan?: EventPlanResponse;
 }
 
 export interface RecommendationDriverSummary {
