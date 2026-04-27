@@ -1,4 +1,6 @@
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -47,6 +49,33 @@ class FeedbackEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recommendation_id: Mapped[str] = mapped_column(String(255), index=True)
     action: Mapped[str] = mapped_column(String(32))
     reasons_json: Mapped[list[dict]] = mapped_column(JSON, default=list)
+
+
+class PlannerSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "planner_sessions"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    recommendation_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("recommendation_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recommendation_context_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    initial_route_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    active_stop_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    budget_level: Mapped[str] = mapped_column(String(32), default="under_75")
+    timezone: Mapped[str] = mapped_column(String(64), default="America/New_York")
+
+
+class PlannerSessionEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "planner_session_events"
+
+    session_id: Mapped[str] = mapped_column(ForeignKey("planner_sessions.id", ondelete="CASCADE"), index=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    recommendation_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class DigestDelivery(UUIDPrimaryKeyMixin, TimestampMixin, Base):

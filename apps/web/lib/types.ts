@@ -169,6 +169,13 @@ export interface TonightPlannerResponse {
   rerouteStatus: "idle" | "available" | "unavailable";
   rerouteNote?: string | null;
   rerouteOption?: TonightPlannerRerouteOption | null;
+  sessionId?: string | null;
+  sessionStatus?: "active" | "completed" | "exhausted" | string | null;
+  activeStop?: TonightPlannerStop | null;
+  remainingStops: TonightPlannerStop[];
+  droppedStops: TonightPlannerStop[];
+  recompositionReason?: string | null;
+  lastEventAt?: string | null;
   stops: TonightPlannerStop[];
 }
 

@@ -203,6 +203,8 @@ export function submitFeedback(
 export function submitRecommendationInteractions(
   events: Array<{
     recommendationId: string;
+    plannerSessionId?: string | null;
+    metadata?: Record<string, unknown>;
     action:
       | "exposed"
       | "opened"

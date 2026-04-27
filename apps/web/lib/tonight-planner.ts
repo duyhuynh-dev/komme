@@ -15,6 +15,13 @@ export interface TonightPlannerPanelState {
   rerouteStatus: TonightPlannerResponse["rerouteStatus"];
   rerouteNote: string | null;
   rerouteOption: TonightPlannerRerouteOption | null;
+  sessionId: string | null;
+  sessionStatus: TonightPlannerResponse["sessionStatus"];
+  activeStop: TonightPlannerStop | null;
+  remainingStops: TonightPlannerStop[];
+  droppedStops: TonightPlannerStop[];
+  recompositionReason: string | null;
+  lastEventAt: string | null;
   stopCountLabel: string | null;
   fallbackCount: number;
   stops: TonightPlannerStop[];
@@ -41,6 +48,13 @@ export function buildTonightPlannerPanelState(
       rerouteStatus: planner?.rerouteStatus ?? "idle",
       rerouteNote: planner?.rerouteNote ?? null,
       rerouteOption: planner?.rerouteOption ?? null,
+      sessionId: planner?.sessionId ?? null,
+      sessionStatus: planner?.sessionStatus ?? null,
+      activeStop: planner?.activeStop ?? null,
+      remainingStops: planner?.remainingStops ?? [],
+      droppedStops: planner?.droppedStops ?? [],
+      recompositionReason: planner?.recompositionReason ?? null,
+      lastEventAt: planner?.lastEventAt ?? null,
       stopCountLabel: null,
       fallbackCount: 0,
       stops: [],
@@ -67,6 +81,13 @@ export function buildTonightPlannerPanelState(
     rerouteStatus: planner.rerouteStatus,
     rerouteNote: planner.rerouteNote ?? null,
     rerouteOption: planner.rerouteOption ?? null,
+    sessionId: planner.sessionId ?? null,
+    sessionStatus: planner.sessionStatus ?? null,
+    activeStop: planner.activeStop ?? null,
+    remainingStops: planner.remainingStops ?? planner.stops,
+    droppedStops: planner.droppedStops ?? [],
+    recompositionReason: planner.recompositionReason ?? null,
+    lastEventAt: planner.lastEventAt ?? null,
     stopCountLabel,
     fallbackCount,
     stops: planner.stops,

@@ -13,6 +13,8 @@ from app.models.recommendation import (
     PLANNER_SKIPPED_FEEDBACK_ACTION,
     PLANNER_SWAP_FEEDBACK_ACTION,
     FeedbackEvent,
+    PlannerSession,
+    PlannerSessionEvent,
     RecommendationRun,
     VenueRecommendation,
 )
@@ -28,6 +30,17 @@ from app.schemas.recommendations import (
     VenueRecommendationCard,
 )
 from app.services.planner import build_tonight_planner
+from app.services.planner_sessions import (
+    PLANNER_EVENT_ROUTE_RECOMPUTED,
+    PLANNER_EVENT_SESSION_CREATED,
+    PLANNER_EVENT_STOP_LOCKED,
+    PLANNER_EVENT_STOP_SKIPPED,
+    append_planner_session_event,
+    get_or_create_planner_session,
+    list_planner_session_events,
+    recompose_remaining_route,
+    reduce_planner_session,
+)
 from app.services.recommendations import get_map_recommendations
 
 
@@ -430,6 +443,199 @@ def test_build_tonight_planner_suggests_reroute_after_skipped_stop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_planner_session_reducer_tracks_execution_events() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-session@example.com")
+        session.add(user)
+        await session.flush()
+
+        now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
+        planner = build_tonight_planner(
+            [
+                _planner_card(
+                    venue_id="pregame-venue",
+                    venue_name="Night Cafe",
+                    neighborhood="Lower East Side",
+                    starts_at="2026-04-25T23:15:00+00:00",
+                    score=0.78,
+                    score_band="high",
+                    price_label="$18",
+                    source_confidence=0.84,
+                    transit_minutes=12,
+                ),
+                _planner_card(
+                    venue_id="main-venue",
+                    venue_name="Elsewhere",
+                    neighborhood="Bushwick",
+                    starts_at="2026-04-26T01:00:00+00:00",
+                    score=0.92,
+                    score_band="high",
+                    price_label="$35",
+                    source_confidence=0.91,
+                    transit_minutes=24,
+                ),
+                _planner_card(
+                    venue_id="late-venue",
+                    venue_name="Mood Ring",
+                    neighborhood="Bushwick",
+                    starts_at="2026-04-26T03:55:00+00:00",
+                    score=0.75,
+                    score_band="high",
+                    price_label="$22",
+                    source_confidence=0.83,
+                    transit_minutes=26,
+                ),
+            ],
+            [
+                _planner_pin(venue_id="pregame-venue", venue_name="Night Cafe", latitude=40.7206, longitude=-73.9874),
+                _planner_pin(venue_id="main-venue", venue_name="Elsewhere", latitude=40.7082, longitude=-73.9232),
+                _planner_pin(venue_id="late-venue", venue_name="Mood Ring", latitude=40.7136, longitude=-73.9318),
+            ],
+            budget_level="under_75",
+            timezone="America/New_York",
+            now_utc=now_utc,
+        )
+
+        planner_session = await get_or_create_planner_session(
+            session,
+            user_id=user.id,
+            recommendation_run_id=None,
+            recommendation_context_hash="session-test",
+            planner=planner,
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        assert planner_session is not None
+
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_STOP_LOCKED,
+            recommendation_id="main-venue-event",
+        )
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_STOP_SKIPPED,
+            recommendation_id="main-venue-event",
+        )
+        recomposition = recompose_remaining_route(
+            reduce_planner_session(
+                planner_session,
+                await list_planner_session_events(session, planner_session.id),
+            ),
+            now_utc=datetime(2026, 4, 26, 0, 30, tzinfo=UTC),
+        )
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_ROUTE_RECOMPUTED,
+            recommendation_id=recomposition.active_stop_event_id,
+            metadata={
+                "activeStopEventId": recomposition.active_stop_event_id,
+                "sessionStatus": recomposition.session_status,
+                "remainingStops": [stop.model_dump(mode="json") for stop in recomposition.remaining_stops],
+                "droppedStops": [stop.model_dump(mode="json") for stop in recomposition.dropped_stops],
+                "replacements": [stop.model_dump(mode="json") for stop in recomposition.replacements],
+                "reason": recomposition.reason,
+            },
+        )
+
+        events = await list_planner_session_events(session, planner_session.id)
+        state = reduce_planner_session(planner_session, events)
+
+        assert [event.event_type for event in events] == [
+            PLANNER_EVENT_SESSION_CREATED,
+            PLANNER_EVENT_STOP_LOCKED,
+            PLANNER_EVENT_STOP_SKIPPED,
+            PLANNER_EVENT_ROUTE_RECOMPUTED,
+        ]
+        assert "main-venue-event" in state.skipped_event_ids
+        assert state.active_stop_event_id == "late-venue-event"
+        assert state.remaining_stops[0].eventId == "late-venue-event"
+        assert "timing" in (state.recomposition_reason or "").lower()
+
+    await engine.dispose()
+
+
+def test_recompose_remaining_route_uses_fallback_when_active_stop_is_exhausted() -> None:
+    main_stop = TonightPlannerStop(
+        role="main_event",
+        roleLabel="Main event",
+        venueId="main-venue",
+        venueName="Elsewhere",
+        eventId="main-event",
+        eventTitle="Headliner",
+        neighborhood="Bushwick",
+        startsAt="2026-04-26T01:00:00+00:00",
+        priceLabel="$35",
+        scoreBand="medium",
+        hopLabel="24 min transit",
+        roleReason="Anchor",
+        confidence="medium",
+        confidenceLabel="Good fit",
+        confidenceReason="Solid anchor.",
+        selected=True,
+        fallbacks=[
+            {
+                "venueId": "backup-venue",
+                "venueName": "Good Room",
+                "eventId": "backup-event",
+                "eventTitle": "Backup set",
+                "neighborhood": "Greenpoint",
+                "startsAt": "2026-04-26T01:20:00+00:00",
+                "priceLabel": "$28",
+                "scoreBand": "high",
+                "hopLabel": "16 min transit",
+                "fallbackReason": "Use this if Elsewhere falls through.",
+                "selected": False,
+            }
+        ],
+    )
+    state = reduce_planner_session(
+        PlannerSession(
+            id="session-1",
+            user_id="user-1",
+            recommendation_context_hash="hash",
+            initial_route_snapshot={"stops": [main_stop.model_dump(mode="json")]},
+            active_stop_event_id="main-event",
+            status="active",
+            budget_level="under_75",
+            timezone="America/New_York",
+        ),
+        [
+            PlannerSessionEvent(
+                session_id="session-1",
+                event_type=PLANNER_EVENT_SESSION_CREATED,
+                recommendation_id="main-event",
+                metadata_json={"activeStopEventId": "main-event"},
+                created_at=datetime(2026, 4, 25, 22, 0, tzinfo=UTC),
+            ),
+            PlannerSessionEvent(
+                session_id="session-1",
+                event_type=PLANNER_EVENT_STOP_SKIPPED,
+                recommendation_id="main-event",
+                metadata_json={},
+                created_at=datetime(2026, 4, 25, 22, 5, tzinfo=UTC),
+            ),
+        ],
+    )
+
+    recomposition = recompose_remaining_route(state, now_utc=datetime(2026, 4, 25, 22, 10, tzinfo=UTC))
+
+    assert recomposition.active_stop_event_id == "backup-event"
+    assert recomposition.remaining_stops[0].venueName == "Good Room"
+    assert recomposition.dropped_stops[0].eventId == "main-event"
+    assert recomposition.replacements[0].eventId == "backup-event"
+
+
+@pytest.mark.asyncio
 async def test_recommendation_interactions_accept_planner_actions() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -441,14 +647,45 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
         user = User(email="planner-actions@example.com")
         session.add(user)
         await session.flush()
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="interaction-test",
+            initial_route_snapshot={"stops": []},
+            active_stop_event_id="rec-1",
+            status="active",
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
 
         payload = RecommendationInteractionsPayload(
             events=[
-                {"recommendationId": "rec-1", "action": PLANNER_COMMIT_FEEDBACK_ACTION},
-                {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
-                {"recommendationId": "rec-2", "action": PLANNER_SWAP_FEEDBACK_ACTION},
-                {"recommendationId": "rec-2", "action": PLANNER_ATTENDED_FEEDBACK_ACTION},
-                {"recommendationId": "rec-3", "action": PLANNER_SKIPPED_FEEDBACK_ACTION},
+                {
+                    "recommendationId": "rec-1",
+                    "action": PLANNER_COMMIT_FEEDBACK_ACTION,
+                    "plannerSessionId": planner_session.id,
+                },
+                {
+                    "recommendationId": "rec-2",
+                    "action": PLANNER_SWAP_FEEDBACK_ACTION,
+                    "plannerSessionId": planner_session.id,
+                },
+                {
+                    "recommendationId": "rec-2",
+                    "action": PLANNER_SWAP_FEEDBACK_ACTION,
+                    "plannerSessionId": planner_session.id,
+                },
+                {
+                    "recommendationId": "rec-2",
+                    "action": PLANNER_ATTENDED_FEEDBACK_ACTION,
+                    "plannerSessionId": planner_session.id,
+                },
+                {
+                    "recommendationId": "rec-3",
+                    "action": PLANNER_SKIPPED_FEEDBACK_ACTION,
+                    "plannerSessionId": planner_session.id,
+                },
                 {"recommendationId": "rec-3", "action": "unknown_action"},
             ]
         )
@@ -461,6 +698,7 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
         await session.commit()
 
         feedback_rows = list((await session.scalars(select(FeedbackEvent))).all())
+        planner_event_rows = list((await session.scalars(select(PlannerSessionEvent))).all())
 
         assert len(feedback_rows) == 4
         assert {row.action for row in feedback_rows} == {
@@ -468,6 +706,10 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
             PLANNER_COMMIT_FEEDBACK_ACTION,
             PLANNER_SKIPPED_FEEDBACK_ACTION,
             PLANNER_SWAP_FEEDBACK_ACTION,
+        }
+        assert {row.event_type for row in planner_event_rows} >= {
+            PLANNER_EVENT_STOP_LOCKED,
+            PLANNER_EVENT_ROUTE_RECOMPUTED,
         }
 
 
@@ -635,14 +877,23 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
 
         response = await get_map_recommendations(session, user)
 
+        planner_sessions = list((await session.scalars(select(PlannerSession))).all())
+        planner_session_events = list((await session.scalars(select(PlannerSessionEvent))).all())
+
         assert response.tonightPlanner.summary == "Test planner"
+        assert response.tonightPlanner.sessionId == planner_sessions[0].id
+        assert response.tonightPlanner.sessionStatus == "active"
+        assert response.tonightPlanner.activeStop is not None
+        assert response.tonightPlanner.remainingStops[0].eventId == occurrence.id
+        assert len(planner_sessions) == 1
+        assert planner_session_events[0].event_type == PLANNER_EVENT_SESSION_CREATED
         assert captured["item_count"] == 1
         assert captured["pin_count"] == 1
         assert captured["budget_level"] == "under_30"
         assert captured["timezone"] == "America/New_York"
-        assert captured["selected_recommendation_id"] == occurrence.id
-        assert captured["selected_action"] == PLANNER_COMMIT_FEEDBACK_ACTION
-        assert captured["outcome_recommendation_id"] == occurrence.id
-        assert captured["outcome_action"] == PLANNER_ATTENDED_FEEDBACK_ACTION
+        assert captured["selected_recommendation_id"] is None
+        assert captured["selected_action"] is None
+        assert captured["outcome_recommendation_id"] is None
+        assert captured["outcome_action"] is None
 
     await engine.dispose()

@@ -153,6 +153,13 @@ class TonightPlannerResponse(BaseModel):
     rerouteStatus: str = "idle"
     rerouteNote: str | None = None
     rerouteOption: TonightPlannerRerouteOption | None = None
+    sessionId: str | None = None
+    sessionStatus: str | None = None
+    activeStop: TonightPlannerStop | None = None
+    remainingStops: list[TonightPlannerStop] = Field(default_factory=list)
+    droppedStops: list[TonightPlannerStop] = Field(default_factory=list)
+    recompositionReason: str | None = None
+    lastEventAt: str | None = None
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
 
@@ -278,6 +285,8 @@ class FeedbackPayload(BaseModel):
 class RecommendationInteractionEvent(BaseModel):
     recommendationId: str
     action: str
+    plannerSessionId: str | None = None
+    metadata: dict = Field(default_factory=dict)
 
 
 class RecommendationInteractionsPayload(BaseModel):

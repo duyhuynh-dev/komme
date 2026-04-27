@@ -41,6 +41,7 @@ from app.schemas.recommendations import (
     VenueRecommendationCard,
 )
 from app.services.planner import build_tonight_planner
+from app.services.planner_sessions import apply_planner_session_state, get_or_create_planner_session
 from app.services.travel import estimate_travel_bands
 
 DEFAULT_VIEWPORT = {
@@ -2388,22 +2389,37 @@ async def get_map_recommendations(
     if not items:
         return _empty_response(display_timezone)
 
-    latest_planner_execution = await _latest_planner_execution(session, user.id)
-    latest_planner_outcome = await _latest_planner_outcome(session, user.id)
+    topic_rows = (
+        await session.scalars(select(UserInterestProfile).where(UserInterestProfile.user_id == user.id))
+    ).all()
+    context_hash = _context_hash(
+        run=run,
+        resolution=anchor_resolution,
+        constraints=constraints,
+        topics=list(topic_rows),
+        items=items,
+    )
     tonight_planner = build_tonight_planner(
         items,
         pins,
         budget_level=constraints.budget_level if constraints else "under_75",
         timezone=display_timezone,
-        selected_recommendation_id=(
-            latest_planner_execution.recommendation_id if latest_planner_execution is not None else None
-        ),
-        selected_action=latest_planner_execution.action if latest_planner_execution is not None else None,
-        outcome_recommendation_id=(
-            latest_planner_outcome.recommendation_id if latest_planner_outcome is not None else None
-        ),
-        outcome_action=latest_planner_outcome.action if latest_planner_outcome is not None else None,
     )
+    planner_session = await get_or_create_planner_session(
+        session,
+        user_id=user.id,
+        recommendation_run_id=run.id,
+        recommendation_context_hash=context_hash,
+        planner=tonight_planner,
+        budget_level=constraints.budget_level if constraints else "under_75",
+        timezone=display_timezone,
+    )
+    tonight_planner = await apply_planner_session_state(
+        session,
+        planner=tonight_planner,
+        planner_session=planner_session,
+    )
+    await session.commit()
 
     return RecommendationsMapResponse(
         viewport=run.viewport_json,

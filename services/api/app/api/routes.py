@@ -60,6 +60,7 @@ from app.services.digest import (
     send_due_weekly_digests,
 )
 from app.services.ingestion import upsert_ingested_candidates
+from app.services.planner_sessions import append_planner_action_event
 from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import (
     get_archive,
@@ -635,6 +636,14 @@ async def recommendation_interactions(
         if not recommendation_id or action not in allowed_actions or key in seen:
             continue
         seen.add(key)
+        await append_planner_action_event(
+            session,
+            user_id=user.id,
+            planner_session_id=event.plannerSessionId,
+            action=action,
+            recommendation_id=recommendation_id,
+            metadata=event.metadata,
+        )
         session.add(
             FeedbackEvent(
                 user_id=user.id,
@@ -645,6 +654,7 @@ async def recommendation_interactions(
         )
 
     await session.flush()
+    await session.commit()
     return OkResponse()
 
 

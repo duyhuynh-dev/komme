@@ -110,6 +110,11 @@ export function TonightPlannerPanel({
             {panelState.executionNote}
           </div>
         ) : null}
+        {panelState.sessionId && panelState.recompositionReason ? (
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            {panelState.recompositionReason}
+          </p>
+        ) : null}
         {panelState.activeTargetVenueName && outcomePrompt ? (
           <div className="mt-3 rounded-[1.5rem] border border-stroke/80 bg-white/80 p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

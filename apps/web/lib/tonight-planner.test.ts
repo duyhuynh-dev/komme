@@ -98,6 +98,58 @@ test("buildTonightPlannerPanelState returns a populated planner view model", () 
   assert.equal(state.stops[1].venueName, "Elsewhere");
 });
 
+test("buildTonightPlannerPanelState carries planner session recomposition state", () => {
+  const stop: TonightPlannerResponse["stops"][number] = {
+    role: "main_event",
+    roleLabel: "Main event",
+    venueId: "main-venue",
+    venueName: "Elsewhere",
+    eventId: "main-event",
+    eventTitle: "Headliner set",
+    neighborhood: "Bushwick",
+    startsAt: "2026-04-26T01:00:00+00:00",
+    priceLabel: "$35",
+    scoreBand: "high",
+    hopLabel: "18 min transit",
+    roleReason: "Strongest anchor from the shortlist.",
+    confidence: "high",
+    confidenceLabel: "Confident anchor",
+    confidenceReason: "Best mix of timing and trust.",
+    selected: true,
+    fallbacks: [],
+  };
+  const planner: TonightPlannerResponse = {
+    status: "ready",
+    title: "Tonight planner",
+    summary: "Route recomposed.",
+    planningNote: null,
+    executionStatus: "locked",
+    executionNote: null,
+    activeTargetEventId: "main-event",
+    activeTargetVenueName: "Elsewhere",
+    outcomeStatus: "pending",
+    outcomeNote: null,
+    rerouteStatus: "idle",
+    rerouteNote: null,
+    rerouteOption: null,
+    sessionId: "session-1",
+    sessionStatus: "active",
+    activeStop: stop,
+    remainingStops: [stop],
+    droppedStops: [],
+    recompositionReason: "Pulse recomposed the remaining route around live timing.",
+    lastEventAt: "2026-04-26T00:30:00+00:00",
+    stops: [stop],
+  };
+
+  const state = buildTonightPlannerPanelState(planner);
+
+  assert.equal(state.sessionId, "session-1");
+  assert.equal(state.activeStop?.eventId, "main-event");
+  assert.equal(state.remainingStops.length, 1);
+  assert.equal(state.recompositionReason, "Pulse recomposed the remaining route around live timing.");
+});
+
 test("buildTonightPlannerPanelState returns the empty planner copy when no viable plan exists", () => {
   const planner: TonightPlannerResponse = {
     status: "empty",
