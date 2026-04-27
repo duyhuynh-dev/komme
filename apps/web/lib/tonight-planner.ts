@@ -21,6 +21,7 @@ export interface TonightPlannerPanelState {
   remainingStops: TonightPlannerStop[];
   droppedStops: TonightPlannerStop[];
   recompositionReason: string | null;
+  lastRecomputedAt: string | null;
   lifecycleReason: string | null;
   createdFreshBecauseStale: boolean;
   lastEventAt: string | null;
@@ -56,6 +57,7 @@ export function buildTonightPlannerPanelState(
       remainingStops: planner?.remainingStops ?? [],
       droppedStops: planner?.droppedStops ?? [],
       recompositionReason: planner?.recompositionReason ?? null,
+      lastRecomputedAt: planner?.lastRecomputedAt ?? null,
       lifecycleReason: planner?.lifecycleReason ?? null,
       createdFreshBecauseStale: planner?.createdFreshBecauseStale ?? false,
       lastEventAt: planner?.lastEventAt ?? null,
@@ -91,6 +93,7 @@ export function buildTonightPlannerPanelState(
     remainingStops: planner.remainingStops ?? planner.stops,
     droppedStops: planner.droppedStops ?? [],
     recompositionReason: planner.recompositionReason ?? null,
+    lastRecomputedAt: planner.lastRecomputedAt ?? null,
     lifecycleReason: planner.lifecycleReason ?? null,
     createdFreshBecauseStale: planner.createdFreshBecauseStale ?? false,
     lastEventAt: planner.lastEventAt ?? null,

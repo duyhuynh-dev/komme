@@ -58,12 +58,14 @@ class PlannerSessionState:
     plan_window_label: str | None = None
     attended_event_ids: set[str] = field(default_factory=set)
     skipped_event_ids: set[str] = field(default_factory=set)
+    replaced_event_ids: set[str] = field(default_factory=set)
     locked_event_ids: set[str] = field(default_factory=set)
     swapped_event_ids: set[str] = field(default_factory=set)
     remaining_stops: list[TonightPlannerStop] = field(default_factory=list)
     dropped_stops: list[TonightPlannerStop] = field(default_factory=list)
     replacements: list[TonightPlannerStop] = field(default_factory=list)
     recomposition_reason: str | None = None
+    last_recomputed_at: datetime | None = None
     lifecycle_reason: str | None = None
     created_fresh_because_stale: bool = False
     replaced_session_id: str | None = None
@@ -222,6 +224,10 @@ async def append_planner_action_event(
     if planner_session.status != PLANNER_SESSION_ACTIVE:
         return None
 
+    previous_events = await list_planner_session_events(session, planner_session.id)
+    previous_state = reduce_planner_session(planner_session, previous_events)
+    previous_route = [_stop_dump(stop) for stop in previous_state.current_route]
+
     await append_planner_session_event(
         session,
         planner_session=planner_session,
@@ -232,14 +238,18 @@ async def append_planner_action_event(
 
     events = await list_planner_session_events(session, planner_session.id)
     state = reduce_planner_session(planner_session, events)
-    if event_type in {PLANNER_EVENT_STOP_SWAPPED, PLANNER_EVENT_STOP_ATTENDED, PLANNER_EVENT_STOP_SKIPPED}:
-        recomposition = recompose_remaining_route(state, now_utc=datetime.now(tz=UTC))
+    if event_type in {PLANNER_EVENT_STOP_SWAPPED, PLANNER_EVENT_STOP_SKIPPED}:
+        recomputed_at = datetime.now(tz=UTC)
+        recomposition = recompose_remaining_route(state, now_utc=recomputed_at)
         await append_planner_session_event(
             session,
             planner_session=planner_session,
             event_type=PLANNER_EVENT_ROUTE_RECOMPUTED,
             recommendation_id=recomposition.active_stop_event_id,
             metadata={
+                "trigger": action,
+                "previousRoute": previous_route,
+                "newRoute": [_stop_dump(stop) for stop in recomposition.remaining_stops],
                 "activeStopEventId": recomposition.active_stop_event_id,
                 "sessionStatus": recomposition.session_status,
                 "remainingStops": [_stop_dump(stop) for stop in recomposition.remaining_stops],
@@ -247,6 +257,7 @@ async def append_planner_action_event(
                 "replacements": [_stop_dump(stop) for stop in recomposition.replacements],
                 "reason": recomposition.reason,
                 "scores": recomposition.diagnostics,
+                "recomputedAt": recomputed_at.isoformat(),
             },
         )
         planner_session.active_stop_event_id = recomposition.active_stop_event_id
@@ -323,6 +334,7 @@ async def apply_planner_session_state(
     planner.remainingStops = state.remaining_stops
     planner.droppedStops = state.dropped_stops
     planner.recompositionReason = state.recomposition_reason
+    planner.lastRecomputedAt = _iso_or_none(state.last_recomputed_at)
     planner.lifecycleReason = state.lifecycle_reason
     planner.createdFreshBecauseStale = state.created_fresh_because_stale
     planner.lastEventAt = _iso_or_none(state.last_event_at)
@@ -369,7 +381,13 @@ def reduce_planner_session(
             state.active_stop_event_id = recommendation_id
         elif event.event_type == PLANNER_EVENT_STOP_SWAPPED and recommendation_id:
             state.swapped_event_ids.add(recommendation_id)
-            state.current_route = _route_with_swap(state.current_route, state.initial_stops, recommendation_id)
+            state.current_route, replaced_event_id = _route_with_swap(
+                state.current_route,
+                state.initial_stops,
+                recommendation_id,
+            )
+            if replaced_event_id:
+                state.replaced_event_ids.add(replaced_event_id)
             state.active_stop_event_id = recommendation_id
         elif event.event_type == PLANNER_EVENT_STOP_ATTENDED and recommendation_id:
             state.attended_event_ids.add(recommendation_id)
@@ -382,6 +400,7 @@ def reduce_planner_session(
             state.dropped_stops = _load_stops(metadata.get("droppedStops", []))
             state.replacements = _load_stops(metadata.get("replacements", []))
             state.recomposition_reason = metadata.get("reason")
+            state.last_recomputed_at = _parse_start(metadata.get("recomputedAt") or "") or event.created_at
             state.active_stop_event_id = metadata.get("activeStopEventId")
             state.session_status = metadata.get("sessionStatus") or state.session_status
             if state.remaining_stops:
@@ -417,44 +436,71 @@ def recompose_remaining_route(
     now_utc: datetime,
 ) -> PlannerRecomposition:
     previous_stop = _previous_context_stop(state)
-    exhausted_event_ids = state.attended_event_ids | state.skipped_event_ids
-    candidates = [
-        stop.model_copy(deep=True)
-        for stop in state.current_route
-        if stop.eventId not in exhausted_event_ids and _is_time_viable(stop, now_utc)
-    ]
-
+    exhausted_event_ids = state.attended_event_ids | state.skipped_event_ids | state.replaced_event_ids
+    plan_window = _state_plan_window(state)
+    active_route_index = _route_index(state.current_route, state.active_stop_event_id)
     replacements: list[TonightPlannerStop] = []
     dropped: list[TonightPlannerStop] = []
-    for stop in state.current_route:
+    candidates: list[TonightPlannerStop] = []
+    for index, stop in enumerate(state.current_route):
         if stop.eventId in state.attended_event_ids:
             continue
-        if stop.eventId in state.skipped_event_ids or not _is_time_viable(stop, now_utc):
+        if active_route_index is not None and index < active_route_index:
+            dropped.append(stop.model_copy(deep=True))
+            continue
+        if (
+            stop.eventId not in state.skipped_event_ids
+            and _is_time_viable(stop, now_utc)
+            and _is_in_plan_window(stop, plan_window)
+        ):
+            candidates.append(stop.model_copy(deep=True))
+            continue
+
+        if stop.eventId in state.skipped_event_ids or not _is_time_viable(stop, now_utc) or not _is_in_plan_window(stop, plan_window):
             dropped.append(stop.model_copy(deep=True))
             replacement = _best_fallback_replacement(
                 stop,
                 previous_stop=previous_stop,
                 exhausted_event_ids=exhausted_event_ids | {candidate.eventId for candidate in candidates},
                 now_utc=now_utc,
+                plan_window=plan_window,
             )
             if replacement is not None:
                 replacements.append(replacement)
                 candidates.append(replacement)
 
-    ranked = sorted(
-        candidates,
-        key=lambda stop: _remaining_stop_score(stop, previous_stop=previous_stop, now_utc=now_utc),
+    candidates = _dedupe_stops(candidates)
+    active_stop = _find_stop(candidates, state.active_stop_event_id)
+    if active_stop is None and candidates:
+        active_stop = max(
+            candidates,
+            key=lambda stop: _remaining_stop_score(stop, previous_stop=previous_stop, now_utc=now_utc),
+        )
+
+    downstream_context = active_stop or previous_stop
+    downstream = [
+        stop
+        for stop in candidates
+        if active_stop is None or stop.eventId != active_stop.eventId
+    ]
+    ranked_downstream = sorted(
+        downstream,
+        key=lambda stop: _remaining_stop_score(stop, previous_stop=downstream_context, now_utc=now_utc),
         reverse=True,
     )
-    ordered = _order_remaining_stops(ranked)
+    ordered = []
+    if active_stop is not None:
+        ordered.append(active_stop.model_copy(deep=True))
+    ordered.extend(_order_remaining_stops(ranked_downstream[:1]))
+
     active_stop_event_id = ordered[0].eventId if ordered else None
     for stop in ordered:
         stop.selected = stop.eventId == active_stop_event_id
 
     if ordered:
-        reason_parts = ["Pulse recomposed the remaining route around live timing"]
-        if previous_stop:
-            reason_parts.append(f"continuity from {previous_stop.venueName}")
+        reason_parts = ["Pulse recomposed the remaining route around live timing and continuity"]
+        if downstream_context:
+            reason_parts.append(f"continuity from {downstream_context.venueName}")
         if replacements:
             reason_parts.append(f"{len(replacements)} replacement option")
         if dropped:
@@ -473,7 +519,7 @@ def recompose_remaining_route(
         active_stop_event_id=active_stop_event_id,
         session_status=status,
         diagnostics=[
-            _score_diagnostics(stop, previous_stop=previous_stop, now_utc=now_utc)
+            _score_diagnostics(stop, previous_stop=downstream_context if stop.eventId != active_stop_event_id else previous_stop, now_utc=now_utc)
             for stop in ordered
         ],
     )
@@ -731,12 +777,12 @@ def _route_with_swap(
     current_route: list[TonightPlannerStop],
     initial_stops: list[TonightPlannerStop],
     recommendation_id: str,
-) -> list[TonightPlannerStop]:
+) -> tuple[list[TonightPlannerStop], str | None]:
     if _find_stop(current_route, recommendation_id):
-        return [stop.model_copy(deep=True) for stop in current_route]
+        return [stop.model_copy(deep=True) for stop in current_route], None
 
     for index, stop in enumerate(current_route):
-        fallback = _find_fallback([stop], recommendation_id) or _find_fallback(initial_stops, recommendation_id)
+        fallback = _find_fallback([stop], recommendation_id)
         if fallback is None:
             continue
         replacement = _fallback_to_stop(fallback, parent=stop)
@@ -744,8 +790,22 @@ def _route_with_swap(
             *(item.model_copy(deep=True) for item in current_route[:index]),
             replacement,
             *(item.model_copy(deep=True) for item in current_route[index + 1 :]),
-        ]
-    return [stop.model_copy(deep=True) for stop in current_route]
+        ], stop.eventId
+
+    for parent in initial_stops:
+        fallback = _find_fallback([parent], recommendation_id)
+        if fallback is None:
+            continue
+        parent_index = _route_index(current_route, parent.eventId)
+        if parent_index is None:
+            continue
+        replacement = _fallback_to_stop(fallback, parent=parent)
+        return [
+            *(item.model_copy(deep=True) for item in current_route[:parent_index]),
+            replacement,
+            *(item.model_copy(deep=True) for item in current_route[parent_index + 1 :]),
+        ], parent.eventId
+    return [stop.model_copy(deep=True) for stop in current_route], None
 
 
 def _fallback_to_stop(
@@ -778,6 +838,15 @@ def _find_stop(stops: list[TonightPlannerStop], event_id: str | None) -> Tonight
     if not event_id:
         return None
     return next((stop for stop in stops if stop.eventId == event_id), None)
+
+
+def _route_index(stops: list[TonightPlannerStop], event_id: str | None) -> int | None:
+    if not event_id:
+        return None
+    for index, stop in enumerate(stops):
+        if stop.eventId == event_id:
+            return index
+    return None
 
 
 def _find_fallback(
@@ -813,15 +882,31 @@ def _best_fallback_replacement(
     previous_stop: TonightPlannerStop | None,
     exhausted_event_ids: set[str],
     now_utc: datetime,
+    plan_window: tuple[datetime | None, datetime | None],
 ) -> TonightPlannerStop | None:
     options = [
         _fallback_to_stop(fallback, parent=stop)
         for fallback in stop.fallbacks
-        if fallback.eventId not in exhausted_event_ids and _is_time_viable(fallback, now_utc)
+        if (
+            fallback.eventId not in exhausted_event_ids
+            and _is_time_viable(fallback, now_utc)
+            and _is_in_plan_window(fallback, plan_window)
+        )
     ]
     if not options:
         return None
     return max(options, key=lambda option: _remaining_stop_score(option, previous_stop=previous_stop, now_utc=now_utc))
+
+
+def _dedupe_stops(stops: list[TonightPlannerStop]) -> list[TonightPlannerStop]:
+    seen: set[str] = set()
+    deduped: list[TonightPlannerStop] = []
+    for stop in stops:
+        if stop.eventId in seen:
+            continue
+        seen.add(stop.eventId)
+        deduped.append(stop)
+    return deduped
 
 
 def _order_remaining_stops(stops: list[TonightPlannerStop]) -> list[TonightPlannerStop]:
@@ -837,7 +922,7 @@ def _remaining_stop_score(
 ) -> float:
     score = 0.0
     score += {"high": 0.32, "medium": 0.22, "low": 0.12}.get(stop.scoreBand, 0.16)
-    score += {"high": 0.18, "medium": 0.12, "watch": 0.04}.get(stop.confidence, 0.08)
+    score += _confidence_fit(stop.confidence) * 0.18
     score += _budget_fit_for_label(stop.priceLabel) * 0.18
     score += _time_viability_score(stop, now_utc) * 0.14
     score += _hop_fit(stop.hopLabel) * 0.1
@@ -858,6 +943,7 @@ def _score_diagnostics(
     reasons = [
         f"{stop.scoreBand} shortlist band",
         f"{stop.confidence} planner confidence",
+        f"source confidence proxy {_confidence_fit(stop.confidence):.2f}",
         f"budget fit {_budget_fit_for_label(stop.priceLabel):.2f}",
         f"time viability {_time_viability_score(stop, now_utc):.2f}",
         f"travel continuity {_hop_fit(stop.hopLabel):.2f}",
@@ -885,6 +971,25 @@ def _is_time_viable(
     return starts_at >= now_utc - timedelta(minutes=30)
 
 
+def _state_plan_window(state: PlannerSessionState) -> tuple[datetime | None, datetime | None]:
+    return (_parse_start(state.plan_window_start or ""), _parse_start(state.plan_window_end or ""))
+
+
+def _is_in_plan_window(
+    stop: TonightPlannerStop | TonightPlannerFallbackOption,
+    plan_window: tuple[datetime | None, datetime | None],
+) -> bool:
+    starts_at = _parse_start(stop.startsAt)
+    if starts_at is None:
+        return False
+    window_start, window_end = plan_window
+    if window_start is not None and starts_at < window_start:
+        return False
+    if window_end is not None and starts_at > window_end:
+        return False
+    return True
+
+
 def _time_viability_score(stop: TonightPlannerStop, now_utc: datetime) -> float:
     starts_at = _parse_start(stop.startsAt)
     if starts_at is None:
@@ -895,6 +1000,10 @@ def _time_viability_score(stop: TonightPlannerStop, now_utc: datetime) -> float:
     if -30 <= minutes_until < 20 or 180 < minutes_until <= 300:
         return 0.72
     return 0.42
+
+
+def _confidence_fit(confidence: str) -> float:
+    return {"high": 1.0, "medium": 0.68, "watch": 0.38}.get(confidence, 0.5)
 
 
 def _parse_start(value: str) -> datetime | None:

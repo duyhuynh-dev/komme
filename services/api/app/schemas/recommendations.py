@@ -162,6 +162,7 @@ class TonightPlannerResponse(BaseModel):
     remainingStops: list[TonightPlannerStop] = Field(default_factory=list)
     droppedStops: list[TonightPlannerStop] = Field(default_factory=list)
     recompositionReason: str | None = None
+    lastRecomputedAt: str | None = None
     lifecycleReason: str | None = None
     createdFreshBecauseStale: bool = False
     lastEventAt: str | None = None

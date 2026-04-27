@@ -24,6 +24,7 @@ from app.schemas.recommendations import (
     MapVenuePin,
     RecommendationFreshness,
     RecommendationProvenance,
+    TonightPlannerFallbackOption,
     TonightPlannerResponse,
     TonightPlannerStop,
     TravelEstimate,
@@ -37,9 +38,11 @@ from app.services.planner_sessions import (
     PLANNER_EVENT_SESSION_EXPIRED,
     PLANNER_EVENT_STOP_LOCKED,
     PLANNER_EVENT_STOP_SKIPPED,
+    PLANNER_EVENT_STOP_SWAPPED,
     PLANNER_SESSION_ACTIVE,
     PLANNER_SESSION_COMPLETED,
     PLANNER_SESSION_EXPIRED,
+    append_planner_action_event,
     append_planner_session_event,
     evaluate_session_lifecycle,
     expire_stale_planner_sessions,
@@ -1152,6 +1155,186 @@ def test_recompose_remaining_route_uses_fallback_when_active_stop_is_exhausted()
     assert recomposition.remaining_stops[0].venueName == "Good Room"
     assert recomposition.dropped_stops[0].eventId == "main-event"
     assert recomposition.replacements[0].eventId == "backup-event"
+
+
+def test_recompose_remaining_route_after_swap_keeps_active_and_best_next_stop() -> None:
+    pregame = _planner_stop(
+        event_id="pregame-event",
+        venue_id="pregame-venue",
+        venue_name="Night Cafe",
+        starts_at="2026-04-25T23:00:00+00:00",
+        role="pregame",
+    )
+    main = _planner_stop(
+        event_id="main-event",
+        venue_id="main-venue",
+        venue_name="Elsewhere",
+        starts_at="2026-04-26T01:00:00+00:00",
+    )
+    main.fallbacks = [
+        TonightPlannerFallbackOption(
+            venueId="backup-venue",
+            venueName="Good Room",
+            eventId="backup-event",
+            eventTitle="Backup set",
+            neighborhood="Greenpoint",
+            startsAt="2026-04-26T01:20:00+00:00",
+            priceLabel="$28",
+            scoreBand="high",
+            hopLabel="16 min transit",
+            fallbackReason="Use this if Elsewhere falls through.",
+            selected=False,
+        )
+    ]
+    late = _planner_stop(
+        event_id="late-event",
+        venue_id="late-venue",
+        venue_name="Mood Ring",
+        starts_at="2026-04-26T03:00:00+00:00",
+        role="late_option",
+    )
+    session_row = PlannerSession(
+        id="session-swap",
+        user_id="user-1",
+        initial_route_snapshot={"stops": [pregame.model_dump(mode="json"), main.model_dump(mode="json"), late.model_dump(mode="json")]},
+        active_stop_event_id="main-event",
+        status=PLANNER_SESSION_ACTIVE,
+        budget_level="under_75",
+        timezone="America/New_York",
+    )
+    state = reduce_planner_session(
+        session_row,
+        [
+            PlannerSessionEvent(
+                session_id="session-swap",
+                event_type=PLANNER_EVENT_SESSION_CREATED,
+                recommendation_id="main-event",
+                metadata_json={"activeStopEventId": "main-event"},
+                created_at=datetime(2026, 4, 25, 22, 0, tzinfo=UTC),
+            ),
+            PlannerSessionEvent(
+                session_id="session-swap",
+                event_type=PLANNER_EVENT_STOP_SWAPPED,
+                recommendation_id="backup-event",
+                metadata_json={},
+                created_at=datetime(2026, 4, 25, 22, 5, tzinfo=UTC),
+            ),
+        ],
+    )
+
+    recomposition = recompose_remaining_route(state, now_utc=datetime(2026, 4, 25, 22, 10, tzinfo=UTC))
+
+    assert recomposition.active_stop_event_id == "backup-event"
+    assert [stop.eventId for stop in recomposition.remaining_stops] == ["backup-event", "late-event"]
+    assert [stop.eventId for stop in recomposition.dropped_stops] == ["pregame-event"]
+    assert len(recomposition.remaining_stops) == 2
+    assert any("source confidence" in reason for reason in recomposition.diagnostics[0]["reasons"])
+
+
+def test_recompose_remaining_route_drops_stale_downstream_stop() -> None:
+    active = _planner_stop(
+        event_id="active-event",
+        venue_id="active-venue",
+        venue_name="Active Room",
+        starts_at="2026-04-26T01:00:00+00:00",
+    )
+    stale_late = _planner_stop(
+        event_id="stale-late-event",
+        venue_id="stale-late-venue",
+        venue_name="Closed Room",
+        starts_at="2026-04-25T20:00:00+00:00",
+        role="late_option",
+    )
+    viable_late = _planner_stop(
+        event_id="viable-late-event",
+        venue_id="viable-late-venue",
+        venue_name="Open Room",
+        starts_at="2026-04-26T02:30:00+00:00",
+        role="late_option",
+    )
+    state = reduce_planner_session(
+        PlannerSession(
+            id="session-stale",
+            user_id="user-1",
+            initial_route_snapshot={"stops": [active.model_dump(mode="json"), stale_late.model_dump(mode="json"), viable_late.model_dump(mode="json")]},
+            active_stop_event_id="active-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+        ),
+        [],
+    )
+
+    recomposition = recompose_remaining_route(state, now_utc=datetime(2026, 4, 26, 0, 40, tzinfo=UTC))
+
+    assert [stop.eventId for stop in recomposition.remaining_stops] == ["active-event", "viable-late-event"]
+    assert [stop.eventId for stop in recomposition.dropped_stops] == ["stale-late-event"]
+
+
+@pytest.mark.asyncio
+async def test_append_planner_action_event_records_auditable_recomposition_metadata() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-recompose@example.com")
+        session.add(user)
+        await session.flush()
+
+        main = _planner_stop(
+            event_id="main-event",
+            venue_id="main-venue",
+            venue_name="Elsewhere",
+            starts_at=(datetime.now(tz=UTC) + timedelta(hours=2)).isoformat(),
+        )
+        late = _planner_stop(
+            event_id="late-event",
+            venue_id="late-venue",
+            venue_name="Mood Ring",
+            starts_at=(datetime.now(tz=UTC) + timedelta(hours=4)).isoformat(),
+            role="late_option",
+        )
+        planner_session = PlannerSession(
+            user_id=user.id,
+            initial_route_snapshot={"stops": [main.model_dump(mode="json"), late.model_dump(mode="json")]},
+            active_stop_event_id="main-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_SESSION_CREATED,
+            recommendation_id="main-event",
+            metadata={"activeStopEventId": "main-event"},
+        )
+
+        await append_planner_action_event(
+            session,
+            user_id=user.id,
+            planner_session_id=planner_session.id,
+            action=PLANNER_SKIPPED_FEEDBACK_ACTION,
+            recommendation_id="main-event",
+        )
+
+        events = await list_planner_session_events(session, planner_session.id)
+        recomputed_event = next(event for event in events if event.event_type == PLANNER_EVENT_ROUTE_RECOMPUTED)
+        state = reduce_planner_session(planner_session, events)
+
+        assert recomputed_event.metadata_json["trigger"] == PLANNER_SKIPPED_FEEDBACK_ACTION
+        assert recomputed_event.metadata_json["previousRoute"][0]["eventId"] == "main-event"
+        assert recomputed_event.metadata_json["newRoute"][0]["eventId"] == "late-event"
+        assert recomputed_event.metadata_json["droppedStops"][0]["eventId"] == "main-event"
+        assert recomputed_event.metadata_json["scores"]
+        assert state.last_recomputed_at is not None
+
+    await engine.dispose()
 
 
 @pytest.mark.asyncio

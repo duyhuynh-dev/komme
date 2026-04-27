@@ -138,6 +138,7 @@ test("buildTonightPlannerPanelState carries planner session recomposition state"
     remainingStops: [stop],
     droppedStops: [],
     recompositionReason: "Pulse recomposed the remaining route around live timing.",
+    lastRecomputedAt: "2026-04-26T00:30:00+00:00",
     lastEventAt: "2026-04-26T00:30:00+00:00",
     stops: [stop],
   };
@@ -148,6 +149,7 @@ test("buildTonightPlannerPanelState carries planner session recomposition state"
   assert.equal(state.activeStop?.eventId, "main-event");
   assert.equal(state.remainingStops.length, 1);
   assert.equal(state.recompositionReason, "Pulse recomposed the remaining route around live timing.");
+  assert.equal(state.lastRecomputedAt, "2026-04-26T00:30:00+00:00");
 });
 
 test("buildTonightPlannerPanelState returns the empty planner copy when no viable plan exists", () => {

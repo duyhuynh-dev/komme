@@ -178,6 +178,7 @@ export interface TonightPlannerResponse {
   remainingStops: TonightPlannerStop[];
   droppedStops: TonightPlannerStop[];
   recompositionReason?: string | null;
+  lastRecomputedAt?: string | null;
   lifecycleReason?: string | null;
   createdFreshBecauseStale?: boolean;
   lastEventAt?: string | null;

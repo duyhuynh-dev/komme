@@ -206,6 +206,32 @@ export function TonightPlannerPanel({
             ) : null}
           </div>
         ) : null}
+        {panelState.lastRecomputedAt && panelState.remainingStops.length ? (
+          <div className="mt-3 rounded-[1.5rem] border border-sky-200 bg-sky-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800">Updated route</p>
+              {panelState.droppedStops.length ? (
+                <span className="rounded-full border border-sky-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-sky-900">
+                  {panelState.droppedStops.length === 1 ? "1 stop dropped" : `${panelState.droppedStops.length} stops dropped`}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {panelState.remainingStops.slice(0, 2).map((stop) => (
+                <span
+                  key={`updated-${stop.eventId}`}
+                  className="rounded-full border border-sky-200 bg-white/85 px-3 py-1.5 text-xs font-medium text-slate-700"
+                >
+                  {stop.selected ? "Now: " : "Next: "}
+                  {stop.venueName}
+                </span>
+              ))}
+            </div>
+            {panelState.recompositionReason ? (
+              <p className="mt-2 text-xs leading-5 text-slate-600">{panelState.recompositionReason}</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {loading ? (
