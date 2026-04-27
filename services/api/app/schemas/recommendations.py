@@ -90,7 +90,7 @@ class MapContext(BaseModel):
     fallbackReason: str | None = None
 
 
-class TonightPlannerFallbackOption(BaseModel):
+class EventPlanFallbackOption(BaseModel):
     venueId: str
     venueName: str
     eventId: str
@@ -104,7 +104,7 @@ class TonightPlannerFallbackOption(BaseModel):
     selected: bool = False
 
 
-class TonightPlannerRerouteOption(BaseModel):
+class EventPlanRerouteOption(BaseModel):
     venueId: str
     venueName: str
     eventId: str
@@ -119,7 +119,7 @@ class TonightPlannerRerouteOption(BaseModel):
     rerouteReason: str
 
 
-class TonightPlannerStop(BaseModel):
+class EventPlanStop(BaseModel):
     role: str
     roleLabel: str
     venueId: str
@@ -136,10 +136,10 @@ class TonightPlannerStop(BaseModel):
     confidenceLabel: str
     confidenceReason: str
     selected: bool = False
-    fallbacks: list[TonightPlannerFallbackOption] = Field(default_factory=list)
+    fallbacks: list[EventPlanFallbackOption] = Field(default_factory=list)
 
 
-class TonightPlannerResponse(BaseModel):
+class EventPlanResponse(BaseModel):
     status: str = "empty"
     title: str = "Tonight planner"
     summary: str | None = None
@@ -152,23 +152,23 @@ class TonightPlannerResponse(BaseModel):
     outcomeNote: str | None = None
     rerouteStatus: str = "idle"
     rerouteNote: str | None = None
-    rerouteOption: TonightPlannerRerouteOption | None = None
+    rerouteOption: EventPlanRerouteOption | None = None
     sessionId: str | None = None
     sessionStatus: str | None = None
-    activeStop: TonightPlannerStop | None = None
-    remainingStops: list[TonightPlannerStop] = Field(default_factory=list)
-    droppedStops: list[TonightPlannerStop] = Field(default_factory=list)
+    activeStop: EventPlanStop | None = None
+    remainingStops: list[EventPlanStop] = Field(default_factory=list)
+    droppedStops: list[EventPlanStop] = Field(default_factory=list)
     recompositionReason: str | None = None
     lifecycleReason: str | None = None
     createdFreshBecauseStale: bool = False
     lastEventAt: str | None = None
-    stops: list[TonightPlannerStop] = Field(default_factory=list)
+    stops: list[EventPlanStop] = Field(default_factory=list)
 
 
-EventPlanFallbackOption = TonightPlannerFallbackOption
-EventPlanRerouteOption = TonightPlannerRerouteOption
-EventPlanStop = TonightPlannerStop
-EventPlanResponse = TonightPlannerResponse
+TonightPlannerFallbackOption = EventPlanFallbackOption
+TonightPlannerRerouteOption = EventPlanRerouteOption
+TonightPlannerStop = EventPlanStop
+TonightPlannerResponse = EventPlanResponse
 
 
 class RecommendationsMapResponse(BaseModel):
