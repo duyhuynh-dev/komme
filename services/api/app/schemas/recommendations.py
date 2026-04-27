@@ -159,6 +159,8 @@ class TonightPlannerResponse(BaseModel):
     remainingStops: list[TonightPlannerStop] = Field(default_factory=list)
     droppedStops: list[TonightPlannerStop] = Field(default_factory=list)
     recompositionReason: str | None = None
+    lifecycleReason: str | None = None
+    createdFreshBecauseStale: bool = False
     lastEventAt: str | None = None
     stops: list[TonightPlannerStop] = Field(default_factory=list)
 
@@ -287,6 +289,9 @@ class PlannerSessionDebugItem(BaseModel):
     remainingStopCount: int = 0
     droppedStopCount: int = 0
     recompositionReason: str | None = None
+    lifecycleReason: str | None = None
+    createdFreshBecauseStale: bool = False
+    replacedSessionId: str | None = None
     recompositionScores: list[PlannerSessionDebugStopScore] = Field(default_factory=list)
     events: list[PlannerSessionDebugEvent] = Field(default_factory=list)
 

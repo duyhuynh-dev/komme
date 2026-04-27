@@ -20,7 +20,10 @@ from app.schemas.recommendations import (
 
 PLANNER_SESSION_ACTIVE = "active"
 PLANNER_SESSION_COMPLETED = "completed"
-PLANNER_SESSION_EXHAUSTED = "exhausted"
+PLANNER_SESSION_EXPIRED = "expired"
+
+PLANNER_SESSION_MAX_AGE = timedelta(hours=48)
+PLANNER_SESSION_PLAN_END_GRACE = timedelta(hours=4)
 
 PLANNER_EVENT_SESSION_CREATED = "session_created"
 PLANNER_EVENT_STOP_LOCKED = "stop_locked"
@@ -28,6 +31,8 @@ PLANNER_EVENT_STOP_SWAPPED = "stop_swapped"
 PLANNER_EVENT_STOP_ATTENDED = "stop_attended"
 PLANNER_EVENT_STOP_SKIPPED = "stop_skipped"
 PLANNER_EVENT_ROUTE_RECOMPUTED = "route_recomputed"
+PLANNER_EVENT_SESSION_COMPLETED = "session_completed"
+PLANNER_EVENT_SESSION_EXPIRED = "session_expired"
 
 
 @dataclass
@@ -56,6 +61,9 @@ class PlannerSessionState:
     dropped_stops: list[TonightPlannerStop] = field(default_factory=list)
     replacements: list[TonightPlannerStop] = field(default_factory=list)
     recomposition_reason: str | None = None
+    lifecycle_reason: str | None = None
+    created_fresh_because_stale: bool = False
+    replaced_session_id: str | None = None
     last_event_at: datetime | None = None
 
 
@@ -81,6 +89,14 @@ async def get_or_create_planner_session(
     if planner.status == "empty" or not planner.stops:
         return None
 
+    now_utc = datetime.now(tz=UTC)
+    stale_session = await expire_stale_planner_sessions(
+        session,
+        user_id=user_id,
+        current_planner=planner,
+        now_utc=now_utc,
+    )
+
     query = (
         select(PlannerSession)
         .where(
@@ -97,7 +113,32 @@ async def get_or_create_planner_session(
 
     existing = await session.scalar(query)
     if existing is not None:
-        return existing
+        events = await list_planner_session_events(session, existing.id)
+        lifecycle = evaluate_session_lifecycle(
+            existing,
+            reduce_planner_session(existing, events),
+            current_planner=planner,
+            now_utc=now_utc,
+        )
+        if lifecycle is not None:
+            await mark_planner_session_lifecycle(
+                session,
+                planner_session=existing,
+                status=lifecycle["status"],
+                reason=lifecycle["reason"],
+                event_type=lifecycle["eventType"],
+                metadata={"rule": lifecycle["rule"], "replacementContextHash": recommendation_context_hash},
+            )
+            stale_session = existing
+        else:
+            return existing
+
+    fresh_reason = None
+    if stale_session is not None:
+        fresh_reason = (
+            f"Created a fresh event plan because prior session {stale_session.id} "
+            f"was {stale_session.status}."
+        )
 
     active_stop = _initial_active_stop(planner.stops)
     planner_session = PlannerSession(
@@ -125,6 +166,9 @@ async def get_or_create_planner_session(
         metadata={
             "activeStopEventId": active_stop.eventId if active_stop else None,
             "routeStopCount": len(planner.stops),
+            "createdFreshBecauseStale": stale_session is not None,
+            "replacedSessionId": stale_session.id if stale_session is not None else None,
+            "lifecycleReason": fresh_reason,
         },
     )
     return planner_session
@@ -166,6 +210,8 @@ async def append_planner_action_event(
     planner_session = await session.get(PlannerSession, planner_session_id)
     if planner_session is None or planner_session.user_id != user_id:
         return None
+    if planner_session.status != PLANNER_SESSION_ACTIVE:
+        return None
 
     await append_planner_session_event(
         session,
@@ -195,7 +241,28 @@ async def append_planner_action_event(
             },
         )
         planner_session.active_stop_event_id = recomposition.active_stop_event_id
-        planner_session.status = recomposition.session_status
+        if recomposition.session_status == PLANNER_SESSION_ACTIVE:
+            planner_session.status = PLANNER_SESSION_ACTIVE
+        else:
+            lifecycle = evaluate_session_lifecycle(
+                planner_session,
+                state,
+                current_planner=None,
+                now_utc=datetime.now(tz=UTC),
+            ) or _lifecycle_decision(
+                status=PLANNER_SESSION_EXPIRED,
+                event_type=PLANNER_EVENT_SESSION_EXPIRED,
+                rule="route_recomputed_empty",
+                reason=recomposition.reason,
+            )
+            await mark_planner_session_lifecycle(
+                session,
+                planner_session=planner_session,
+                status=lifecycle["status"],
+                reason=lifecycle["reason"],
+                event_type=lifecycle["eventType"],
+                metadata={"rule": lifecycle["rule"]},
+            )
     elif event_type in {PLANNER_EVENT_STOP_LOCKED, PLANNER_EVENT_STOP_SWAPPED}:
         planner_session.active_stop_event_id = recommendation_id
 
@@ -247,6 +314,8 @@ async def apply_planner_session_state(
     planner.remainingStops = state.remaining_stops
     planner.droppedStops = state.dropped_stops
     planner.recompositionReason = state.recomposition_reason
+    planner.lifecycleReason = state.lifecycle_reason
+    planner.createdFreshBecauseStale = state.created_fresh_because_stale
     planner.lastEventAt = _iso_or_none(state.last_event_at)
     if state.remaining_stops:
         planner.stops = state.remaining_stops
@@ -275,6 +344,10 @@ def reduce_planner_session(
 
         if event.event_type == PLANNER_EVENT_SESSION_CREATED:
             state.active_stop_event_id = metadata.get("activeStopEventId") or recommendation_id
+            state.created_fresh_because_stale = bool(metadata.get("createdFreshBecauseStale"))
+            state.replaced_session_id = metadata.get("replacedSessionId")
+            if metadata.get("lifecycleReason"):
+                state.lifecycle_reason = metadata.get("lifecycleReason")
         elif event.event_type == PLANNER_EVENT_STOP_LOCKED and recommendation_id:
             state.locked_event_ids.add(recommendation_id)
             state.active_stop_event_id = recommendation_id
@@ -301,6 +374,15 @@ def reduce_planner_session(
                     for stop in state.current_route
                     if stop.eventId in state.attended_event_ids
                 ] + [stop.model_copy(deep=True) for stop in state.remaining_stops]
+        elif event.event_type in {PLANNER_EVENT_SESSION_COMPLETED, PLANNER_EVENT_SESSION_EXPIRED}:
+            state.session_status = metadata.get("sessionStatus") or (
+                PLANNER_SESSION_COMPLETED
+                if event.event_type == PLANNER_EVENT_SESSION_COMPLETED
+                else PLANNER_SESSION_EXPIRED
+            )
+            state.lifecycle_reason = metadata.get("reason")
+            state.active_stop_event_id = None
+            state.remaining_stops = []
 
     if not state.remaining_stops:
         state.remaining_stops = [
@@ -365,7 +447,7 @@ def recompose_remaining_route(
         status = PLANNER_SESSION_ACTIVE
     else:
         reason = "Pulse could not find a viable remaining stop after timing, fallback exhaustion, and continuity checks."
-        status = PLANNER_SESSION_EXHAUSTED
+        status = PLANNER_SESSION_EXPIRED
 
     return PlannerRecomposition(
         remaining_stops=ordered,
@@ -429,6 +511,9 @@ async def get_planner_session_debug(
                 remainingStopCount=len(state.remaining_stops),
                 droppedStopCount=len(state.dropped_stops),
                 recompositionReason=state.recomposition_reason,
+                lifecycleReason=state.lifecycle_reason,
+                createdFreshBecauseStale=state.created_fresh_because_stale,
+                replacedSessionId=state.replaced_session_id,
                 recompositionScores=scores,
                 events=[
                     PlannerSessionDebugEvent(
@@ -443,6 +528,153 @@ async def get_planner_session_debug(
             )
         )
     return PlannerSessionDebugResponse(sessions=items)
+
+
+async def expire_stale_planner_sessions(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    current_planner: TonightPlannerResponse | None,
+    now_utc: datetime,
+) -> PlannerSession | None:
+    stale_session: PlannerSession | None = None
+    active_sessions = list(
+        (
+            await session.scalars(
+                select(PlannerSession)
+                .where(
+                    PlannerSession.user_id == user_id,
+                    PlannerSession.status == PLANNER_SESSION_ACTIVE,
+                )
+                .order_by(desc(PlannerSession.created_at), desc(PlannerSession.id))
+            )
+        ).all()
+    )
+    for planner_session in active_sessions:
+        events = await list_planner_session_events(session, planner_session.id)
+        state = reduce_planner_session(planner_session, events)
+        lifecycle = evaluate_session_lifecycle(
+            planner_session,
+            state,
+            current_planner=current_planner,
+            now_utc=now_utc,
+        )
+        if lifecycle is None:
+            continue
+        await mark_planner_session_lifecycle(
+            session,
+            planner_session=planner_session,
+            status=lifecycle["status"],
+            reason=lifecycle["reason"],
+            event_type=lifecycle["eventType"],
+            metadata={"rule": lifecycle["rule"]},
+        )
+        stale_session = planner_session
+    return stale_session
+
+
+async def mark_planner_session_lifecycle(
+    session: AsyncSession,
+    *,
+    planner_session: PlannerSession,
+    status: str,
+    reason: str,
+    event_type: str,
+    metadata: dict | None = None,
+) -> PlannerSessionEvent:
+    planner_session.status = status
+    planner_session.active_stop_event_id = None
+    payload = {
+        "sessionStatus": status,
+        "reason": reason,
+        **(metadata or {}),
+    }
+    return await append_planner_session_event(
+        session,
+        planner_session=planner_session,
+        event_type=event_type,
+        recommendation_id=None,
+        metadata=payload,
+    )
+
+
+def evaluate_session_lifecycle(
+    planner_session: PlannerSession,
+    state: PlannerSessionState,
+    *,
+    current_planner: TonightPlannerResponse | None,
+    now_utc: datetime,
+) -> dict | None:
+    if planner_session.status != PLANNER_SESSION_ACTIVE and state.session_status != PLANNER_SESSION_ACTIVE:
+        return None
+
+    created_at = _timestamp_utc(planner_session.created_at)
+    if now_utc - created_at > PLANNER_SESSION_MAX_AGE:
+        return _lifecycle_decision(
+            status=PLANNER_SESSION_EXPIRED,
+            event_type=PLANNER_EVENT_SESSION_EXPIRED,
+            rule="session_age",
+            reason="Planner session expired because it exceeded the 48-hour execution window.",
+        )
+
+    plan_end = _plan_window_end(state.initial_stops)
+    if plan_end is not None and now_utc > plan_end:
+        return _lifecycle_decision(
+            status=PLANNER_SESSION_EXPIRED,
+            event_type=PLANNER_EVENT_SESSION_EXPIRED,
+            rule="plan_window_end",
+            reason="Planner session expired because its event plan window has passed.",
+        )
+
+    route_event_ids = {stop.eventId for stop in state.current_route}
+    resolved_event_ids = state.attended_event_ids | state.skipped_event_ids
+    if route_event_ids and route_event_ids.issubset(resolved_event_ids):
+        return _lifecycle_decision(
+            status=PLANNER_SESSION_COMPLETED,
+            event_type=PLANNER_EVENT_SESSION_COMPLETED,
+            rule="all_stops_resolved",
+            reason="Planner session completed because every route stop was attended or skipped.",
+        )
+
+    unresolved_stops = [
+        stop
+        for stop in state.current_route
+        if stop.eventId not in resolved_event_ids
+    ]
+    if unresolved_stops and not any(_is_time_viable(stop, now_utc) for stop in unresolved_stops):
+        return _lifecycle_decision(
+            status=PLANNER_SESSION_EXPIRED,
+            event_type=PLANNER_EVENT_SESSION_EXPIRED,
+            rule="route_not_viable",
+            reason="Planner session expired because no unresolved route stop is still time-viable.",
+        )
+
+    if current_planner is not None and current_planner.stops:
+        current_event_ids = {stop.eventId for stop in current_planner.stops}
+        if route_event_ids and route_event_ids.isdisjoint(current_event_ids):
+            return _lifecycle_decision(
+                status=PLANNER_SESSION_EXPIRED,
+                event_type=PLANNER_EVENT_SESSION_EXPIRED,
+                rule="planning_window_changed",
+                reason="Planner session expired because the current planning window no longer overlaps its route.",
+            )
+
+    return None
+
+
+def _lifecycle_decision(
+    *,
+    status: str,
+    event_type: str,
+    rule: str,
+    reason: str,
+) -> dict:
+    return {
+        "status": status,
+        "eventType": event_type,
+        "rule": rule,
+        "reason": reason,
+    }
 
 
 def _initial_active_stop(stops: list[TonightPlannerStop]) -> TonightPlannerStop | None:
@@ -637,6 +869,14 @@ def _parse_start(value: str) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _plan_window_end(stops: list[TonightPlannerStop]) -> datetime | None:
+    starts = [_parse_start(stop.startsAt) for stop in stops]
+    viable_starts = [start for start in starts if start is not None]
+    if not viable_starts:
+        return None
+    return max(viable_starts) + PLANNER_SESSION_PLAN_END_GRACE
+
+
 def _start_timestamp(stop: TonightPlannerStop) -> float:
     starts_at = _parse_start(stop.startsAt)
     return starts_at.timestamp() if starts_at else float("inf")
@@ -689,3 +929,9 @@ def _iso_or_none(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(UTC).isoformat()
+
+
+def _timestamp_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

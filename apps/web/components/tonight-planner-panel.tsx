@@ -110,9 +110,9 @@ export function TonightPlannerPanel({
             {panelState.executionNote}
           </div>
         ) : null}
-        {panelState.sessionId && panelState.recompositionReason ? (
+        {panelState.sessionId && (panelState.recompositionReason || panelState.lifecycleReason) ? (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            {panelState.recompositionReason}
+            {panelState.recompositionReason ?? panelState.lifecycleReason}
           </p>
         ) : null}
         {panelState.activeTargetVenueName && outcomePrompt ? (

@@ -170,11 +170,13 @@ export interface TonightPlannerResponse {
   rerouteNote?: string | null;
   rerouteOption?: TonightPlannerRerouteOption | null;
   sessionId?: string | null;
-  sessionStatus?: "active" | "completed" | "exhausted" | string | null;
+  sessionStatus?: "active" | "completed" | "expired" | string | null;
   activeStop?: TonightPlannerStop | null;
   remainingStops: TonightPlannerStop[];
   droppedStops: TonightPlannerStop[];
   recompositionReason?: string | null;
+  lifecycleReason?: string | null;
+  createdFreshBecauseStale?: boolean;
   lastEventAt?: string | null;
   stops: TonightPlannerStop[];
 }
@@ -356,6 +358,9 @@ export interface PlannerSessionDebugItem {
   remainingStopCount: number;
   droppedStopCount: number;
   recompositionReason?: string | null;
+  lifecycleReason?: string | null;
+  createdFreshBecauseStale: boolean;
+  replacedSessionId?: string | null;
   recompositionScores: PlannerSessionDebugStopScore[];
   events: PlannerSessionDebugEvent[];
 }

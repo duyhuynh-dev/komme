@@ -32,15 +32,22 @@ from app.schemas.recommendations import (
 from app.services.planner import build_tonight_planner
 from app.services.planner_sessions import (
     PLANNER_EVENT_ROUTE_RECOMPUTED,
+    PLANNER_EVENT_SESSION_COMPLETED,
     PLANNER_EVENT_SESSION_CREATED,
+    PLANNER_EVENT_SESSION_EXPIRED,
     PLANNER_EVENT_STOP_LOCKED,
     PLANNER_EVENT_STOP_SKIPPED,
+    PLANNER_SESSION_ACTIVE,
+    PLANNER_SESSION_COMPLETED,
+    PLANNER_SESSION_EXPIRED,
     append_planner_session_event,
+    evaluate_session_lifecycle,
+    expire_stale_planner_sessions,
     get_or_create_planner_session,
+    get_planner_session_debug,
     list_planner_session_events,
     recompose_remaining_route,
     reduce_planner_session,
-    get_planner_session_debug,
 )
 from app.services.recommendations import get_map_recommendations
 
@@ -105,6 +112,35 @@ def _planner_pin(
         longitude=longitude,
         scoreBand=score_band,
         selected=False,
+    )
+
+
+def _planner_stop(
+    *,
+    event_id: str,
+    venue_id: str = "venue-1",
+    venue_name: str = "Elsewhere",
+    starts_at: str = "2026-04-26T01:00:00+00:00",
+    role: str = "main_event",
+) -> TonightPlannerStop:
+    return TonightPlannerStop(
+        role=role,
+        roleLabel="Main event" if role == "main_event" else role.replace("_", " ").title(),
+        venueId=venue_id,
+        venueName=venue_name,
+        eventId=event_id,
+        eventTitle=f"{venue_name} event",
+        neighborhood="Bushwick",
+        startsAt=starts_at,
+        priceLabel="$35",
+        scoreBand="high",
+        hopLabel="18 min transit",
+        roleReason="Test route stop",
+        confidence="high",
+        confidenceLabel="Confident anchor",
+        confidenceReason="Test confidence",
+        selected=False,
+        fallbacks=[],
     )
 
 
@@ -649,6 +685,232 @@ async def test_planner_session_debug_payload_summarizes_timeline_and_scores() ->
             PLANNER_EVENT_SESSION_CREATED,
             PLANNER_EVENT_ROUTE_RECOMPUTED,
         ]
+
+    await engine.dispose()
+
+
+def test_planner_session_lifecycle_marks_completed_when_route_is_resolved() -> None:
+    stop = _planner_stop(event_id="main-event")
+    planner_session = PlannerSession(
+        id="session-1",
+        user_id="user-1",
+        initial_route_snapshot={"stops": [stop.model_dump(mode="json")]},
+        active_stop_event_id="main-event",
+        status=PLANNER_SESSION_ACTIVE,
+        budget_level="under_75",
+        timezone="America/New_York",
+        created_at=datetime(2026, 4, 25, 20, 0, tzinfo=UTC),
+    )
+    state = reduce_planner_session(
+        planner_session,
+        [
+            PlannerSessionEvent(
+                session_id="session-1",
+                event_type=PLANNER_EVENT_SESSION_CREATED,
+                recommendation_id="main-event",
+                metadata_json={"activeStopEventId": "main-event"},
+                created_at=datetime(2026, 4, 25, 20, 0, tzinfo=UTC),
+            ),
+            PlannerSessionEvent(
+                session_id="session-1",
+                event_type="stop_attended",
+                recommendation_id="main-event",
+                metadata_json={},
+                created_at=datetime(2026, 4, 25, 23, 0, tzinfo=UTC),
+            ),
+        ],
+    )
+
+    lifecycle = evaluate_session_lifecycle(
+        planner_session,
+        state,
+        current_planner=None,
+        now_utc=datetime(2026, 4, 26, 0, 0, tzinfo=UTC),
+    )
+
+    assert lifecycle is not None
+    assert lifecycle["status"] == PLANNER_SESSION_COMPLETED
+    assert lifecycle["eventType"] == PLANNER_EVENT_SESSION_COMPLETED
+    assert lifecycle["rule"] == "all_stops_resolved"
+
+
+def test_planner_session_lifecycle_expires_by_age_and_route_viability() -> None:
+    old_stop = _planner_stop(event_id="old-event", starts_at="2026-04-26T12:00:00+00:00")
+    old_session = PlannerSession(
+        id="old-session",
+        user_id="user-1",
+        initial_route_snapshot={"stops": [old_stop.model_dump(mode="json")]},
+        active_stop_event_id="old-event",
+        status=PLANNER_SESSION_ACTIVE,
+        budget_level="under_75",
+        timezone="America/New_York",
+        created_at=datetime(2026, 4, 24, 0, 0, tzinfo=UTC),
+    )
+    old_state = reduce_planner_session(old_session, [])
+
+    age_lifecycle = evaluate_session_lifecycle(
+        old_session,
+        old_state,
+        current_planner=None,
+        now_utc=datetime(2026, 4, 26, 1, 0, tzinfo=UTC),
+    )
+
+    stale_stop = _planner_stop(event_id="stale-event", starts_at="2026-04-26T12:00:00+00:00")
+    stale_session = PlannerSession(
+        id="stale-session",
+        user_id="user-1",
+        initial_route_snapshot={"stops": [stale_stop.model_dump(mode="json")]},
+        active_stop_event_id="stale-event",
+        status=PLANNER_SESSION_ACTIVE,
+        budget_level="under_75",
+        timezone="America/New_York",
+        created_at=datetime(2026, 4, 26, 10, 0, tzinfo=UTC),
+    )
+    stale_state = reduce_planner_session(stale_session, [])
+
+    viability_lifecycle = evaluate_session_lifecycle(
+        stale_session,
+        stale_state,
+        current_planner=None,
+        now_utc=datetime(2026, 4, 26, 12, 45, tzinfo=UTC),
+    )
+
+    assert age_lifecycle is not None
+    assert age_lifecycle["status"] == PLANNER_SESSION_EXPIRED
+    assert age_lifecycle["rule"] == "session_age"
+    assert viability_lifecycle is not None
+    assert viability_lifecycle["status"] == PLANNER_SESSION_EXPIRED
+    assert viability_lifecycle["rule"] == "route_not_viable"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_planner_session_rejects_stale_active_session_and_creates_fresh() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-stale@example.com")
+        session.add(user)
+        await session.flush()
+
+        old_stop = _planner_stop(
+            event_id="old-event",
+            venue_id="old-venue",
+            venue_name="Old Venue",
+            starts_at=(datetime.now(tz=UTC) - timedelta(hours=3)).isoformat(),
+        )
+        old_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="same-context",
+            initial_route_snapshot={"stops": [old_stop.model_dump(mode="json")]},
+            active_stop_event_id="old-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+            created_at=datetime.now(tz=UTC) - timedelta(hours=6),
+        )
+        session.add(old_session)
+        await session.flush()
+
+        new_stop = _planner_stop(
+            event_id="new-event",
+            venue_id="new-venue",
+            venue_name="New Venue",
+            starts_at=(datetime.now(tz=UTC) + timedelta(hours=2)).isoformat(),
+        )
+        planner = TonightPlannerResponse(
+            status="ready",
+            stops=[new_stop],
+            summary="Fresh event plan.",
+        )
+
+        fresh_session = await get_or_create_planner_session(
+            session,
+            user_id=user.id,
+            recommendation_run_id=None,
+            recommendation_context_hash="same-context",
+            planner=planner,
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+
+        await session.refresh(old_session)
+        fresh_events = await list_planner_session_events(session, fresh_session.id)
+        old_events = await list_planner_session_events(session, old_session.id)
+
+        assert fresh_session is not None
+        assert fresh_session.id != old_session.id
+        assert old_session.status == PLANNER_SESSION_EXPIRED
+        assert any(event.event_type == PLANNER_EVENT_SESSION_EXPIRED for event in old_events)
+        assert fresh_events[0].metadata_json["createdFreshBecauseStale"] is True
+        assert fresh_events[0].metadata_json["replacedSessionId"] == old_session.id
+        debug_response = await get_planner_session_debug(session, user_id=user.id)
+        fresh_debug = next(item for item in debug_response.sessions if item.sessionId == fresh_session.id)
+        old_debug = next(item for item in debug_response.sessions if item.sessionId == old_session.id)
+        assert fresh_debug.createdFreshBecauseStale is True
+        assert fresh_debug.replacedSessionId == old_session.id
+        assert old_debug.lifecycleReason is not None
+        assert "expired" in old_debug.lifecycleReason
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_expire_stale_planner_sessions_marks_changed_planning_window() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-window@example.com")
+        session.add(user)
+        await session.flush()
+        old_stop = _planner_stop(
+            event_id="old-event",
+            venue_id="old-venue",
+            venue_name="Old Venue",
+            starts_at="2026-04-26T20:00:00+00:00",
+        )
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="old-context",
+            initial_route_snapshot={"stops": [old_stop.model_dump(mode="json")]},
+            active_stop_event_id="old-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+            created_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
+        )
+        session.add(planner_session)
+        await session.flush()
+        current_stop = _planner_stop(
+            event_id="new-event",
+            venue_id="new-venue",
+            venue_name="New Venue",
+            starts_at="2026-04-26T21:00:00+00:00",
+        )
+        current_planner = TonightPlannerResponse(status="ready", stops=[current_stop])
+
+        stale_session = await expire_stale_planner_sessions(
+            session,
+            user_id=user.id,
+            current_planner=current_planner,
+            now_utc=datetime(2026, 4, 26, 13, 0, tzinfo=UTC),
+        )
+
+        await session.refresh(planner_session)
+        events = await list_planner_session_events(session, planner_session.id)
+
+        assert stale_session is not None
+        assert stale_session.id == planner_session.id
+        assert planner_session.status == PLANNER_SESSION_EXPIRED
+        assert events[-1].event_type == PLANNER_EVENT_SESSION_EXPIRED
+        assert events[-1].metadata_json["rule"] == "planning_window_changed"
 
     await engine.dispose()
 

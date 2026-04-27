@@ -261,6 +261,14 @@ function PlannerSessionCard({ session }: { session: PlannerSessionDebugItem }) {
       {session.recompositionReason ? (
         <p className="mt-4 text-sm leading-6 text-slate-700">{session.recompositionReason}</p>
       ) : null}
+      {session.lifecycleReason ? (
+        <p className="mt-2 text-sm leading-6 text-slate-700">{session.lifecycleReason}</p>
+      ) : null}
+      {session.createdFreshBecauseStale && session.replacedSessionId ? (
+        <p className="mt-2 break-all text-xs leading-5 text-slate-500">
+          Replaced stale session {session.replacedSessionId}
+        </p>
+      ) : null}
       {session.recompositionScores.length ? (
         <div className="mt-4 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recomposition scores</p>
@@ -454,7 +462,7 @@ export function RecommendationOpsPageContent() {
 
             <SectionShell
               title="Planner sessions"
-              subtitle="Stateful execution history for Tonight Planner route changes and recomposition decisions."
+              subtitle="Stateful execution history for event-plan route changes and recomposition decisions."
             >
               {plannerSessions.length ? (
                 <div className="grid gap-4">
