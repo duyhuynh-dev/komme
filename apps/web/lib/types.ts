@@ -115,6 +115,7 @@ export interface TonightPlannerFallbackOption {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  sourceConfidence?: number;
   hopLabel?: string | null;
   fallbackReason: string;
   selected: boolean;
@@ -129,6 +130,7 @@ export interface TonightPlannerRerouteOption {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  sourceConfidence?: number;
   hopLabel?: string | null;
   roleLabel?: string | null;
   sourceKind: "fallback" | "next_stop";
@@ -146,6 +148,7 @@ export interface TonightPlannerStop {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  sourceConfidence?: number;
   hopLabel?: string | null;
   roleReason: string;
   confidence: "high" | "medium" | "watch";

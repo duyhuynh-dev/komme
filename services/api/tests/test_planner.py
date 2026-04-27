@@ -125,6 +125,7 @@ def _planner_stop(
     venue_name: str = "Elsewhere",
     starts_at: str = "2026-04-26T01:00:00+00:00",
     role: str = "main_event",
+    source_confidence: float = 0.75,
 ) -> TonightPlannerStop:
     return TonightPlannerStop(
         role=role,
@@ -137,6 +138,7 @@ def _planner_stop(
         startsAt=starts_at,
         priceLabel="$35",
         scoreBand="high",
+        sourceConfidence=source_confidence,
         hopLabel="18 min transit",
         roleReason="Test route stop",
         confidence="high",
@@ -215,6 +217,7 @@ def test_build_tonight_planner_sequences_pregame_main_and_late_option() -> None:
     assert planner.stops[0].venueId == "pregame-venue"
     assert planner.stops[1].venueId == "main-venue"
     assert planner.stops[2].venueId == "late-venue"
+    assert planner.stops[1].sourceConfidence == 0.91
     assert planner.stops[1].confidence == "high"
     assert planner.stops[1].hopLabel is not None
     assert "Elsewhere" in (planner.summary or "")
@@ -1181,6 +1184,7 @@ def test_recompose_remaining_route_after_swap_keeps_active_and_best_next_stop() 
             startsAt="2026-04-26T01:20:00+00:00",
             priceLabel="$28",
             scoreBand="high",
+            sourceConfidence=0.92,
             hopLabel="16 min transit",
             fallbackReason="Use this if Elsewhere falls through.",
             selected=False,
@@ -1228,7 +1232,8 @@ def test_recompose_remaining_route_after_swap_keeps_active_and_best_next_stop() 
     assert [stop.eventId for stop in recomposition.remaining_stops] == ["backup-event", "late-event"]
     assert [stop.eventId for stop in recomposition.dropped_stops] == ["pregame-event"]
     assert len(recomposition.remaining_stops) == 2
-    assert any("source confidence" in reason for reason in recomposition.diagnostics[0]["reasons"])
+    assert recomposition.remaining_stops[0].sourceConfidence == 0.92
+    assert "source confidence 0.92" in recomposition.diagnostics[0]["reasons"]
 
 
 def test_recompose_remaining_route_drops_stale_downstream_stop() -> None:
@@ -1269,6 +1274,55 @@ def test_recompose_remaining_route_drops_stale_downstream_stop() -> None:
 
     assert [stop.eventId for stop in recomposition.remaining_stops] == ["active-event", "viable-late-event"]
     assert [stop.eventId for stop in recomposition.dropped_stops] == ["stale-late-event"]
+
+
+def test_recompose_remaining_route_prefers_downstream_source_confidence() -> None:
+    active = _planner_stop(
+        event_id="active-event",
+        venue_id="active-venue",
+        venue_name="Active Room",
+        starts_at="2026-04-26T01:00:00+00:00",
+    )
+    low_confidence_next = _planner_stop(
+        event_id="low-source-event",
+        venue_id="low-source-venue",
+        venue_name="Thin Source Room",
+        starts_at="2026-04-26T02:00:00+00:00",
+        role="late_option",
+        source_confidence=0.25,
+    )
+    high_confidence_next = _planner_stop(
+        event_id="high-source-event",
+        venue_id="high-source-venue",
+        venue_name="Trusted Source Room",
+        starts_at="2026-04-26T02:05:00+00:00",
+        role="late_option",
+        source_confidence=0.95,
+    )
+    state = reduce_planner_session(
+        PlannerSession(
+            id="session-source-confidence",
+            user_id="user-1",
+            initial_route_snapshot={
+                "stops": [
+                    active.model_dump(mode="json"),
+                    low_confidence_next.model_dump(mode="json"),
+                    high_confidence_next.model_dump(mode="json"),
+                ]
+            },
+            active_stop_event_id="active-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+        ),
+        [],
+    )
+
+    recomposition = recompose_remaining_route(state, now_utc=datetime(2026, 4, 26, 0, 40, tzinfo=UTC))
+
+    assert [stop.eventId for stop in recomposition.remaining_stops] == ["active-event", "high-source-event"]
+    assert recomposition.diagnostics[1]["eventId"] == "high-source-event"
+    assert "source confidence 0.95" in recomposition.diagnostics[1]["reasons"]
 
 
 @pytest.mark.asyncio

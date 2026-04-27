@@ -824,6 +824,7 @@ def _fallback_to_stop(
         startsAt=fallback.startsAt,
         priceLabel=fallback.priceLabel,
         scoreBand=fallback.scoreBand,
+        sourceConfidence=fallback.sourceConfidence,
         hopLabel=fallback.hopLabel,
         roleReason=fallback.fallbackReason,
         confidence="medium",
@@ -922,7 +923,7 @@ def _remaining_stop_score(
 ) -> float:
     score = 0.0
     score += {"high": 0.32, "medium": 0.22, "low": 0.12}.get(stop.scoreBand, 0.16)
-    score += _confidence_fit(stop.confidence) * 0.18
+    score += _source_confidence(stop) * 0.18
     score += _budget_fit_for_label(stop.priceLabel) * 0.18
     score += _time_viability_score(stop, now_utc) * 0.14
     score += _hop_fit(stop.hopLabel) * 0.1
@@ -943,7 +944,7 @@ def _score_diagnostics(
     reasons = [
         f"{stop.scoreBand} shortlist band",
         f"{stop.confidence} planner confidence",
-        f"source confidence proxy {_confidence_fit(stop.confidence):.2f}",
+        f"source confidence {_source_confidence(stop):.2f}",
         f"budget fit {_budget_fit_for_label(stop.priceLabel):.2f}",
         f"time viability {_time_viability_score(stop, now_utc):.2f}",
         f"travel continuity {_hop_fit(stop.hopLabel):.2f}",
@@ -1002,8 +1003,8 @@ def _time_viability_score(stop: TonightPlannerStop, now_utc: datetime) -> float:
     return 0.42
 
 
-def _confidence_fit(confidence: str) -> float:
-    return {"high": 1.0, "medium": 0.68, "watch": 0.38}.get(confidence, 0.5)
+def _source_confidence(stop: TonightPlannerStop | TonightPlannerFallbackOption) -> float:
+    return max(0.0, min(1.0, float(getattr(stop, "sourceConfidence", 0.75) or 0.75)))
 
 
 def _parse_start(value: str) -> datetime | None:

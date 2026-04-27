@@ -99,6 +99,7 @@ class TonightPlannerFallbackOption(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    sourceConfidence: float = 0.75
     hopLabel: str | None = None
     fallbackReason: str
     selected: bool = False
@@ -113,6 +114,7 @@ class TonightPlannerRerouteOption(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    sourceConfidence: float = 0.75
     hopLabel: str | None = None
     roleLabel: str | None = None
     sourceKind: str = "next_stop"
@@ -130,6 +132,7 @@ class TonightPlannerStop(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    sourceConfidence: float = 0.75
     hopLabel: str | None = None
     roleReason: str
     confidence: str = "medium"
