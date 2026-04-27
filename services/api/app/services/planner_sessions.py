@@ -53,6 +53,9 @@ class PlannerSessionState:
     active_stop_event_id: str | None
     initial_stops: list[TonightPlannerStop]
     current_route: list[TonightPlannerStop]
+    plan_window_start: str | None = None
+    plan_window_end: str | None = None
+    plan_window_label: str | None = None
     attended_event_ids: set[str] = field(default_factory=set)
     skipped_event_ids: set[str] = field(default_factory=set)
     locked_event_ids: set[str] = field(default_factory=set)
@@ -149,6 +152,9 @@ async def get_or_create_planner_session(
             "status": planner.status,
             "summary": planner.summary,
             "planningNote": planner.planningNote,
+            "planWindowStart": planner.planWindowStart,
+            "planWindowEnd": planner.planWindowEnd,
+            "planWindowLabel": planner.planWindowLabel,
             "stops": [_stop_dump(stop) for stop in planner.stops],
         },
         active_stop_event_id=active_stop.eventId if active_stop else None,
@@ -166,6 +172,9 @@ async def get_or_create_planner_session(
         metadata={
             "activeStopEventId": active_stop.eventId if active_stop else None,
             "routeStopCount": len(planner.stops),
+            "planWindowStart": planner.planWindowStart,
+            "planWindowEnd": planner.planWindowEnd,
+            "planWindowLabel": planner.planWindowLabel,
             "createdFreshBecauseStale": stale_session is not None,
             "replacedSessionId": stale_session.id if stale_session is not None else None,
             "lifecycleReason": fresh_reason,
@@ -326,13 +335,17 @@ def reduce_planner_session(
     planner_session: PlannerSession,
     events: list[PlannerSessionEvent],
 ) -> PlannerSessionState:
-    initial_stops = _load_stops(planner_session.initial_route_snapshot.get("stops", []))
+    snapshot = planner_session.initial_route_snapshot or {}
+    initial_stops = _load_stops(snapshot.get("stops", []))
     state = PlannerSessionState(
         session_id=planner_session.id,
         session_status=planner_session.status,
         active_stop_event_id=planner_session.active_stop_event_id,
         initial_stops=initial_stops,
         current_route=[stop.model_copy(deep=True) for stop in initial_stops],
+        plan_window_start=snapshot.get("planWindowStart"),
+        plan_window_end=snapshot.get("planWindowEnd"),
+        plan_window_label=snapshot.get("planWindowLabel"),
         remaining_stops=[stop.model_copy(deep=True) for stop in initial_stops],
         recomposition_reason=None,
     )
@@ -344,6 +357,9 @@ def reduce_planner_session(
 
         if event.event_type == PLANNER_EVENT_SESSION_CREATED:
             state.active_stop_event_id = metadata.get("activeStopEventId") or recommendation_id
+            state.plan_window_start = metadata.get("planWindowStart") or state.plan_window_start
+            state.plan_window_end = metadata.get("planWindowEnd") or state.plan_window_end
+            state.plan_window_label = metadata.get("planWindowLabel") or state.plan_window_label
             state.created_fresh_because_stale = bool(metadata.get("createdFreshBecauseStale"))
             state.replaced_session_id = metadata.get("replacedSessionId")
             if metadata.get("lifecycleReason"):
@@ -505,6 +521,9 @@ async def get_planner_session_debug(
                 activeStopEventId=state.active_stop_event_id,
                 budgetLevel=planner_session.budget_level,
                 timezone=planner_session.timezone,
+                planWindowStart=state.plan_window_start,
+                planWindowEnd=state.plan_window_end,
+                planWindowLabel=state.plan_window_label,
                 createdAt=_iso_or_none(planner_session.created_at) or "",
                 updatedAt=_iso_or_none(planner_session.updated_at) or "",
                 initialStopCount=len(state.initial_stops),
@@ -650,6 +669,14 @@ def evaluate_session_lifecycle(
         )
 
     if current_planner is not None and current_planner.stops:
+        if _plan_windows_conflict(state, current_planner):
+            return _lifecycle_decision(
+                status=PLANNER_SESSION_EXPIRED,
+                event_type=PLANNER_EVENT_SESSION_EXPIRED,
+                rule="planning_window_changed",
+                reason="Planner session expired because the requested event plan window changed.",
+            )
+
         current_event_ids = {stop.eventId for stop in current_planner.stops}
         if route_event_ids and route_event_ids.isdisjoint(current_event_ids):
             return _lifecycle_decision(
@@ -660,6 +687,17 @@ def evaluate_session_lifecycle(
             )
 
     return None
+
+
+def _plan_windows_conflict(
+    state: PlannerSessionState,
+    current_planner: TonightPlannerResponse,
+) -> bool:
+    stored_window = (state.plan_window_start, state.plan_window_end)
+    current_window = (current_planner.planWindowStart, current_planner.planWindowEnd)
+    if not any(stored_window) or not any(current_window):
+        return False
+    return stored_window != current_window
 
 
 def _lifecycle_decision(

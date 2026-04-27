@@ -293,6 +293,9 @@ class PlannerSessionDebugItem(BaseModel):
     activeStopEventId: str | None = None
     budgetLevel: str
     timezone: str
+    planWindowStart: str | None = None
+    planWindowEnd: str | None = None
+    planWindowLabel: str | None = None
     createdAt: str
     updatedAt: str
     initialStopCount: int = 0

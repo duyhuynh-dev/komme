@@ -1008,6 +1008,81 @@ async def test_expire_stale_planner_sessions_marks_changed_planning_window() -> 
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_get_or_create_planner_session_rejects_changed_explicit_plan_window() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-explicit-window@example.com")
+        session.add(user)
+        await session.flush()
+
+        route_stop = _planner_stop(
+            event_id="shared-event",
+            venue_id="shared-venue",
+            venue_name="Shared Venue",
+            starts_at="2026-04-27T22:00:00+00:00",
+        )
+        old_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="same-context",
+            initial_route_snapshot={
+                "planWindowStart": "2026-04-27T18:00:00-04:00",
+                "planWindowEnd": "2026-04-28T02:00:00-04:00",
+                "planWindowLabel": "Event window",
+                "stops": [route_stop.model_dump(mode="json")],
+            },
+            active_stop_event_id="shared-event",
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+            created_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
+        )
+        session.add(old_session)
+        await session.flush()
+
+        planner = TonightPlannerResponse(
+            status="ready",
+            stops=[route_stop],
+            summary="Same route, later requested window.",
+            planWindowStart="2026-04-28T18:00:00-04:00",
+            planWindowEnd="2026-04-29T02:00:00-04:00",
+            planWindowLabel="Event window",
+        )
+
+        fresh_session = await get_or_create_planner_session(
+            session,
+            user_id=user.id,
+            recommendation_run_id=None,
+            recommendation_context_hash="same-context",
+            planner=planner,
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+
+        await session.refresh(old_session)
+        fresh_events = await list_planner_session_events(session, fresh_session.id)
+        old_events = await list_planner_session_events(session, old_session.id)
+        fresh_state = reduce_planner_session(fresh_session, fresh_events)
+        debug_response = await get_planner_session_debug(session, user_id=user.id)
+        fresh_debug = next(item for item in debug_response.sessions if item.sessionId == fresh_session.id)
+
+        assert fresh_session is not None
+        assert fresh_session.id != old_session.id
+        assert old_session.status == PLANNER_SESSION_EXPIRED
+        assert old_events[-1].metadata_json["rule"] == "planning_window_changed"
+        assert fresh_events[0].metadata_json["planWindowStart"] == "2026-04-28T18:00:00-04:00"
+        assert fresh_state.plan_window_start == "2026-04-28T18:00:00-04:00"
+        assert fresh_debug.planWindowStart == "2026-04-28T18:00:00-04:00"
+        assert fresh_debug.createdFreshBecauseStale is True
+
+    await engine.dispose()
+
+
 def test_recompose_remaining_route_uses_fallback_when_active_stop_is_exhausted() -> None:
     main_stop = TonightPlannerStop(
         role="main_event",
