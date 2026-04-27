@@ -7,7 +7,7 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
-from app.models.profile import UserInterestProfile
+from app.models.profile import ProfileRun, UserInterestProfile
 from app.models.recommendation import (
     DIGEST_SECURITY_CLICK_FEEDBACK_ACTION,
     PLANNER_ATTENDED_FEEDBACK_ACTION,
@@ -1497,7 +1497,33 @@ def _topic_source_label(source_provider: str) -> str:
     return labels.get(source_provider, source_provider.replace("_", " ").title())
 
 
-def _topic_source_summaries(rows: list[UserInterestProfile]) -> list[RecommendationTopicSourceSummary]:
+def _latest_profile_runs_by_provider(runs: list[ProfileRun]) -> dict[str, ProfileRun]:
+    latest: dict[str, ProfileRun] = {}
+    for run in runs:
+        current = latest.get(run.provider)
+        if current is None or _timestamp_utc(run.created_at) > _timestamp_utc(current.created_at):
+            latest[run.provider] = run
+    return latest
+
+
+def _profile_run_health_reason(run: ProfileRun | None) -> str | None:
+    if run is None:
+        return None
+    if run.status == "completed":
+        return "Latest provider sync completed."
+
+    summary = run.summary_json or {}
+    message = summary.get("message")
+    if isinstance(message, str) and message:
+        return f"Latest provider sync failed: {message}"
+    return "Latest provider sync failed."
+
+
+def _topic_source_summaries(
+    rows: list[UserInterestProfile],
+    latest_runs_by_provider: dict[str, ProfileRun] | None = None,
+) -> list[RecommendationTopicSourceSummary]:
+    latest_runs_by_provider = latest_runs_by_provider or {}
     grouped: dict[str, list[UserInterestProfile]] = {}
     for row in rows:
         if row.muted:
@@ -1505,20 +1531,27 @@ def _topic_source_summaries(rows: list[UserInterestProfile]) -> list[Recommendat
         source_provider = row.source_provider or "unknown"
         grouped.setdefault(source_provider, []).append(row)
 
-    summaries = [
-        RecommendationTopicSourceSummary(
-            sourceProvider=source_provider,
-            label=_topic_source_label(source_provider),
-            topicCount=len(source_rows),
-            averageConfidence=round(sum(row.confidence for row in source_rows) / len(source_rows), 3),
-            topTopics=[
-                row.label
-                for row in sorted(source_rows, key=lambda row: (-row.confidence, row.label.lower()))[:4]
-            ],
+    summaries: list[RecommendationTopicSourceSummary] = []
+    for source_provider, source_rows in grouped.items():
+        if not source_rows:
+            continue
+        latest_run = latest_runs_by_provider.get(source_provider)
+        summaries.append(
+            RecommendationTopicSourceSummary(
+                sourceProvider=source_provider,
+                label=_topic_source_label(source_provider),
+                topicCount=len(source_rows),
+                averageConfidence=round(sum(row.confidence for row in source_rows) / len(source_rows), 3),
+                topTopics=[
+                    row.label
+                    for row in sorted(source_rows, key=lambda row: (-row.confidence, row.label.lower()))[:4]
+                ],
+                latestRunStatus=latest_run.status if latest_run else None,
+                latestRunAt=_timestamp_utc(latest_run.created_at).isoformat() if latest_run else None,
+                stale=latest_run is not None and latest_run.status != "completed",
+                healthReason=_profile_run_health_reason(latest_run),
+            )
         )
-        for source_provider, source_rows in grouped.items()
-        if source_rows
-    ]
     return sorted(summaries, key=lambda item: (-item.topicCount, item.label.lower()))
 
 
@@ -2503,6 +2536,15 @@ async def get_recommendation_debug_summary(
             )
         ).all()
     )
+    profile_runs = list(
+        (
+            await session.scalars(
+                select(ProfileRun)
+                .where(ProfileRun.user_id == user.id)
+                .order_by(ProfileRun.created_at.desc())
+            )
+        ).all()
+    )
     feedback_signals = await _feedback_signals(session, user.id)
     _, items, _ = await _cards_for_run(session, run)
     positive_drivers, negative_drivers = _driver_summaries(items)
@@ -2523,7 +2565,7 @@ async def get_recommendation_debug_summary(
         mapContext=_build_map_context(anchor_resolution),
         activeTopics=_topic_labels(topic_rows, muted=False),
         mutedTopics=_topic_labels(topic_rows, muted=True),
-        activeTopicSources=_topic_source_summaries(topic_rows),
+        activeTopicSources=_topic_source_summaries(topic_rows, _latest_profile_runs_by_provider(profile_runs)),
         topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
         topConfirmedSaveReasons=_confirmed_save_reason_summaries(feedback_signals),
         topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),

@@ -281,6 +281,10 @@ export interface RecommendationTopicSourceSummary {
   topicCount: number;
   averageConfidence: number;
   topTopics: string[];
+  latestRunStatus?: string | null;
+  latestRunAt?: string | null;
+  stale: boolean;
+  healthReason?: string | null;
 }
 
 export interface RecommendationMovementCue {

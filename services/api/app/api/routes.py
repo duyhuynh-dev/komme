@@ -81,7 +81,7 @@ from app.services.spotify_oauth import build_spotify_authorize_url, exchange_spo
 from app.services.worker_sync import trigger_worker_supply_sync
 from app.taste.errors import InsufficientSignalError, TasteProviderError
 from app.taste.profile_contracts import TasteProfile
-from app.taste.profile_service import apply_taste_profile
+from app.taste.profile_service import apply_taste_profile, record_taste_profile_failure
 from app.taste.providers.manual import ManualThemeProvider
 from app.taste.providers.reddit_export import RedditExportProvider
 from app.taste.providers.spotify import SpotifyProvider
@@ -895,5 +895,7 @@ async def taste_spotify_apply(
         profile = await provider.build_profile(session, connection)
         applied = await apply_taste_profile(session, identity.user, profile)
     except TasteProviderError as error:
+        await record_taste_profile_failure(session, identity.user, provider="spotify", error=error)
+        await session.commit()
         _raise_taste_provider_http_error(error)
     return _serialize_taste_profile(applied)

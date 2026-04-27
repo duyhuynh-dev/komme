@@ -2,8 +2,8 @@ import pytest
 
 from app.models.profile import ProfileRun, UserInterestProfile
 from app.models.user import User
-from app.taste.errors import InvalidManualSelectionError, UnknownThemeError
-from app.taste.profile_service import apply_taste_profile
+from app.taste.errors import InvalidManualSelectionError, ProviderUnavailableError, UnknownThemeError
+from app.taste.profile_service import apply_taste_profile, record_taste_profile_failure
 from app.taste.providers.manual import ManualThemeProvider
 
 
@@ -78,3 +78,23 @@ async def test_apply_taste_profile_persists_profile_run_and_interest_rows(monkey
     assert interest_rows[0].source_provider == "manual"
     assert "Selected manually during onboarding." in interest_rows[0].source_signals_json
     assert refresh_calls == [("user-1", True, "manual", "pulse-manual-provider-v1")]
+
+
+@pytest.mark.asyncio
+async def test_record_taste_profile_failure_persists_provider_health() -> None:
+    session = FakeSession()
+    user = User(id="user-1", email="duy@example.com")
+    error = ProviderUnavailableError("Spotify connection expired. Reconnect Spotify and try again.")
+
+    await record_taste_profile_failure(session, user, provider="spotify", error=error)
+
+    profile_runs = [obj for obj in session.added if isinstance(obj, ProfileRun)]
+    assert session.flushed is True
+    assert len(profile_runs) == 1
+    assert profile_runs[0].provider == "spotify"
+    assert profile_runs[0].status == "failed"
+    assert profile_runs[0].summary_json == {
+        "errorCode": "provider_unavailable",
+        "message": "Spotify connection expired. Reconnect Spotify and try again.",
+        "retryable": True,
+    }

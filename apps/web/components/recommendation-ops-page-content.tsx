@@ -393,10 +393,19 @@ export function RecommendationOpsPageContent() {
                     <div className="mt-3 space-y-2">
                       {debugSummary.activeTopicSources.length ? (
                         debugSummary.activeTopicSources.map((source) => (
-                          <div key={source.sourceProvider} className="rounded-[1rem] border border-stroke/80 bg-white px-3 py-2">
+                          <div
+                            key={source.sourceProvider}
+                            className={[
+                              "rounded-[1rem] border px-3 py-2",
+                              source.stale ? "border-amber-200 bg-amber-50" : "border-stroke/80 bg-white",
+                            ].join(" ")}
+                            title={source.healthReason ?? undefined}
+                          >
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-slate-800">{source.label}</p>
-                              <span className="text-xs font-semibold text-slate-500">{source.topicCount}</span>
+                              <span className="text-xs font-semibold text-slate-500">
+                                {source.stale ? "stale" : source.topicCount}
+                              </span>
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
                               Avg confidence {Math.round(source.averageConfidence * 100)}%

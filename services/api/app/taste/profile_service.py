@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.profile import ProfileRun, UserInterestOverride, UserInterestProfile
 from app.models.user import User
 from app.services.recommendations import refresh_recommendations_for_user
+from app.taste.errors import TasteProviderError
 from app.taste.profile_contracts import TasteProfile, TasteTheme
 
 
@@ -67,3 +68,26 @@ async def apply_taste_profile(
         model_name=f"pulse-{profile.source}-provider-v1",
     )
     return profile
+
+
+async def record_taste_profile_failure(
+    session: AsyncSession,
+    user: User,
+    *,
+    provider: str,
+    error: TasteProviderError,
+) -> None:
+    session.add(
+        ProfileRun(
+            user_id=user.id,
+            provider=provider,
+            model_name=f"pulse-{provider}-provider-v1",
+            status="failed",
+            summary_json={
+                "errorCode": error.code,
+                "message": error.message,
+                "retryable": error.retryable,
+            },
+        )
+    )
+    await session.flush()

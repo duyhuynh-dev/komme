@@ -1,6 +1,6 @@
 from app.models.events import CanonicalEvent
 from app.models.events import EventOccurrence
-from app.models.profile import UserInterestProfile
+from app.models.profile import ProfileRun, UserInterestProfile
 from app.models.events import Venue
 from app.services.recommendations import (
     FeedbackSignals,
@@ -116,13 +116,26 @@ def test_topic_source_summaries_show_spotify_ranking_influence() -> None:
         ),
     ]
 
-    summaries = _topic_source_summaries(rows)
+    failed_run = ProfileRun(
+        user_id="user-1",
+        provider="spotify",
+        model_name="pulse-spotify-provider-v1",
+        status="failed",
+        summary_json={"message": "Spotify connection expired. Reconnect Spotify and try again."},
+    )
+    failed_run.created_at = datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
+
+    summaries = _topic_source_summaries(rows, {"spotify": failed_run})
 
     assert summaries[0].sourceProvider == "spotify"
     assert summaries[0].label == "Spotify"
     assert summaries[0].topicCount == 2
     assert summaries[0].averageConfidence == 0.81
     assert summaries[0].topTopics == ["Underground dance", "Indie live music"]
+    assert summaries[0].latestRunStatus == "failed"
+    assert summaries[0].latestRunAt == "2026-04-27T12:00:00+00:00"
+    assert summaries[0].stale is True
+    assert summaries[0].healthReason == "Latest provider sync failed: Spotify connection expired. Reconnect Spotify and try again."
     assert summaries[1].sourceProvider == "manual"
 
 
