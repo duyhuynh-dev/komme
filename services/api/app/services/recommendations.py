@@ -40,8 +40,11 @@ from app.schemas.recommendations import (
     TravelEstimate,
     VenueRecommendationCard,
 )
-from app.services.planner import build_tonight_planner
-from app.services.planner_sessions import apply_planner_session_state, get_or_create_planner_session
+from app.services.event_plan import (
+    apply_event_plan_session_state,
+    build_event_plan,
+    get_or_create_event_plan_session,
+)
 from app.services.travel import estimate_travel_bands
 
 DEFAULT_VIEWPORT = {
@@ -2399,24 +2402,24 @@ async def get_map_recommendations(
         topics=list(topic_rows),
         items=items,
     )
-    tonight_planner = build_tonight_planner(
+    event_plan = build_event_plan(
         items,
         pins,
         budget_level=constraints.budget_level if constraints else "under_75",
         timezone=display_timezone,
     )
-    planner_session = await get_or_create_planner_session(
+    planner_session = await get_or_create_event_plan_session(
         session,
         user_id=user.id,
         recommendation_run_id=run.id,
         recommendation_context_hash=context_hash,
-        planner=tonight_planner,
+        planner=event_plan,
         budget_level=constraints.budget_level if constraints else "under_75",
         timezone=display_timezone,
     )
-    tonight_planner = await apply_planner_session_state(
+    event_plan = await apply_event_plan_session_state(
         session,
-        planner=tonight_planner,
+        planner=event_plan,
         planner_session=planner_session,
     )
     await session.commit()
@@ -2437,8 +2440,8 @@ async def get_map_recommendations(
             "socialMode": constraints.social_mode if constraints else "either",
         },
         mapContext=_build_map_context(anchor_resolution),
-        tonightPlanner=tonight_planner,
-        eventPlan=tonight_planner,
+        tonightPlanner=event_plan,
+        eventPlan=event_plan,
     )
 
 

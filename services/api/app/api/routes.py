@@ -60,8 +60,8 @@ from app.services.digest import (
     send_digest_preview,
     send_due_weekly_digests,
 )
+from app.services.event_plan import append_event_plan_action, get_event_plan_session_debug
 from app.services.ingestion import upsert_ingested_candidates
-from app.services.planner_sessions import append_planner_action_event, get_planner_session_debug
 from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import (
     get_archive,
@@ -492,7 +492,7 @@ async def planner_sessions(
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
 ) -> PlannerSessionDebugResponse:
-    return await get_planner_session_debug(session, user_id=user.id)
+    return await get_event_plan_session_debug(session, user_id=user.id)
 
 
 @router.post("/recommendations/refresh", response_model=OkResponse)
@@ -645,7 +645,7 @@ async def recommendation_interactions(
         if not recommendation_id or action not in allowed_actions or key in seen:
             continue
         seen.add(key)
-        await append_planner_action_event(
+        await append_event_plan_action(
             session,
             user_id=user.id,
             planner_session_id=event.plannerSessionId,

@@ -1224,7 +1224,7 @@ async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypa
             )
 
         monkeypatch.setattr("app.services.recommendations.refresh_recommendations_for_user", fake_refresh)
-        monkeypatch.setattr("app.services.recommendations.build_tonight_planner", fake_planner)
+        monkeypatch.setattr("app.services.recommendations.build_event_plan", fake_planner)
 
         response = await get_map_recommendations(session, user)
 
