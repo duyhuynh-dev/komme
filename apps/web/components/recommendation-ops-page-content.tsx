@@ -3,8 +3,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
+import { getPlannerSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
 import type {
+  PlannerSessionDebugItem,
   RecommendationDebugSummary,
   RecommendationDriverSummary,
   RecommendationFeedbackReasonSummary,
@@ -228,6 +229,77 @@ function SummaryPanel({
   );
 }
 
+function PlannerSessionCard({ session }: { session: PlannerSessionDebugItem }) {
+  const recentEvents = session.events.slice(-5).reverse();
+  return (
+    <div className="rounded-[1.25rem] border border-stroke/80 bg-canvas/80 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Planner session</p>
+          <p className="mt-1 break-all font-mono text-sm text-slate-800">{session.sessionId}</p>
+        </div>
+        <span className="rounded-full border border-stroke/80 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+          {session.sessionStatus}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Route</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {session.remainingStopCount} remaining · {session.droppedStopCount} dropped
+          </p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Budget</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{session.budgetLevel}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Updated</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{formatTimestamp(session.updatedAt)}</p>
+        </div>
+      </div>
+      {session.recompositionReason ? (
+        <p className="mt-4 text-sm leading-6 text-slate-700">{session.recompositionReason}</p>
+      ) : null}
+      {session.recompositionScores.length ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recomposition scores</p>
+          {session.recompositionScores.map((score) => (
+            <div key={`${session.sessionId}-${score.eventId}`} className="rounded-[1rem] border border-stroke/80 bg-white px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">{score.venueName}</p>
+                <span className="rounded-full bg-canvas px-3 py-1 text-xs font-semibold text-slate-600">
+                  {score.role} · {score.score.toFixed(3)}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {score.reasons.slice(0, 4).map((reason) => (
+                  <span key={`${score.eventId}-${reason}`} className="rounded-full border border-stroke/80 bg-canvas px-3 py-1 text-xs text-slate-600">
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-4 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recent events</p>
+        {recentEvents.length ? (
+          recentEvents.map((event) => (
+            <div key={event.eventId} className="flex flex-wrap items-center justify-between gap-2 rounded-[1rem] border border-stroke/80 bg-white px-3 py-2">
+              <span className="text-sm font-medium text-slate-800">{event.eventType.replaceAll("_", " ")}</span>
+              <span className="font-mono text-xs text-slate-500">{formatTimestamp(event.createdAt)}</span>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">No planner events recorded yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function RecommendationOpsPageContent() {
   const debugSummaryQuery = useQuery({
     queryKey: ["recommendation-debug-summary"],
@@ -237,11 +309,16 @@ export function RecommendationOpsPageContent() {
     queryKey: ["recommendation-run-comparison"],
     queryFn: getRecommendationRunComparison,
   });
+  const plannerSessionsQuery = useQuery({
+    queryKey: ["planner-session-debug"],
+    queryFn: getPlannerSessionDebug,
+  });
 
-  const isLoading = debugSummaryQuery.isLoading || comparisonQuery.isLoading;
-  const error = debugSummaryQuery.error ?? comparisonQuery.error;
+  const isLoading = debugSummaryQuery.isLoading || comparisonQuery.isLoading || plannerSessionsQuery.isLoading;
+  const error = debugSummaryQuery.error ?? comparisonQuery.error ?? plannerSessionsQuery.error;
   const debugSummary = debugSummaryQuery.data;
   const comparison = comparisonQuery.data;
+  const plannerSessions = plannerSessionsQuery.data?.sessions ?? [];
   const confirmedSaveReasons = debugSummary?.topConfirmedSaveReasons ?? [];
 
   return (
@@ -373,6 +450,21 @@ export function RecommendationOpsPageContent() {
                   )}
                 </div>
               </div>
+            </SectionShell>
+
+            <SectionShell
+              title="Planner sessions"
+              subtitle="Stateful execution history for Tonight Planner route changes and recomposition decisions."
+            >
+              {plannerSessions.length ? (
+                <div className="grid gap-4">
+                  {plannerSessions.map((session) => (
+                    <PlannerSessionCard key={session.sessionId} session={session} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No planner sessions have been created yet.</p>
+              )}
             </SectionShell>
 
             <SectionShell

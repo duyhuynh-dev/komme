@@ -326,6 +326,44 @@ export interface RecommendationRunComparison {
   steadyLeaders: RecommendationRunComparisonItem[];
 }
 
+export interface PlannerSessionDebugEvent {
+  eventId: string;
+  eventType: string;
+  recommendationId?: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface PlannerSessionDebugStopScore {
+  eventId: string;
+  venueName: string;
+  role: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface PlannerSessionDebugItem {
+  sessionId: string;
+  sessionStatus: string;
+  recommendationRunId?: string | null;
+  contextHash?: string | null;
+  activeStopEventId?: string | null;
+  budgetLevel: string;
+  timezone: string;
+  createdAt: string;
+  updatedAt: string;
+  initialStopCount: number;
+  remainingStopCount: number;
+  droppedStopCount: number;
+  recompositionReason?: string | null;
+  recompositionScores: PlannerSessionDebugStopScore[];
+  events: PlannerSessionDebugEvent[];
+}
+
+export interface PlannerSessionDebugResponse {
+  sessions: PlannerSessionDebugItem[];
+}
+
 export interface ArchiveSnapshot {
   runId: string;
   kind: "live" | "preview" | "scheduled" | "snapshot";

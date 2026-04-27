@@ -40,6 +40,7 @@ from app.services.planner_sessions import (
     list_planner_session_events,
     recompose_remaining_route,
     reduce_planner_session,
+    get_planner_session_debug,
 )
 from app.services.recommendations import get_map_recommendations
 
@@ -560,6 +561,94 @@ async def test_planner_session_reducer_tracks_execution_events() -> None:
         assert state.active_stop_event_id == "late-venue-event"
         assert state.remaining_stops[0].eventId == "late-venue-event"
         assert "timing" in (state.recomposition_reason or "").lower()
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_planner_session_debug_payload_summarizes_timeline_and_scores() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="planner-debug@example.com")
+        session.add(user)
+        await session.flush()
+        stop = TonightPlannerStop(
+            role="main_event",
+            roleLabel="Main event",
+            venueId="main-venue",
+            venueName="Elsewhere",
+            eventId="main-event",
+            eventTitle="Headliner",
+            neighborhood="Bushwick",
+            startsAt="2026-04-26T01:00:00+00:00",
+            priceLabel="$35",
+            scoreBand="high",
+            hopLabel="18 min transit",
+            roleReason="Anchor",
+            confidence="high",
+            confidenceLabel="Confident anchor",
+            confidenceReason="Strong fit.",
+            selected=True,
+            fallbacks=[],
+        )
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="debug-hash",
+            initial_route_snapshot={"stops": [stop.model_dump(mode="json")]},
+            active_stop_event_id="main-event",
+            status="active",
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_SESSION_CREATED,
+            recommendation_id="main-event",
+            metadata={"activeStopEventId": "main-event"},
+        )
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_ROUTE_RECOMPUTED,
+            recommendation_id="main-event",
+            metadata={
+                "activeStopEventId": "main-event",
+                "sessionStatus": "active",
+                "remainingStops": [stop.model_dump(mode="json")],
+                "droppedStops": [],
+                "reason": "Pulse recomposed the remaining route around live timing.",
+                "scores": [
+                    {
+                        "eventId": "main-event",
+                        "venueName": "Elsewhere",
+                        "role": "main_event",
+                        "score": 0.812,
+                        "reasons": ["high shortlist band", "budget fit 0.78"],
+                    }
+                ],
+            },
+        )
+
+        response = await get_planner_session_debug(session, user_id=user.id)
+
+        assert len(response.sessions) == 1
+        debug_session = response.sessions[0]
+        assert debug_session.sessionId == planner_session.id
+        assert debug_session.contextHash == "debug-hash"
+        assert debug_session.recompositionReason == "Pulse recomposed the remaining route around live timing."
+        assert debug_session.recompositionScores[0].venueName == "Elsewhere"
+        assert [event.eventType for event in debug_session.events] == [
+            PLANNER_EVENT_SESSION_CREATED,
+            PLANNER_EVENT_ROUTE_RECOMPUTED,
+        ]
 
     await engine.dispose()
 

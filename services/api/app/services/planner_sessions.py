@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.recommendation import PlannerSession, PlannerSessionEvent
 from app.schemas.recommendations import (
+    PlannerSessionDebugEvent,
+    PlannerSessionDebugItem,
+    PlannerSessionDebugResponse,
+    PlannerSessionDebugStopScore,
     TonightPlannerFallbackOption,
     TonightPlannerResponse,
     TonightPlannerStop,
@@ -34,6 +38,7 @@ class PlannerRecomposition:
     reason: str = "Pulse kept the remaining route as-is."
     active_stop_event_id: str | None = None
     session_status: str = PLANNER_SESSION_ACTIVE
+    diagnostics: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -186,6 +191,7 @@ async def append_planner_action_event(
                 "droppedStops": [_stop_dump(stop) for stop in recomposition.dropped_stops],
                 "replacements": [_stop_dump(stop) for stop in recomposition.replacements],
                 "reason": recomposition.reason,
+                "scores": recomposition.diagnostics,
             },
         )
         planner_session.active_stop_event_id = recomposition.active_stop_event_id
@@ -368,7 +374,75 @@ def recompose_remaining_route(
         reason=reason,
         active_stop_event_id=active_stop_event_id,
         session_status=status,
+        diagnostics=[
+            _score_diagnostics(stop, previous_stop=previous_stop, now_utc=now_utc)
+            for stop in ordered
+        ],
     )
+
+
+async def get_planner_session_debug(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    limit: int = 5,
+) -> PlannerSessionDebugResponse:
+    planner_sessions = list(
+        (
+            await session.scalars(
+                select(PlannerSession)
+                .where(PlannerSession.user_id == user_id)
+                .order_by(desc(PlannerSession.updated_at), desc(PlannerSession.created_at))
+                .limit(limit)
+            )
+        ).all()
+    )
+
+    items: list[PlannerSessionDebugItem] = []
+    for planner_session in planner_sessions:
+        events = await list_planner_session_events(session, planner_session.id)
+        state = reduce_planner_session(planner_session, events)
+        latest_recomposition = _latest_recomposition_event(events)
+        latest_recomposition_metadata = latest_recomposition.metadata_json if latest_recomposition else {}
+        scores = [
+            PlannerSessionDebugStopScore(
+                eventId=str(item.get("eventId") or ""),
+                venueName=str(item.get("venueName") or "Unknown venue"),
+                role=str(item.get("role") or "stop"),
+                score=float(item.get("score") or 0.0),
+                reasons=[str(reason) for reason in item.get("reasons", [])],
+            )
+            for item in latest_recomposition_metadata.get("scores", [])
+        ]
+        items.append(
+            PlannerSessionDebugItem(
+                sessionId=planner_session.id,
+                sessionStatus=state.session_status,
+                recommendationRunId=planner_session.recommendation_run_id,
+                contextHash=planner_session.recommendation_context_hash,
+                activeStopEventId=state.active_stop_event_id,
+                budgetLevel=planner_session.budget_level,
+                timezone=planner_session.timezone,
+                createdAt=_iso_or_none(planner_session.created_at) or "",
+                updatedAt=_iso_or_none(planner_session.updated_at) or "",
+                initialStopCount=len(state.initial_stops),
+                remainingStopCount=len(state.remaining_stops),
+                droppedStopCount=len(state.dropped_stops),
+                recompositionReason=state.recomposition_reason,
+                recompositionScores=scores,
+                events=[
+                    PlannerSessionDebugEvent(
+                        eventId=event.id,
+                        eventType=event.event_type,
+                        recommendationId=event.recommendation_id,
+                        createdAt=_iso_or_none(event.created_at) or "",
+                        metadata=event.metadata_json or {},
+                    )
+                    for event in events
+                ],
+            )
+        )
+    return PlannerSessionDebugResponse(sessions=items)
 
 
 def _initial_active_stop(stops: list[TonightPlannerStop]) -> TonightPlannerStop | None:
@@ -504,6 +578,33 @@ def _remaining_stop_score(
     return score
 
 
+def _score_diagnostics(
+    stop: TonightPlannerStop,
+    *,
+    previous_stop: TonightPlannerStop | None,
+    now_utc: datetime,
+) -> dict:
+    score = _remaining_stop_score(stop, previous_stop=previous_stop, now_utc=now_utc)
+    reasons = [
+        f"{stop.scoreBand} shortlist band",
+        f"{stop.confidence} planner confidence",
+        f"budget fit {_budget_fit_for_label(stop.priceLabel):.2f}",
+        f"time viability {_time_viability_score(stop, now_utc):.2f}",
+        f"travel continuity {_hop_fit(stop.hopLabel):.2f}",
+    ]
+    if previous_stop and previous_stop.neighborhood == stop.neighborhood:
+        reasons.append(f"same-neighborhood continuity from {previous_stop.venueName}")
+    elif previous_stop:
+        reasons.append(f"neighborhood continuity checked against {previous_stop.venueName}")
+    return {
+        "eventId": stop.eventId,
+        "venueName": stop.venueName,
+        "role": stop.role,
+        "score": round(score, 3),
+        "reasons": reasons,
+    }
+
+
 def _is_time_viable(
     stop: TonightPlannerStop | TonightPlannerFallbackOption,
     now_utc: datetime,
@@ -573,6 +674,13 @@ def _shared_boroughish_label(left: str, right: str) -> bool:
     left_lower = left.lower()
     right_lower = right.lower()
     return any(token in left_lower and token in right_lower for token in ["bushwick", "brooklyn", "lower", "east", "greenpoint"])
+
+
+def _latest_recomposition_event(events: list[PlannerSessionEvent]) -> PlannerSessionEvent | None:
+    return next(
+        (event for event in reversed(events) if event.event_type == PLANNER_EVENT_ROUTE_RECOMPUTED),
+        None,
+    )
 
 
 def _iso_or_none(value: datetime | None) -> str | None:

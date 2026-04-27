@@ -257,6 +257,44 @@ class RecommendationRunComparison(BaseModel):
     steadyLeaders: list[RecommendationRunComparisonItem] = Field(default_factory=list)
 
 
+class PlannerSessionDebugEvent(BaseModel):
+    eventId: str
+    eventType: str
+    recommendationId: str | None = None
+    createdAt: str
+    metadata: dict = Field(default_factory=dict)
+
+
+class PlannerSessionDebugStopScore(BaseModel):
+    eventId: str
+    venueName: str
+    role: str
+    score: float
+    reasons: list[str] = Field(default_factory=list)
+
+
+class PlannerSessionDebugItem(BaseModel):
+    sessionId: str
+    sessionStatus: str
+    recommendationRunId: str | None = None
+    contextHash: str | None = None
+    activeStopEventId: str | None = None
+    budgetLevel: str
+    timezone: str
+    createdAt: str
+    updatedAt: str
+    initialStopCount: int = 0
+    remainingStopCount: int = 0
+    droppedStopCount: int = 0
+    recompositionReason: str | None = None
+    recompositionScores: list[PlannerSessionDebugStopScore] = Field(default_factory=list)
+    events: list[PlannerSessionDebugEvent] = Field(default_factory=list)
+
+
+class PlannerSessionDebugResponse(BaseModel):
+    sessions: list[PlannerSessionDebugItem] = Field(default_factory=list)
+
+
 class ArchiveSnapshot(BaseModel):
     runId: str
     kind: str

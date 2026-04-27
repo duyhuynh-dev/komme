@@ -8,6 +8,7 @@ import type {
   FeedbackReason,
   InterestTopic,
   LocationAnchorPayload,
+  PlannerSessionDebugResponse,
   RecommendationDebugSummary,
   RecommendationRunComparison,
   RecommendationsMapResponse,
@@ -176,6 +177,10 @@ export function getRecommendationDebugSummary() {
 
 export function getRecommendationRunComparison() {
   return request<RecommendationRunComparison>("/v1/recommendations/run-comparison");
+}
+
+export function getPlannerSessionDebug() {
+  return request<PlannerSessionDebugResponse>("/v1/planner/sessions");
 }
 
 export function getInterests() {

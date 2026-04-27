@@ -32,6 +32,7 @@ from app.schemas.recommendations import (
     RecommendationInteractionsPayload,
     RecommendationDebugSummary,
     RecommendationRunComparison,
+    PlannerSessionDebugResponse,
     RecommendationsMapResponse,
 )
 from app.schemas.taste import (
@@ -60,7 +61,7 @@ from app.services.digest import (
     send_due_weekly_digests,
 )
 from app.services.ingestion import upsert_ingested_candidates
-from app.services.planner_sessions import append_planner_action_event
+from app.services.planner_sessions import append_planner_action_event, get_planner_session_debug
 from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import (
     get_archive,
@@ -484,6 +485,14 @@ async def recommendations_run_comparison(
     user=Depends(current_user),
 ) -> RecommendationRunComparison:
     return await get_recommendation_run_comparison(session, user)
+
+
+@router.get("/planner/sessions", response_model=PlannerSessionDebugResponse)
+async def planner_sessions(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> PlannerSessionDebugResponse:
+    return await get_planner_session_debug(session, user_id=user.id)
 
 
 @router.post("/recommendations/refresh", response_model=OkResponse)
