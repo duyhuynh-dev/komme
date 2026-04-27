@@ -1530,6 +1530,85 @@ async def test_event_plan_interactions_accept_neutral_session_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_plan_interactions_return_recomposed_session_payload() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    active_stop = _planner_stop(event_id="rec-1", starts_at="2030-04-26T01:00:00+00:00")
+    next_stop = _planner_stop(
+        event_id="rec-2",
+        venue_id="venue-2",
+        venue_name="Good Room",
+        starts_at="2030-04-26T02:30:00+00:00",
+        role="late_option",
+    )
+
+    async with session_factory() as session:
+        user = User(email="event-plan-response@example.com", timezone="America/New_York")
+        session.add(user)
+        await session.flush()
+
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="event-plan-response-test",
+            initial_route_snapshot={
+                "stops": [active_stop.model_dump(), next_stop.model_dump()],
+                "planWindowStart": "2030-04-26T00:00:00+00:00",
+                "planWindowEnd": "2030-04-26T04:00:00+00:00",
+                "planWindowLabel": "Tonight",
+            },
+            active_stop_event_id=active_stop.eventId,
+            status=PLANNER_SESSION_ACTIVE,
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
+        await append_planner_session_event(
+            session,
+            planner_session=planner_session,
+            event_type=PLANNER_EVENT_SESSION_CREATED,
+            recommendation_id=active_stop.eventId,
+            metadata={"activeStopEventId": active_stop.eventId},
+        )
+
+        response = await event_plan_interactions(
+            payload=RecommendationInteractionsPayload(
+                events=[
+                    {
+                        "recommendationId": active_stop.eventId,
+                        "action": PLANNER_SKIPPED_FEEDBACK_ACTION,
+                        "eventPlanSessionId": planner_session.id,
+                    }
+                ]
+            ),
+            session=session,
+            user=user,
+        )
+
+        assert response.eventPlanSession is not None
+        assert response.plannerSession is not None
+        assert response.eventPlanSession.sessionId == planner_session.id
+        assert response.eventPlanSession.sessionStatus == PLANNER_SESSION_ACTIVE
+        assert response.eventPlanSession.activeStop is not None
+        assert response.eventPlanSession.activeStop.eventId == next_stop.eventId
+        assert [stop.eventId for stop in response.eventPlanSession.remainingStops] == [next_stop.eventId]
+        assert [stop.eventId for stop in response.eventPlanSession.droppedStops] == [active_stop.eventId]
+        assert response.eventPlanSession.recompositionReason
+        assert response.eventPlanSession.lastRecomputedAt is not None
+        assert response.eventPlanSession.lastEventAt is not None
+
+        planner_event_rows = list((await session.scalars(select(PlannerSessionEvent))).all())
+        assert {row.event_type for row in planner_event_rows} >= {
+            PLANNER_EVENT_STOP_SKIPPED,
+            PLANNER_EVENT_ROUTE_RECOMPUTED,
+        }
+
+
+@pytest.mark.asyncio
 async def test_get_map_recommendations_includes_tonight_planner_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)

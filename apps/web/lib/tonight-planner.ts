@@ -30,6 +30,44 @@ export interface TonightPlannerPanelState {
   stops: TonightPlannerStop[];
 }
 
+export interface PlannerSessionRouteUpdate {
+  sessionId: string;
+  sessionStatus?: string | null;
+  activeStop?: TonightPlannerStop | null;
+  remainingStops?: TonightPlannerStop[] | null;
+  droppedStops?: TonightPlannerStop[] | null;
+  recompositionReason?: string | null;
+  lastRecomputedAt?: string | null;
+  lastEventAt?: string | null;
+}
+
+export function applyPlannerSessionRouteUpdate(
+  planner: TonightPlannerResponse | null | undefined,
+  update: PlannerSessionRouteUpdate | null | undefined,
+): TonightPlannerResponse | null | undefined {
+  if (!planner || !update) {
+    return planner;
+  }
+
+  const remainingStops = update.remainingStops ?? planner.remainingStops ?? [];
+  const activeStop = update.activeStop ?? planner.activeStop ?? remainingStops[0] ?? null;
+
+  return {
+    ...planner,
+    sessionId: update.sessionId ?? planner.sessionId,
+    sessionStatus: update.sessionStatus ?? planner.sessionStatus,
+    activeStop,
+    activeTargetEventId: activeStop?.eventId ?? planner.activeTargetEventId ?? null,
+    activeTargetVenueName: activeStop?.venueName ?? planner.activeTargetVenueName ?? null,
+    remainingStops,
+    droppedStops: update.droppedStops ?? planner.droppedStops ?? [],
+    recompositionReason: update.recompositionReason ?? planner.recompositionReason ?? null,
+    lastRecomputedAt: update.lastRecomputedAt ?? planner.lastRecomputedAt ?? null,
+    lastEventAt: update.lastEventAt ?? planner.lastEventAt ?? null,
+    stops: remainingStops.length ? remainingStops : planner.stops,
+  };
+}
+
 export function buildTonightPlannerPanelState(
   planner: TonightPlannerResponse | null | undefined,
 ): TonightPlannerPanelState {

@@ -29,7 +29,9 @@ from app.schemas.profile import (
 from app.schemas.recommendations import (
     ArchiveResponse,
     FeedbackPayload,
+    PlannerActionSessionPayload,
     RecommendationInteractionsPayload,
+    RecommendationInteractionsResponse,
     RecommendationDebugSummary,
     RecommendationRunComparison,
     EventPlanSessionDebugResponse,
@@ -63,6 +65,7 @@ from app.services.digest import (
 )
 from app.services.event_plan import append_event_plan_action, get_event_plan_session_debug
 from app.services.ingestion import upsert_ingested_candidates
+from app.services.planner_sessions import list_planner_session_events, reduce_planner_session
 from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
 from app.services.recommendations import (
     get_archive,
@@ -626,21 +629,21 @@ async def recommendation_feedback(
     return OkResponse()
 
 
-@router.post("/recommendations/interactions", response_model=OkResponse)
+@router.post("/recommendations/interactions", response_model=RecommendationInteractionsResponse)
 async def recommendation_interactions(
     payload: RecommendationInteractionsPayload,
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
-) -> OkResponse:
+) -> RecommendationInteractionsResponse:
     return await _record_recommendation_interactions(payload=payload, session=session, user=user)
 
 
-@router.post("/event-plan/interactions", response_model=OkResponse)
+@router.post("/event-plan/interactions", response_model=RecommendationInteractionsResponse)
 async def event_plan_interactions(
     payload: RecommendationInteractionsPayload,
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
-) -> OkResponse:
+) -> RecommendationInteractionsResponse:
     return await _record_recommendation_interactions(payload=payload, session=session, user=user)
 
 
@@ -649,9 +652,9 @@ async def _record_recommendation_interactions(
     payload: RecommendationInteractionsPayload,
     session: AsyncSession,
     user,
-) -> OkResponse:
+) -> RecommendationInteractionsResponse:
     if user is None:
-        return OkResponse()
+        return RecommendationInteractionsResponse()
 
     allowed_actions = {
         "exposed",
@@ -664,6 +667,7 @@ async def _record_recommendation_interactions(
         "planner_skipped",
     }
     seen: set[tuple[str, str]] = set()
+    planner_action_payload: PlannerActionSessionPayload | None = None
 
     for event in payload.events:
         action = event.action.strip().lower()
@@ -672,7 +676,7 @@ async def _record_recommendation_interactions(
         if not recommendation_id or action not in allowed_actions or key in seen:
             continue
         seen.add(key)
-        await append_event_plan_action(
+        planner_session = await append_event_plan_action(
             session,
             user_id=user.id,
             planner_session_id=event.eventPlanSessionId or event.plannerSessionId,
@@ -680,6 +684,8 @@ async def _record_recommendation_interactions(
             recommendation_id=recommendation_id,
             metadata=event.metadata,
         )
+        if planner_session is not None:
+            planner_action_payload = await _planner_action_session_payload(session, planner_session)
         session.add(
             FeedbackEvent(
                 user_id=user.id,
@@ -691,7 +697,32 @@ async def _record_recommendation_interactions(
 
     await session.flush()
     await session.commit()
-    return OkResponse()
+    return RecommendationInteractionsResponse(
+        plannerSession=planner_action_payload,
+        eventPlanSession=planner_action_payload,
+    )
+
+
+async def _planner_action_session_payload(
+    session: AsyncSession,
+    planner_session,
+) -> PlannerActionSessionPayload:
+    events = await list_planner_session_events(session, planner_session.id)
+    state = reduce_planner_session(planner_session, events)
+    active_stop = next(
+        (stop for stop in state.remaining_stops if stop.eventId == state.active_stop_event_id),
+        None,
+    )
+    return PlannerActionSessionPayload(
+        sessionId=state.session_id,
+        sessionStatus=state.session_status,
+        activeStop=active_stop,
+        remainingStops=state.remaining_stops,
+        droppedStops=state.dropped_stops,
+        recompositionReason=state.recomposition_reason,
+        lastRecomputedAt=state.last_recomputed_at.isoformat() if state.last_recomputed_at else None,
+        lastEventAt=state.last_event_at.isoformat() if state.last_event_at else None,
+    )
 
 
 @router.get("/maps/token", response_model=MapTokenResponse)

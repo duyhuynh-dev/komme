@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  applyPlannerSessionRouteUpdate,
   buildTonightPlannerPanelState,
   plannerFallbackActionLabel,
   plannerOutcomePrompt,
@@ -150,6 +151,80 @@ test("buildTonightPlannerPanelState carries planner session recomposition state"
   assert.equal(state.remainingStops.length, 1);
   assert.equal(state.recompositionReason, "Pulse recomposed the remaining route around live timing.");
   assert.equal(state.lastRecomputedAt, "2026-04-26T00:30:00+00:00");
+});
+
+test("applyPlannerSessionRouteUpdate reflects action response state immediately", () => {
+  const skippedStop: TonightPlannerResponse["stops"][number] = {
+    role: "main_event",
+    roleLabel: "Main event",
+    venueId: "main-venue",
+    venueName: "Elsewhere",
+    eventId: "main-event",
+    eventTitle: "Headliner set",
+    neighborhood: "Bushwick",
+    startsAt: "2026-04-26T01:00:00+00:00",
+    priceLabel: "$35",
+    scoreBand: "high",
+    hopLabel: "18 min transit",
+    roleReason: "Strongest anchor from the shortlist.",
+    confidence: "high",
+    confidenceLabel: "Confident anchor",
+    confidenceReason: "Best mix of timing and trust.",
+    selected: true,
+    fallbacks: [],
+  };
+  const nextStop: TonightPlannerResponse["stops"][number] = {
+    ...skippedStop,
+    role: "late_option",
+    roleLabel: "Late option",
+    venueId: "late-venue",
+    venueName: "Good Room",
+    eventId: "late-event",
+    eventTitle: "Late room set",
+    neighborhood: "Greenpoint",
+    startsAt: "2026-04-26T02:30:00+00:00",
+    priceLabel: "$28",
+    selected: true,
+  };
+  const planner: TonightPlannerResponse = {
+    status: "ready",
+    title: "Tonight planner",
+    summary: "Route ready.",
+    planningNote: null,
+    executionStatus: "locked",
+    executionNote: null,
+    activeTargetEventId: "main-event",
+    activeTargetVenueName: "Elsewhere",
+    outcomeStatus: "pending",
+    outcomeNote: null,
+    rerouteStatus: "idle",
+    rerouteNote: null,
+    rerouteOption: null,
+    sessionId: "session-1",
+    sessionStatus: "active",
+    activeStop: skippedStop,
+    remainingStops: [skippedStop, nextStop],
+    droppedStops: [],
+    stops: [skippedStop, nextStop],
+  };
+
+  const updated = applyPlannerSessionRouteUpdate(planner, {
+    sessionId: "session-1",
+    sessionStatus: "active",
+    activeStop: nextStop,
+    remainingStops: [nextStop],
+    droppedStops: [skippedStop],
+    recompositionReason: "Pulse recomposed the remaining route after the skip.",
+    lastRecomputedAt: "2026-04-26T00:45:00+00:00",
+    lastEventAt: "2026-04-26T00:45:01+00:00",
+  });
+
+  assert.equal(updated?.activeTargetEventId, "late-event");
+  assert.equal(updated?.activeTargetVenueName, "Good Room");
+  assert.deepEqual(updated?.stops.map((stop) => stop.eventId), ["late-event"]);
+  assert.deepEqual(updated?.droppedStops.map((stop) => stop.eventId), ["main-event"]);
+  assert.equal(updated?.recompositionReason, "Pulse recomposed the remaining route after the skip.");
+  assert.equal(updated?.lastRecomputedAt, "2026-04-26T00:45:00+00:00");
 });
 
 test("buildTonightPlannerPanelState returns the empty planner copy when no viable plan exists", () => {

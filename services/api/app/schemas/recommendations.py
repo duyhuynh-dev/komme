@@ -381,5 +381,24 @@ class RecommendationInteractionsPayload(BaseModel):
     events: list[RecommendationInteractionEvent] = Field(default_factory=list)
 
 
+class PlannerActionSessionPayload(BaseModel):
+    sessionId: str
+    sessionStatus: str | None = None
+    activeStop: TonightPlannerStop | None = None
+    remainingStops: list[TonightPlannerStop] = Field(default_factory=list)
+    droppedStops: list[TonightPlannerStop] = Field(default_factory=list)
+    recompositionReason: str | None = None
+    lastRecomputedAt: str | None = None
+    lastEventAt: str | None = None
+
+
+class RecommendationInteractionsResponse(BaseModel):
+    ok: bool = True
+    plannerSession: PlannerActionSessionPayload | None = None
+    eventPlanSession: PlannerActionSessionPayload | None = None
+
+
 EventPlanInteractionEvent = RecommendationInteractionEvent
 EventPlanInteractionsPayload = RecommendationInteractionsPayload
+EventPlanActionSessionPayload = PlannerActionSessionPayload
+EventPlanInteractionsResponse = RecommendationInteractionsResponse

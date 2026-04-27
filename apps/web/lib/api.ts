@@ -15,6 +15,7 @@ import type {
   RecommendationsMapResponse,
   SupplySyncResponse,
   TasteProfileResponse,
+  TonightPlannerStop,
   UserConstraint
 } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -210,6 +211,23 @@ export function submitFeedback(
   });
 }
 
+export interface PlannerActionSessionPayload {
+  sessionId: string;
+  sessionStatus?: string | null;
+  activeStop?: TonightPlannerStop | null;
+  remainingStops: TonightPlannerStop[];
+  droppedStops: TonightPlannerStop[];
+  recompositionReason?: string | null;
+  lastRecomputedAt?: string | null;
+  lastEventAt?: string | null;
+}
+
+export interface RecommendationInteractionsResponse {
+  ok: true;
+  plannerSession?: PlannerActionSessionPayload | null;
+  eventPlanSession?: PlannerActionSessionPayload | null;
+}
+
 export function submitRecommendationInteractions(
   events: Array<{
     recommendationId: string;
@@ -227,7 +245,7 @@ export function submitRecommendationInteractions(
       | "planner_skipped";
   }>,
 ) {
-  return request<{ ok: true }>("/v1/recommendations/interactions", {
+  return request<RecommendationInteractionsResponse>("/v1/recommendations/interactions", {
     method: "POST",
     body: JSON.stringify({ events }),
   });
@@ -236,7 +254,7 @@ export function submitRecommendationInteractions(
 export function submitEventPlanInteractions(
   events: Parameters<typeof submitRecommendationInteractions>[0],
 ) {
-  return request<{ ok: true }>("/v1/event-plan/interactions", {
+  return request<RecommendationInteractionsResponse>("/v1/event-plan/interactions", {
     method: "POST",
     body: JSON.stringify({ events }),
   });

@@ -17,7 +17,7 @@ import {
   syncSupply,
   submitFeedback
 } from "@/lib/api";
-import type { FeedbackReason, InterestTopic, RecommendationRunComparisonItem, VenueRecommendationCard } from "@/lib/types";
+import type { FeedbackReason, InterestTopic, RecommendationRunComparisonItem, RecommendationsMapResponse, VenueRecommendationCard } from "@/lib/types";
 import { useAuth } from "@/components/auth-provider";
 import { AccountDock } from "@/components/account-dock";
 import { FeedbackReasonModal } from "@/components/feedback-reason-modal";
@@ -27,6 +27,7 @@ import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
 import { SettingsDock } from "@/components/settings-dock";
 import { TonightPlannerPanel } from "@/components/tonight-planner-panel";
+import { applyPlannerSessionRouteUpdate, type PlannerSessionRouteUpdate } from "@/lib/tonight-planner";
 import { formatDigestTime } from "@/lib/utils";
 
 export function PulseShell() {
@@ -63,6 +64,24 @@ export function PulseShell() {
     queryKey: ["recommendation-run-comparison", identityKey],
     queryFn: getRecommendationRunComparison,
   });
+
+  const applyPlannerActionResponse = (update: PlannerSessionRouteUpdate | null | undefined) => {
+    if (!update) {
+      return;
+    }
+    queryClient.setQueryData<RecommendationsMapResponse>(["map-recommendations", identityKey], (current) => {
+      if (!current) {
+        return current;
+      }
+      const eventPlan = applyPlannerSessionRouteUpdate(current.eventPlan ?? current.tonightPlanner, update);
+      const tonightPlanner = applyPlannerSessionRouteUpdate(current.tonightPlanner, update);
+      return {
+        ...current,
+        eventPlan: eventPlan ?? current.eventPlan,
+        tonightPlanner: tonightPlanner ?? current.tonightPlanner,
+      };
+    });
+  };
 
   const interestsQuery = useQuery({
     queryKey: ["interests", identityKey],
@@ -118,9 +137,15 @@ export function PulseShell() {
       eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
       successMessage?: string;
-    }) => submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, successMessage })),
-    onSuccess: async ({ action, successMessage }) => {
-      await queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
+    }) =>
+      submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then((response) => ({
+        action,
+        successMessage,
+        response,
+      })),
+    onSuccess: ({ action, successMessage, response }) => {
+      applyPlannerActionResponse(response.eventPlanSession ?? response.plannerSession);
+      void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       setSurfaceStatus(
         successMessage ??
           (action === "planner_commit"
@@ -146,9 +171,15 @@ export function PulseShell() {
       venueName: string;
       eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
-    }) => submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, venueName })),
-    onSuccess: async ({ action, venueName }) => {
-      await Promise.all([
+    }) =>
+      submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then((response) => ({
+        action,
+        venueName,
+        response,
+      })),
+    onSuccess: ({ action, venueName, response }) => {
+      applyPlannerActionResponse(response.eventPlanSession ?? response.plannerSession);
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
         queryClient.invalidateQueries({ queryKey: ["recommendation-debug-summary"] }),
         queryClient.invalidateQueries({ queryKey: ["recommendation-run-comparison"] }),
