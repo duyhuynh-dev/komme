@@ -289,6 +289,24 @@ class PlannerSessionDebugStopScore(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class PlannerSessionDebugRouteStop(BaseModel):
+    eventId: str
+    venueName: str
+    role: str | None = None
+
+
+class PlannerSessionDebugRecomposition(BaseModel):
+    eventId: str
+    trigger: str | None = None
+    createdAt: str
+    activeStopEventId: str | None = None
+    previousRoute: list[PlannerSessionDebugRouteStop] = Field(default_factory=list)
+    newRoute: list[PlannerSessionDebugRouteStop] = Field(default_factory=list)
+    droppedStops: list[PlannerSessionDebugRouteStop] = Field(default_factory=list)
+    reason: str | None = None
+    scores: list[PlannerSessionDebugStopScore] = Field(default_factory=list)
+
+
 class PlannerSessionDebugItem(BaseModel):
     sessionId: str
     sessionStatus: str
@@ -310,6 +328,7 @@ class PlannerSessionDebugItem(BaseModel):
     createdFreshBecauseStale: bool = False
     replacedSessionId: str | None = None
     recompositionScores: list[PlannerSessionDebugStopScore] = Field(default_factory=list)
+    recompositionHistory: list[PlannerSessionDebugRecomposition] = Field(default_factory=list)
     events: list[PlannerSessionDebugEvent] = Field(default_factory=list)
 
 
@@ -318,6 +337,8 @@ class PlannerSessionDebugResponse(BaseModel):
 
 
 EventPlanSessionDebugEvent = PlannerSessionDebugEvent
+EventPlanSessionDebugRouteStop = PlannerSessionDebugRouteStop
+EventPlanSessionDebugRecomposition = PlannerSessionDebugRecomposition
 EventPlanSessionDebugStopScore = PlannerSessionDebugStopScore
 EventPlanSessionDebugItem = PlannerSessionDebugItem
 EventPlanSessionDebugResponse = PlannerSessionDebugResponse

@@ -11,6 +11,8 @@ from app.models.recommendation import PlannerSession, PlannerSessionEvent
 from app.schemas.recommendations import (
     PlannerSessionDebugEvent,
     PlannerSessionDebugItem,
+    PlannerSessionDebugRecomposition,
+    PlannerSessionDebugRouteStop,
     PlannerSessionDebugResponse,
     PlannerSessionDebugStopScore,
     TonightPlannerFallbackOption,
@@ -548,16 +550,8 @@ async def get_planner_session_debug(
         state = reduce_planner_session(planner_session, events)
         latest_recomposition = _latest_recomposition_event(events)
         latest_recomposition_metadata = latest_recomposition.metadata_json if latest_recomposition else {}
-        scores = [
-            PlannerSessionDebugStopScore(
-                eventId=str(item.get("eventId") or ""),
-                venueName=str(item.get("venueName") or "Unknown venue"),
-                role=str(item.get("role") or "stop"),
-                score=float(item.get("score") or 0.0),
-                reasons=[str(reason) for reason in item.get("reasons", [])],
-            )
-            for item in latest_recomposition_metadata.get("scores", [])
-        ]
+        scores = _debug_scores(latest_recomposition_metadata.get("scores", []))
+        recomposition_history = _debug_recomposition_history(events)
         items.append(
             PlannerSessionDebugItem(
                 sessionId=planner_session.id,
@@ -580,6 +574,7 @@ async def get_planner_session_debug(
                 createdFreshBecauseStale=state.created_fresh_because_stale,
                 replacedSessionId=state.replaced_session_id,
                 recompositionScores=scores,
+                recompositionHistory=recomposition_history,
                 events=[
                     PlannerSessionDebugEvent(
                         eventId=event.id,
@@ -1069,6 +1064,52 @@ def _latest_recomposition_event(events: list[PlannerSessionEvent]) -> PlannerSes
         (event for event in reversed(events) if event.event_type == PLANNER_EVENT_ROUTE_RECOMPUTED),
         None,
     )
+
+
+def _debug_recomposition_history(events: list[PlannerSessionEvent]) -> list[PlannerSessionDebugRecomposition]:
+    history: list[PlannerSessionDebugRecomposition] = []
+    for event in events:
+        if event.event_type != PLANNER_EVENT_ROUTE_RECOMPUTED:
+            continue
+        metadata = event.metadata_json or {}
+        history.append(
+            PlannerSessionDebugRecomposition(
+                eventId=event.id,
+                trigger=metadata.get("trigger"),
+                createdAt=str(metadata.get("recomputedAt") or _iso_or_none(event.created_at) or ""),
+                activeStopEventId=metadata.get("activeStopEventId"),
+                previousRoute=_debug_route_stops(metadata.get("previousRoute", [])),
+                newRoute=_debug_route_stops(metadata.get("newRoute") or metadata.get("remainingStops", [])),
+                droppedStops=_debug_route_stops(metadata.get("droppedStops", [])),
+                reason=metadata.get("reason"),
+                scores=_debug_scores(metadata.get("scores", [])),
+            )
+        )
+    return history
+
+
+def _debug_route_stops(items: list[dict]) -> list[PlannerSessionDebugRouteStop]:
+    return [
+        PlannerSessionDebugRouteStop(
+            eventId=str(item.get("eventId") or ""),
+            venueName=str(item.get("venueName") or "Unknown venue"),
+            role=str(item.get("role")) if item.get("role") is not None else None,
+        )
+        for item in items
+    ]
+
+
+def _debug_scores(items: list[dict]) -> list[PlannerSessionDebugStopScore]:
+    return [
+        PlannerSessionDebugStopScore(
+            eventId=str(item.get("eventId") or ""),
+            venueName=str(item.get("venueName") or "Unknown venue"),
+            role=str(item.get("role") or "stop"),
+            score=float(item.get("score") or 0.0),
+            reasons=[str(reason) for reason in item.get("reasons", [])],
+        )
+        for item in items
+    ]
 
 
 def _iso_or_none(value: datetime | None) -> str | None:

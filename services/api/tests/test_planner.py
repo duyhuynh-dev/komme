@@ -721,11 +721,15 @@ async def test_planner_session_debug_payload_summarizes_timeline_and_scores() ->
             event_type=PLANNER_EVENT_ROUTE_RECOMPUTED,
             recommendation_id="main-event",
             metadata={
+                "trigger": "planner_skipped",
+                "previousRoute": [stop.model_dump(mode="json")],
+                "newRoute": [stop.model_dump(mode="json")],
                 "activeStopEventId": "main-event",
                 "sessionStatus": "active",
                 "remainingStops": [stop.model_dump(mode="json")],
                 "droppedStops": [],
                 "reason": "Pulse recomposed the remaining route around live timing.",
+                "recomputedAt": "2026-04-26T00:30:00+00:00",
                 "scores": [
                     {
                         "eventId": "main-event",
@@ -746,6 +750,12 @@ async def test_planner_session_debug_payload_summarizes_timeline_and_scores() ->
         assert debug_session.contextHash == "debug-hash"
         assert debug_session.recompositionReason == "Pulse recomposed the remaining route around live timing."
         assert debug_session.recompositionScores[0].venueName == "Elsewhere"
+        assert len(debug_session.recompositionHistory) == 1
+        assert debug_session.recompositionHistory[0].trigger == "planner_skipped"
+        assert debug_session.recompositionHistory[0].createdAt == "2026-04-26T00:30:00+00:00"
+        assert debug_session.recompositionHistory[0].previousRoute[0].venueName == "Elsewhere"
+        assert debug_session.recompositionHistory[0].newRoute[0].eventId == "main-event"
+        assert debug_session.recompositionHistory[0].scores[0].score == 0.812
         assert [event.eventType for event in debug_session.events] == [
             PLANNER_EVENT_SESSION_CREATED,
             PLANNER_EVENT_ROUTE_RECOMPUTED,
