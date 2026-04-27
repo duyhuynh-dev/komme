@@ -896,6 +896,22 @@ async def taste_spotify_apply(
     session: AsyncSession = Depends(get_db),
     identity=Depends(authenticated_identity),
 ) -> TasteProfileResponse:
+    return await _sync_spotify_taste(session=session, identity=identity)
+
+
+@router.post("/taste/spotify/sync", response_model=TasteProfileResponse)
+async def taste_spotify_sync(
+    session: AsyncSession = Depends(get_db),
+    identity=Depends(authenticated_identity),
+) -> TasteProfileResponse:
+    return await _sync_spotify_taste(session=session, identity=identity)
+
+
+async def _sync_spotify_taste(
+    *,
+    session: AsyncSession,
+    identity,
+) -> TasteProfileResponse:
     connection = await _require_oauth_connection(session, identity.user.id, "spotify")
     provider = SpotifyProvider()
     try:

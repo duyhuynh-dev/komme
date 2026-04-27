@@ -23,6 +23,7 @@ import {
   startMockRedditConnection,
   startRedditConnection,
   startSpotifyConnection,
+  syncSpotifyTaste,
 } from "@/lib/api";
 import type { TasteProfileResponse } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -65,6 +66,7 @@ export function AccountDock() {
   const [isConnectingReddit, setIsConnectingReddit] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
   const [isConnectingSpotify, setIsConnectingSpotify] = useState(false);
+  const [isSyncingSpotify, setIsSyncingSpotify] = useState(false);
   const [isReadingRedditExport, setIsReadingRedditExport] = useState(false);
   const [isApplyingRedditExport, setIsApplyingRedditExport] = useState(false);
   const [redditExportFile, setRedditExportFile] = useState<File | null>(null);
@@ -246,6 +248,26 @@ export function AccountDock() {
       setMessage("Spotify taste applied. The map and signals just refreshed with the new provider profile.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to apply the Spotify taste profile.");
+    }
+  };
+
+  const retrySpotifySync = async () => {
+    setIsSyncingSpotify(true);
+    try {
+      await syncSpotifyTaste();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["auth-viewer"] }),
+        queryClient.invalidateQueries({ queryKey: ["interests"] }),
+        queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
+        queryClient.invalidateQueries({ queryKey: ["archive"] }),
+        queryClient.invalidateQueries({ queryKey: ["spotify-taste-preview"] }),
+      ]);
+      setMessage("Spotify sync refreshed. Pulse is using the latest listening signals again.");
+    } catch (error) {
+      await queryClient.invalidateQueries({ queryKey: ["auth-viewer"] });
+      setMessage(error instanceof Error ? error.message : "Unable to refresh Spotify taste right now.");
+    } finally {
+      setIsSyncingSpotify(false);
     }
   };
 
@@ -527,6 +549,16 @@ export function AccountDock() {
                   </div>
                   {spotifyTasteHealth?.healthReason ? (
                     <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyTasteHealth.healthReason}</p>
+                  ) : null}
+                  {spotifyTasteHealth?.stale ? (
+                    <button
+                      type="button"
+                      onClick={() => void retrySpotifySync()}
+                      disabled={isSyncingSpotify}
+                      className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60"
+                    >
+                      {isSyncingSpotify ? "Refreshing Spotify..." : "Retry Spotify sync"}
+                    </button>
                   ) : null}
                   {spotifyPreviewQuery.data && hasSpotifyThemes ? (
                     <>

@@ -316,6 +316,12 @@ export function applySpotifyTaste() {
   });
 }
 
+export function syncSpotifyTaste() {
+  return request<TasteProfileResponse>("/v1/taste/spotify/sync", {
+    method: "POST"
+  });
+}
+
 export function previewRedditExportTaste(file: File) {
   return uploadBinary<TasteProfileResponse>("/v1/taste/reddit-export/preview", file);
 }
