@@ -632,6 +632,24 @@ async def recommendation_interactions(
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
 ) -> OkResponse:
+    return await _record_recommendation_interactions(payload=payload, session=session, user=user)
+
+
+@router.post("/event-plan/interactions", response_model=OkResponse)
+async def event_plan_interactions(
+    payload: RecommendationInteractionsPayload,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> OkResponse:
+    return await _record_recommendation_interactions(payload=payload, session=session, user=user)
+
+
+async def _record_recommendation_interactions(
+    *,
+    payload: RecommendationInteractionsPayload,
+    session: AsyncSession,
+    user,
+) -> OkResponse:
     if user is None:
         return OkResponse()
 

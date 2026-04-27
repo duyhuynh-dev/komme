@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.api.routes import event_plan_sessions, planner_sessions, recommendation_interactions
+from app.api.routes import event_plan_interactions, event_plan_sessions, planner_sessions, recommendation_interactions
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.recommendation import (
@@ -1096,6 +1096,56 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
             PLANNER_EVENT_STOP_LOCKED,
             PLANNER_EVENT_ROUTE_RECOMPUTED,
         }
+
+
+@pytest.mark.asyncio
+async def test_event_plan_interactions_accept_neutral_session_payload() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="event-plan-interactions@example.com", timezone="America/New_York")
+        session.add(user)
+        await session.flush()
+
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="event-plan-interaction-test",
+            initial_route_snapshot={"stops": []},
+            active_stop_event_id="rec-1",
+            status="active",
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
+
+        payload = RecommendationInteractionsPayload(
+            events=[
+                {
+                    "recommendationId": "rec-1",
+                    "action": PLANNER_COMMIT_FEEDBACK_ACTION,
+                    "eventPlanSessionId": planner_session.id,
+                }
+            ]
+        )
+
+        await event_plan_interactions(
+            payload=payload,
+            session=session,
+            user=user,
+        )
+        await session.commit()
+
+        feedback_rows = list((await session.scalars(select(FeedbackEvent))).all())
+        planner_event_rows = list((await session.scalars(select(PlannerSessionEvent))).all())
+
+        assert len(feedback_rows) == 1
+        assert feedback_rows[0].action == PLANNER_COMMIT_FEEDBACK_ACTION
+        assert {row.event_type for row in planner_event_rows} >= {PLANNER_EVENT_STOP_LOCKED}
 
 
 @pytest.mark.asyncio

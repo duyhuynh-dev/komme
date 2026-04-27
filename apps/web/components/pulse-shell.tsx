@@ -12,6 +12,7 @@ import {
   getRecommendationRunComparison,
   patchInterests,
   refreshRecommendations,
+  submitEventPlanInteractions,
   submitRecommendationInteractions,
   syncSupply,
   submitFeedback
@@ -117,7 +118,7 @@ export function PulseShell() {
       eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
       successMessage?: string;
-    }) => submitRecommendationInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, successMessage })),
+    }) => submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, successMessage })),
     onSuccess: async ({ action, successMessage }) => {
       await queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       setSurfaceStatus(
@@ -145,7 +146,7 @@ export function PulseShell() {
       venueName: string;
       eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
-    }) => submitRecommendationInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, venueName })),
+    }) => submitEventPlanInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, venueName })),
     onSuccess: async ({ action, venueName }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),

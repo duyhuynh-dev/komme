@@ -233,6 +233,15 @@ export function submitRecommendationInteractions(
   });
 }
 
+export function submitEventPlanInteractions(
+  events: Parameters<typeof submitRecommendationInteractions>[0],
+) {
+  return request<{ ok: true }>("/v1/event-plan/interactions", {
+    method: "POST",
+    body: JSON.stringify({ events }),
+  });
+}
+
 export function getMapToken() {
   return request<{ enabled: boolean; token: string | null }>("/v1/maps/token");
 }
