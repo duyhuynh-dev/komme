@@ -66,7 +66,13 @@ from app.services.digest import (
 from app.services.event_plan import append_event_plan_action, get_event_plan_session_debug
 from app.services.ingestion import upsert_ingested_candidates
 from app.services.planner_sessions import list_planner_session_events, reduce_planner_session
-from app.services.profile import get_email_preferences, list_interests, update_email_preferences, update_interests
+from app.services.profile import (
+    get_email_preferences,
+    get_spotify_taste_health,
+    list_interests,
+    update_email_preferences,
+    update_interests,
+)
 from app.services.recommendations import (
     get_archive,
     get_map_recommendations,
@@ -168,6 +174,7 @@ async def auth_me(
         redditConnected=connection_mode != "none",
         redditConnectionMode=connection_mode,
         spotifyConnected=spotify_connection is not None,
+        spotifyTasteHealth=await get_spotify_taste_health(session, identity.user),
     )
 
 

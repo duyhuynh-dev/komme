@@ -199,6 +199,15 @@ export interface FeedbackReason {
   label: string;
 }
 
+export interface ConnectedSourceHealth {
+  connected: boolean;
+  latestRunStatus?: string | null;
+  latestRunAt?: string | null;
+  stale: boolean;
+  currentlyInfluencingRanking: boolean;
+  healthReason?: string | null;
+}
+
 export interface AuthViewer {
   userId: string;
   email: string;
@@ -209,6 +218,7 @@ export interface AuthViewer {
   redditConnected: boolean;
   redditConnectionMode: "none" | "live" | "sample";
   spotifyConnected: boolean;
+  spotifyTasteHealth: ConnectedSourceHealth;
 }
 
 export interface ThemeEvidenceCount {

@@ -83,6 +83,14 @@ export function AccountDock() {
   const connectionMode = viewerQuery.data?.redditConnectionMode ?? "none";
   const status = statusCopy(connectionMode, isSignedIn);
   const spotifyConnected = Boolean(viewerQuery.data?.spotifyConnected);
+  const spotifyTasteHealth = viewerQuery.data?.spotifyTasteHealth;
+  const spotifyHealthLabel = spotifyTasteHealth?.stale
+    ? "Needs refresh"
+    : spotifyTasteHealth?.currentlyInfluencingRanking
+      ? "Influencing ranking"
+      : spotifyConnected
+        ? "Connected"
+        : "Not connected";
 
   const spotifyPreviewQuery = useQuery({
     queryKey: ["spotify-taste-preview", user?.id ?? "demo"],
@@ -496,15 +504,31 @@ export function AccountDock() {
                 ) : null}
               </div>
 
-              {spotifyConnected && spotifyPreviewQuery.data ? (
+              {spotifyConnected ? (
                 <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
                       <Disc3 className="h-3.5 w-3.5" />
                       Spotify connected
                     </span>
+                    <span
+                      className={[
+                        "inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                        spotifyTasteHealth?.stale
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : spotifyTasteHealth?.currentlyInfluencingRanking
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-stroke bg-white text-slate-500",
+                      ].join(" ")}
+                      title={spotifyTasteHealth?.healthReason ?? undefined}
+                    >
+                      {spotifyHealthLabel}
+                    </span>
                   </div>
-                  {hasSpotifyThemes ? (
+                  {spotifyTasteHealth?.healthReason ? (
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyTasteHealth.healthReason}</p>
+                  ) : null}
+                  {spotifyPreviewQuery.data && hasSpotifyThemes ? (
                     <>
                       <p className="mt-3 text-sm leading-6 text-slate-600">
                         Pulse found {spotifyThemes.length} possible themes from your listening history.
@@ -520,14 +544,14 @@ export function AccountDock() {
                         ))}
                       </div>
                     </>
-                  ) : (
+                  ) : spotifyPreviewQuery.data ? (
                     <>
                       <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyLowSignalReason}</p>
                       <p className="mt-2 text-xs leading-5 text-slate-500">
                         Keep listening on Spotify for a bit longer, then tap refresh and Pulse will try again.
                       </p>
                     </>
-                  )}
+                  ) : null}
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stroke/80 pt-3">

@@ -1,4 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ConnectedSourceHealth(BaseModel):
+    connected: bool = False
+    latestRunStatus: str | None = None
+    latestRunAt: str | None = None
+    stale: bool = False
+    currentlyInfluencingRanking: bool = False
+    healthReason: str | None = None
 
 
 class AuthViewerResponse(BaseModel):
@@ -11,6 +20,7 @@ class AuthViewerResponse(BaseModel):
     redditConnected: bool
     redditConnectionMode: str = "none"
     spotifyConnected: bool = False
+    spotifyTasteHealth: ConnectedSourceHealth = Field(default_factory=ConnectedSourceHealth)
 
 
 class RedditConnectStartResponse(BaseModel):
