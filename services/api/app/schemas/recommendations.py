@@ -341,9 +341,14 @@ class FeedbackPayload(BaseModel):
 class RecommendationInteractionEvent(BaseModel):
     recommendationId: str
     action: str
+    eventPlanSessionId: str | None = None
     plannerSessionId: str | None = None
     metadata: dict = Field(default_factory=dict)
 
 
 class RecommendationInteractionsPayload(BaseModel):
     events: list[RecommendationInteractionEvent] = Field(default_factory=list)
+
+
+EventPlanInteractionEvent = RecommendationInteractionEvent
+EventPlanInteractionsPayload = RecommendationInteractionsPayload

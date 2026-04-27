@@ -657,7 +657,7 @@ async def recommendation_interactions(
         await append_event_plan_action(
             session,
             user_id=user.id,
-            planner_session_id=event.plannerSessionId,
+            planner_session_id=event.eventPlanSessionId or event.plannerSessionId,
             action=action,
             recommendation_id=recommendation_id,
             metadata=event.metadata,

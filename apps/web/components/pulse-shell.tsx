@@ -108,16 +108,16 @@ export function PulseShell() {
     mutationFn: ({
       recommendationId,
       action,
-      plannerSessionId,
+      eventPlanSessionId,
       metadata,
       successMessage,
     }: {
       recommendationId: string;
       action: "planner_commit" | "planner_swap";
-      plannerSessionId?: string | null;
+      eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
       successMessage?: string;
-    }) => submitRecommendationInteractions([{ recommendationId, action, plannerSessionId, metadata }]).then(() => ({ action, successMessage })),
+    }) => submitRecommendationInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, successMessage })),
     onSuccess: async ({ action, successMessage }) => {
       await queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       setSurfaceStatus(
@@ -137,15 +137,15 @@ export function PulseShell() {
       recommendationId,
       action,
       venueName,
-      plannerSessionId,
+      eventPlanSessionId,
       metadata,
     }: {
       recommendationId: string;
       action: "planner_attended" | "planner_skipped";
       venueName: string;
-      plannerSessionId?: string | null;
+      eventPlanSessionId?: string | null;
       metadata?: Record<string, unknown>;
-    }) => submitRecommendationInteractions([{ recommendationId, action, plannerSessionId, metadata }]).then(() => ({ action, venueName })),
+    }) => submitRecommendationInteractions([{ recommendationId, action, eventPlanSessionId, metadata }]).then(() => ({ action, venueName })),
     onSuccess: async ({ action, venueName }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
@@ -269,6 +269,7 @@ export function PulseShell() {
   const recordInteractions = (
     events: Array<{
       recommendationId: string;
+      eventPlanSessionId?: string | null;
       plannerSessionId?: string | null;
       metadata?: Record<string, unknown>;
       action:
@@ -449,7 +450,7 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: stop.eventId,
                   action: "planner_commit",
-                  plannerSessionId: eventPlan?.sessionId,
+                  eventPlanSessionId: eventPlan?.sessionId,
                   metadata: { venueId: stop.venueId, venueName: stop.venueName, role: stop.role },
                 });
               }}
@@ -458,7 +459,7 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
-                  plannerSessionId: eventPlan?.sessionId,
+                  eventPlanSessionId: eventPlan?.sessionId,
                   metadata: { venueId: option.venueId, venueName: option.venueName, sourceKind: "fallback" },
                 });
               }}
@@ -467,7 +468,7 @@ export function PulseShell() {
                 plannerActionMutation.mutate({
                   recommendationId: option.eventId,
                   action: "planner_swap",
-                  plannerSessionId: eventPlan?.sessionId,
+                  eventPlanSessionId: eventPlan?.sessionId,
                   metadata: { venueId: option.venueId, venueName: option.venueName, sourceKind: option.sourceKind },
                   successMessage: `Pulse rerouted tonight toward ${option.venueName}.`,
                 });
@@ -482,7 +483,7 @@ export function PulseShell() {
                   recommendationId,
                   action,
                   venueName,
-                  plannerSessionId: eventPlan?.sessionId,
+                  eventPlanSessionId: eventPlan?.sessionId,
                   metadata: { venueName },
                 });
               }}

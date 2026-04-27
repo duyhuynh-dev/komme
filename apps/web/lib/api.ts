@@ -213,6 +213,7 @@ export function submitFeedback(
 export function submitRecommendationInteractions(
   events: Array<{
     recommendationId: string;
+    eventPlanSessionId?: string | null;
     plannerSessionId?: string | null;
     metadata?: Record<string, unknown>;
     action:

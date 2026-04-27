@@ -1049,17 +1049,17 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
                 {
                     "recommendationId": "rec-1",
                     "action": PLANNER_COMMIT_FEEDBACK_ACTION,
-                    "plannerSessionId": planner_session.id,
+                    "eventPlanSessionId": planner_session.id,
                 },
                 {
                     "recommendationId": "rec-2",
                     "action": PLANNER_SWAP_FEEDBACK_ACTION,
-                    "plannerSessionId": planner_session.id,
+                    "eventPlanSessionId": planner_session.id,
                 },
                 {
                     "recommendationId": "rec-2",
                     "action": PLANNER_SWAP_FEEDBACK_ACTION,
-                    "plannerSessionId": planner_session.id,
+                    "eventPlanSessionId": planner_session.id,
                 },
                 {
                     "recommendationId": "rec-2",
@@ -1069,7 +1069,7 @@ async def test_recommendation_interactions_accept_planner_actions() -> None:
                 {
                     "recommendationId": "rec-3",
                     "action": PLANNER_SKIPPED_FEEDBACK_ACTION,
-                    "plannerSessionId": planner_session.id,
+                    "eventPlanSessionId": planner_session.id,
                 },
                 {"recommendationId": "rec-3", "action": "unknown_action"},
             ]
