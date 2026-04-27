@@ -36,6 +36,14 @@ class RecommendationScoreBreakdownItem(BaseModel):
     direction: str = "positive"
 
 
+class RecommendationPersonalizationSource(BaseModel):
+    sourceProvider: str
+    label: str
+    influence: str
+    topicLabels: list[str] = Field(default_factory=list)
+    detail: str | None = None
+
+
 class SecondaryEvent(BaseModel):
     eventId: str
     title: str
@@ -60,6 +68,7 @@ class VenueRecommendationCard(BaseModel):
     provenance: RecommendationProvenance
     scoreSummary: str | None = None
     scoreBreakdown: list[RecommendationScoreBreakdownItem] = Field(default_factory=list)
+    personalizationProvenance: list[RecommendationPersonalizationSource] = Field(default_factory=list)
     secondaryEvents: list[SecondaryEvent] = Field(default_factory=list)
 
 

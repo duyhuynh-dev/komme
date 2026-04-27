@@ -49,6 +49,14 @@ export interface RecommendationScoreBreakdownItem {
   direction: "positive" | "negative";
 }
 
+export interface RecommendationPersonalizationSource {
+  sourceProvider: string;
+  label: string;
+  influence: "supporting" | "reducing" | "suppressed" | string;
+  topicLabels: string[];
+  detail?: string | null;
+}
+
 export interface TravelEstimate {
   mode: "walk" | "transit";
   label: string;
@@ -73,6 +81,7 @@ export interface VenueRecommendationCard {
   provenance: RecommendationProvenance;
   scoreSummary?: string | null;
   scoreBreakdown: RecommendationScoreBreakdownItem[];
+  personalizationProvenance: RecommendationPersonalizationSource[];
   secondaryEvents: Array<{
     eventId: string;
     title: string;

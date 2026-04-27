@@ -35,6 +35,7 @@ from app.schemas.recommendations import (
     MapContext,
     RecommendationsMapResponse,
     RecommendationFreshness,
+    RecommendationPersonalizationSource,
     RecommendationProvenance,
     RecommendationReason,
     RecommendationScoreBreakdownItem,
@@ -97,6 +98,7 @@ BROAD_CULTURAL_THEME_KEYS = {
 REASON_META_KEY = "_pulseMeta"
 REASON_META_SCORE_SUMMARY = "score_summary"
 REASON_META_SCORE_BREAKDOWN = "score_breakdown"
+REASON_META_PERSONALIZATION_PROVENANCE = "personalization_provenance"
 SAVE_FEEDBACK_REASON_KEYS = {
     "easy_to_get_to",
     "good_price",
@@ -1471,26 +1473,101 @@ def _score_summary(score_breakdown: list[dict]) -> str | None:
     return summary
 
 
+def _personalization_source_label(source_provider: str) -> str:
+    return _topic_source_label(source_provider)
+
+
+def _personalization_provenance(
+    *,
+    matched_topics: list[UserInterestProfile],
+    score_breakdown: list[dict],
+    feedback_adjustment: float,
+) -> list[dict]:
+    grouped_topics: dict[str, list[UserInterestProfile]] = {}
+    for topic in matched_topics:
+        source_provider = topic.source_provider or "unknown"
+        grouped_topics.setdefault(source_provider, []).append(topic)
+
+    sources: list[dict] = [
+        {
+            "sourceProvider": source_provider,
+            "label": _personalization_source_label(source_provider),
+            "influence": "supporting",
+            "topicLabels": [
+                topic.label
+                for topic in sorted(source_topics, key=lambda topic: (-topic.confidence, topic.label.lower()))
+            ],
+            "detail": f"Matched {_join_labels([topic.label for topic in source_topics])}.",
+        }
+        for source_provider, source_topics in grouped_topics.items()
+    ]
+
+    if abs(feedback_adjustment) >= 0.015:
+        sources.append(
+            {
+                "sourceProvider": "feedback",
+                "label": "Recent feedback",
+                "influence": "supporting" if feedback_adjustment > 0 else "reducing",
+                "topicLabels": [],
+                "detail": "Recent actions adjusted this venue's rank.",
+            }
+        )
+
+    stale_items = [item for item in score_breakdown if item.get("key") == "stale_provider_guard"]
+    if stale_items:
+        sources.append(
+            {
+                "sourceProvider": "spotify",
+                "label": "Spotify",
+                "influence": "suppressed",
+                "topicLabels": [],
+                "detail": stale_items[0].get("detail"),
+            }
+        )
+
+    return sorted(
+        sources,
+        key=lambda source: (
+            {"supporting": 0, "reducing": 1, "suppressed": 2}.get(source["influence"], 3),
+            source["label"],
+        ),
+    )
+
+
 def _pack_reason_payload(
     reasons: list[dict],
     *,
     score_summary: str | None,
     score_breakdown: list[dict],
+    personalization_provenance: list[dict] | None = None,
 ) -> list[dict]:
     payload = [dict(reason) for reason in reasons]
     if score_summary:
         payload.append({REASON_META_KEY: REASON_META_SCORE_SUMMARY, "summary": score_summary})
     if score_breakdown:
         payload.append({REASON_META_KEY: REASON_META_SCORE_BREAKDOWN, "items": score_breakdown})
+    if personalization_provenance:
+        payload.append(
+            {
+                REASON_META_KEY: REASON_META_PERSONALIZATION_PROVENANCE,
+                "items": personalization_provenance,
+            }
+        )
     return payload
 
 
 def _unpack_reason_payload(
     payload: list[dict] | None,
-) -> tuple[list[RecommendationReason], str | None, list[RecommendationScoreBreakdownItem]]:
+) -> tuple[
+    list[RecommendationReason],
+    str | None,
+    list[RecommendationScoreBreakdownItem],
+    list[RecommendationPersonalizationSource],
+]:
     reasons: list[RecommendationReason] = []
     score_summary: str | None = None
     score_breakdown: list[RecommendationScoreBreakdownItem] = []
+    personalization_provenance: list[RecommendationPersonalizationSource] = []
 
     for item in payload or []:
         meta_key = item.get(REASON_META_KEY)
@@ -1503,10 +1580,16 @@ def _unpack_reason_payload(
             candidate_items = item.get("items") or []
             score_breakdown = [RecommendationScoreBreakdownItem(**candidate) for candidate in candidate_items]
             continue
+        if meta_key == REASON_META_PERSONALIZATION_PROVENANCE:
+            candidate_items = item.get("items") or []
+            personalization_provenance = [
+                RecommendationPersonalizationSource(**candidate) for candidate in candidate_items
+            ]
+            continue
         if "title" in item and "detail" in item:
             reasons.append(RecommendationReason(title=item["title"], detail=item["detail"]))
 
-    return reasons, score_summary, score_breakdown
+    return reasons, score_summary, score_breakdown, personalization_provenance
 
 
 def _constraints_snapshot(constraints: UserConstraint | None) -> dict:
@@ -2330,6 +2413,11 @@ async def refresh_recommendations_for_user(
             feedback_adjustment=feedback_adjustment,
             feedback_reason=feedback_reason,
         )
+        personalization_provenance = _personalization_provenance(
+            matched_topics=matched_topics,
+            score_breakdown=score_breakdown,
+            feedback_adjustment=feedback_adjustment,
+        )
         score_summary = _score_summary(score_breakdown)
         entry = {
             "venue": venue,
@@ -2351,6 +2439,7 @@ async def refresh_recommendations_for_user(
             ),
             "score_summary": score_summary,
             "score_breakdown": score_breakdown,
+            "personalization_provenance": personalization_provenance,
         }
         venue_entries.setdefault(venue.id, []).append(entry)
 
@@ -2389,6 +2478,7 @@ async def refresh_recommendations_for_user(
                     primary["reasons"],
                     score_summary=primary["score_summary"],
                     score_breakdown=primary["score_breakdown"],
+                    personalization_provenance=primary["personalization_provenance"],
                 ),
                 travel_json=primary["travel"],
                 secondary_events_json=_secondary_events_payload(entries),
@@ -2444,7 +2534,9 @@ async def _cards_for_run(
             venue.latitude,
             venue.longitude,
         )
-        reasons, score_summary, score_breakdown = _unpack_reason_payload(recommendation.reasons_json)
+        reasons, score_summary, score_breakdown, personalization_provenance = _unpack_reason_payload(
+            recommendation.reasons_json
+        )
 
         card = VenueRecommendationCard(
             venueId=venue.id,
@@ -2464,6 +2556,7 @@ async def _cards_for_run(
             provenance=_build_provenance(source, occurrence),
             scoreSummary=score_summary,
             scoreBreakdown=score_breakdown,
+            personalizationProvenance=personalization_provenance,
             secondaryEvents=recommendation.secondary_events_json or [],
         )
         items.append(card)

@@ -218,6 +218,25 @@ export function RecommendationDrawer({
                 </div>
               ) : null}
 
+              {card.personalizationProvenance.length ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                  {card.personalizationProvenance.slice(0, 4).map((source) => (
+                    <span
+                      key={`${card.venueId}-${source.sourceProvider}-${source.influence}`}
+                      className={[
+                        "rounded-full border px-3 py-1",
+                        source.influence === "suppressed" || source.influence === "reducing"
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                      ].join(" ")}
+                      title={source.detail ?? undefined}
+                    >
+                      {source.label} · {source.influence}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="mt-4 space-y-2">
                 {card.reasons.filter((reason) => reason.title !== "Travel fit").map((reason) => (
                   <div key={reason.title} className="rounded-2xl bg-white/70 px-3 py-2 text-sm text-slate-700">

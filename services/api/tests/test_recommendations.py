@@ -14,6 +14,7 @@ from app.models.recommendation import (
     RecommendationRun,
     VenueRecommendation,
 )
+from app.models.profile import UserInterestProfile
 from app.models.user import User
 from app.models.user import UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
@@ -33,6 +34,7 @@ from app.services.recommendations import (
     _driver_summaries,
     _feedback_signals,
     _pack_reason_payload,
+    _personalization_provenance,
     _score_breakdown_items,
     _score_summary,
     _unpack_reason_payload,
@@ -82,6 +84,15 @@ def test_pack_and_unpack_reason_payload_preserves_explainability_metadata() -> N
             "summaryLabel": "profile fit",
         }
     ]
+    provenance = [
+        {
+            "sourceProvider": "spotify",
+            "label": "Spotify",
+            "influence": "supporting",
+            "topicLabels": ["Underground dance"],
+            "detail": "Matched Underground dance.",
+        }
+    ]
     payload = _pack_reason_payload(
         [
             {
@@ -91,14 +102,78 @@ def test_pack_and_unpack_reason_payload_preserves_explainability_metadata() -> N
         ],
         score_summary="Led by profile fit.",
         score_breakdown=score_breakdown,
+        personalization_provenance=provenance,
     )
 
-    reasons, score_summary, unpacked_breakdown = _unpack_reason_payload(payload)
+    reasons, score_summary, unpacked_breakdown, unpacked_provenance = _unpack_reason_payload(payload)
 
     assert reasons[0].title == "Profile match"
     assert score_summary == "Led by profile fit."
     assert unpacked_breakdown[0].key == "profile_fit"
     assert unpacked_breakdown[0].impactLabel == "driving this pick"
+    assert unpacked_provenance[0].sourceProvider == "spotify"
+    assert unpacked_provenance[0].influence == "supporting"
+
+
+def test_personalization_provenance_identifies_source_contributors() -> None:
+    spotify_topic = UserInterestProfile(
+        user_id="user-1",
+        topic_key="underground_dance",
+        label="Underground dance",
+        confidence=0.92,
+        source_provider="spotify",
+        boosted=False,
+        muted=False,
+    )
+    manual_topic = UserInterestProfile(
+        user_id="user-1",
+        topic_key="gallery_nights",
+        label="Gallery nights",
+        confidence=0.72,
+        source_provider="manual",
+        boosted=False,
+        muted=False,
+    )
+
+    provenance = _personalization_provenance(
+        matched_topics=[spotify_topic, manual_topic],
+        score_breakdown=[],
+        feedback_adjustment=0.04,
+    )
+
+    by_source = {item["sourceProvider"]: item for item in provenance}
+    assert set(by_source) == {"manual", "spotify", "feedback"}
+    assert by_source["manual"]["topicLabels"] == ["Gallery nights"]
+    assert by_source["spotify"]["topicLabels"] == ["Underground dance"]
+    assert by_source["feedback"]["influence"] == "supporting"
+
+
+def test_personalization_provenance_marks_stale_spotify_suppression() -> None:
+    provenance = _personalization_provenance(
+        matched_topics=[],
+        score_breakdown=[
+            {
+                "key": "stale_provider_guard",
+                "label": "Provider freshness",
+                "impactLabel": "holding it back",
+                "detail": "Latest Spotify sync failed, so Pulse suppressed stale Underground dance signals for this run.",
+                "contribution": -0.21,
+                "direction": "negative",
+                "summaryLabel": "stale Spotify taste",
+            }
+        ],
+        feedback_adjustment=0.0,
+    )
+
+    assert provenance == [
+        {
+            "sourceProvider": "spotify",
+            "label": "Spotify",
+            "influence": "suppressed",
+            "topicLabels": [],
+            "detail": "Latest Spotify sync failed, so Pulse suppressed stale Underground dance signals for this run.",
+        }
+    ]
 
 
 def _sample_card(
