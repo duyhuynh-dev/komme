@@ -48,7 +48,10 @@ def build_tonight_planner(
     selected_action: str | None = None,
     outcome_recommendation_id: str | None = None,
     outcome_action: str | None = None,
+    plan_window_start_utc: datetime | None = None,
+    plan_window_end_utc: datetime | None = None,
 ) -> TonightPlannerResponse:
+    explicit_plan_window = plan_window_start_utc is not None or plan_window_end_utc is not None
     if not items:
         return TonightPlannerResponse(
             summary="Pulse needs a live shortlist before it can sketch out tonight.",
@@ -58,7 +61,14 @@ def build_tonight_planner(
     zone = _planner_timezone(timezone)
     current_utc = now_utc or datetime.now(tz=UTC)
     now_local = current_utc.astimezone(zone)
-    tonight_start, tonight_end = _tonight_window(now_local, zone)
+    plan_window_start, plan_window_end = _plan_window(
+        now_local,
+        zone,
+        plan_window_start_utc=plan_window_start_utc,
+        plan_window_end_utc=plan_window_end_utc,
+    )
+    candidate_window_start = now_local - timedelta(minutes=30)
+    candidate_window_end = plan_window_end if explicit_plan_window else now_local + timedelta(hours=36)
     pin_by_venue_id = {pin.venueId: pin for pin in pins}
 
     candidates: list[PlannerCandidate] = []
@@ -70,9 +80,9 @@ def build_tonight_planner(
         start_local = _parse_local_start(card.startsAt, zone)
         if start_local is None:
             continue
-        if start_local < now_local - timedelta(minutes=30):
+        if start_local < candidate_window_start:
             continue
-        if start_local > now_local + timedelta(hours=36):
+        if start_local > candidate_window_end:
             continue
 
         anchor_hop_label, anchor_hop_minutes = _anchor_hop(card)
@@ -86,14 +96,17 @@ def build_tonight_planner(
                 anchor_hop_minutes=anchor_hop_minutes,
                 budget_fit=_budget_fit_for_label(budget_level, card.priceLabel),
                 source_confidence=card.provenance.sourceConfidence,
-                tonight=tonight_start <= start_local <= tonight_end,
+                tonight=plan_window_start <= start_local <= plan_window_end,
             )
         )
 
     if not candidates:
         return TonightPlannerResponse(
-            summary="Pulse could not find a workable tonight window in the current shortlist.",
+            summary="Pulse could not find a workable event plan window in the current shortlist.",
             planningNote="Try checking for new events or refreshing the shortlist once more options land.",
+            planWindowStart=plan_window_start.isoformat(),
+            planWindowEnd=plan_window_end.isoformat(),
+            planWindowLabel=_plan_window_label(explicit_plan_window),
         )
 
     tonight_candidates = [candidate for candidate in candidates if candidate.tonight]
@@ -231,6 +244,9 @@ def build_tonight_planner(
         status=status,
         summary=summary,
         planningNote=planning_note,
+        planWindowStart=plan_window_start.isoformat(),
+        planWindowEnd=plan_window_end.isoformat(),
+        planWindowLabel=_plan_window_label(explicit_plan_window),
         stops=stops,
     )
     _apply_execution_state(
@@ -262,6 +278,35 @@ def _tonight_window(now_local: datetime, zone: ZoneInfo) -> tuple[datetime, date
     start = datetime.combine(anchor_day, time(17, 0), tzinfo=zone)
     end = datetime.combine(anchor_day + timedelta(days=1), time(4, 0), tzinfo=zone)
     return start, end
+
+
+def _plan_window(
+    now_local: datetime,
+    zone: ZoneInfo,
+    *,
+    plan_window_start_utc: datetime | None,
+    plan_window_end_utc: datetime | None,
+) -> tuple[datetime, datetime]:
+    default_start, default_end = _tonight_window(now_local, zone)
+    start = _to_local_window_bound(plan_window_start_utc, zone) or default_start
+    end = _to_local_window_bound(plan_window_end_utc, zone) or (
+        start + timedelta(hours=12) if plan_window_start_utc is not None else default_end
+    )
+    if end <= start:
+        return default_start, default_end
+    return start, end
+
+
+def _to_local_window_bound(value: datetime | None, zone: ZoneInfo) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(zone)
+
+
+def _plan_window_label(explicit_plan_window: bool) -> str:
+    return "Event window" if explicit_plan_window else "Tonight"
 
 
 def _parse_local_start(value: str, zone: ZoneInfo) -> datetime | None:
@@ -491,17 +536,20 @@ def _build_fallbacks(
         return []
 
     if selection.role == "pregame":
-        scorer = lambda candidate: _pregame_score(candidate, main_event)
+        def scorer(candidate: PlannerCandidate) -> float:
+            return _pregame_score(candidate, main_event)
     elif selection.role == "main_event":
-        scorer = lambda candidate: max(
-            _main_event_score(candidate, using_tonight_window=candidate.tonight),
-            _backup_score(candidate, main_event),
-        )
+        def scorer(candidate: PlannerCandidate) -> float:
+            return max(
+                _main_event_score(candidate, using_tonight_window=candidate.tonight),
+                _backup_score(candidate, main_event),
+            )
     else:
-        scorer = lambda candidate: max(
-            _late_option_score(candidate, main_event),
-            _backup_score(candidate, main_event),
-        )
+        def scorer(candidate: PlannerCandidate) -> float:
+            return max(
+                _late_option_score(candidate, main_event),
+                _backup_score(candidate, main_event),
+            )
 
     ranked_options = sorted(
         (

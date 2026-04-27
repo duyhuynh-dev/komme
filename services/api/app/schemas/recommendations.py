@@ -144,6 +144,9 @@ class TonightPlannerResponse(BaseModel):
     title: str = "Tonight planner"
     summary: str | None = None
     planningNote: str | None = None
+    planWindowStart: str | None = None
+    planWindowEnd: str | None = None
+    planWindowLabel: str = "Tonight"
     executionStatus: str = "idle"
     executionNote: str | None = None
     activeTargetEventId: str | None = None

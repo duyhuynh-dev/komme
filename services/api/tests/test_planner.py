@@ -217,6 +217,65 @@ def test_build_tonight_planner_sequences_pregame_main_and_late_option() -> None:
     assert "Elsewhere" in (planner.summary or "")
 
 
+def test_build_tonight_planner_supports_explicit_event_plan_window() -> None:
+    now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
+    items = [
+        _planner_card(
+            venue_id="gallery-venue",
+            venue_name="Gallery Opening",
+            neighborhood="Chelsea",
+            starts_at="2026-04-29T22:30:00+00:00",
+            score=0.78,
+            score_band="high",
+            price_label="$18",
+            source_confidence=0.84,
+            transit_minutes=18,
+        ),
+        _planner_card(
+            venue_id="main-venue",
+            venue_name="Future Festival",
+            neighborhood="Williamsburg",
+            starts_at="2026-04-30T00:00:00+00:00",
+            score=0.93,
+            score_band="high",
+            price_label="$35",
+            source_confidence=0.91,
+            transit_minutes=24,
+        ),
+        _planner_card(
+            venue_id="late-venue",
+            venue_name="After Hours Set",
+            neighborhood="Bushwick",
+            starts_at="2026-04-30T03:00:00+00:00",
+            score=0.76,
+            score_band="high",
+            price_label="$22",
+            source_confidence=0.83,
+            transit_minutes=26,
+        ),
+    ]
+    pins = [
+        _planner_pin(venue_id="gallery-venue", venue_name="Gallery Opening", latitude=40.7465, longitude=-74.0014),
+        _planner_pin(venue_id="main-venue", venue_name="Future Festival", latitude=40.7182, longitude=-73.9571),
+        _planner_pin(venue_id="late-venue", venue_name="After Hours Set", latitude=40.7136, longitude=-73.9318),
+    ]
+
+    planner = build_tonight_planner(
+        items,
+        pins,
+        budget_level="under_75",
+        timezone="America/New_York",
+        now_utc=now_utc,
+        plan_window_start_utc=datetime(2026, 4, 29, 22, 0, tzinfo=UTC),
+        plan_window_end_utc=datetime(2026, 4, 30, 6, 0, tzinfo=UTC),
+    )
+
+    assert planner.status == "ready"
+    assert planner.planWindowLabel == "Event window"
+    assert planner.planWindowStart == "2026-04-29T18:00:00-04:00"
+    assert [stop.venueId for stop in planner.stops] == ["gallery-venue", "main-venue", "late-venue"]
+
+
 def test_build_tonight_planner_adds_fallbacks_for_late_low_confidence_stop() -> None:
     now_utc = datetime(2026, 4, 25, 22, 0, tzinfo=UTC)
     items = [

@@ -160,6 +160,9 @@ export interface TonightPlannerResponse {
   title: string;
   summary?: string | null;
   planningNote?: string | null;
+  planWindowStart?: string | null;
+  planWindowEnd?: string | null;
+  planWindowLabel?: string | null;
   executionStatus: "idle" | "locked" | "swapped";
   executionNote?: string | null;
   activeTargetEventId?: string | null;
