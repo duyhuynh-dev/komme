@@ -6,11 +6,11 @@ from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.schemas.recommendations import (
-    EventPlanFallbackOption,
-    EventPlanResponse,
-    EventPlanRerouteOption,
-    EventPlanStop,
     MapVenuePin,
+    TonightPlannerFallbackOption,
+    TonightPlannerRerouteOption,
+    TonightPlannerResponse,
+    TonightPlannerStop,
     VenueRecommendationCard,
 )
 from app.services.travel import estimate_travel_bands, haversine_miles
@@ -37,7 +37,7 @@ class PlannerSelection:
     role_score: float
 
 
-def build_event_plan(
+def build_tonight_planner(
     items: list[VenueRecommendationCard],
     pins: list[MapVenuePin],
     *,
@@ -48,9 +48,9 @@ def build_event_plan(
     selected_action: str | None = None,
     outcome_recommendation_id: str | None = None,
     outcome_action: str | None = None,
-) -> EventPlanResponse:
+) -> TonightPlannerResponse:
     if not items:
-        return EventPlanResponse(
+        return TonightPlannerResponse(
             summary="Pulse needs a live shortlist before it can sketch out tonight.",
             planningNote="Refresh the shortlist once fresh events are in, then Pulse can build a sequence.",
         )
@@ -91,7 +91,7 @@ def build_event_plan(
         )
 
     if not candidates:
-        return EventPlanResponse(
+        return TonightPlannerResponse(
             summary="Pulse could not find a workable tonight window in the current shortlist.",
             planningNote="Try checking for new events or refreshing the shortlist once more options land.",
         )
@@ -105,7 +105,7 @@ def build_event_plan(
         lambda candidate: _main_event_score(candidate, using_tonight_window=using_tonight_window),
     )
     if main_event is None:
-        return EventPlanResponse(
+        return TonightPlannerResponse(
             status="limited",
             summary="Pulse found shortlist events, but not a strong anchor stop for tonight yet.",
             planningNote="The shortlist needs one clearer anchor before the planner can build a fuller night.",
@@ -180,7 +180,7 @@ def build_event_plan(
         selections.append(trailing_selection)
 
     used_venue_ids = {selection.candidate.card.venueId for selection in selections}
-    stops: list[EventPlanStop] = []
+    stops: list[TonightPlannerStop] = []
     for index, selection in enumerate(selections):
         previous_candidate = selections[index - 1].candidate if index > 0 else None
         fallback_trigger = _fallback_trigger(selection)
@@ -198,7 +198,7 @@ def build_event_plan(
         )
         confidence, confidence_label, confidence_reason = _selection_confidence(selection)
         stops.append(
-            EventPlanStop(
+            TonightPlannerStop(
                 role=selection.role,
                 roleLabel=selection.roleLabel,
                 venueId=selection.candidate.card.venueId,
@@ -227,7 +227,7 @@ def build_event_plan(
     else:
         planning_note = "Tonight looks thin in the live shortlist, so Pulse kept the plan light and surfaced backup options."
 
-    planner = EventPlanResponse(
+    planner = TonightPlannerResponse(
         status=status,
         summary=summary,
         planningNote=planning_note,
@@ -245,31 +245,6 @@ def build_event_plan(
     )
     _apply_reroute_state(planner)
     return planner
-
-
-def build_tonight_planner(
-    items: list[VenueRecommendationCard],
-    pins: list[MapVenuePin],
-    *,
-    budget_level: str = "under_75",
-    timezone: str = "America/New_York",
-    now_utc: datetime | None = None,
-    selected_recommendation_id: str | None = None,
-    selected_action: str | None = None,
-    outcome_recommendation_id: str | None = None,
-    outcome_action: str | None = None,
-) -> EventPlanResponse:
-    return build_event_plan(
-        items,
-        pins,
-        budget_level=budget_level,
-        timezone=timezone,
-        now_utc=now_utc,
-        selected_recommendation_id=selected_recommendation_id,
-        selected_action=selected_action,
-        outcome_recommendation_id=outcome_recommendation_id,
-        outcome_action=outcome_action,
-    )
 
 
 def _planner_timezone(timezone_name: str) -> ZoneInfo:
@@ -510,26 +485,23 @@ def _build_fallbacks(
     used_venue_ids: set[str],
     previous_candidate: PlannerCandidate | None,
     reason_key: str,
-) -> list[EventPlanFallbackOption]:
+) -> list[TonightPlannerFallbackOption]:
     fallback_pool = [candidate for candidate in candidates if candidate.card.venueId not in used_venue_ids]
     if not fallback_pool:
         return []
 
     if selection.role == "pregame":
-        def scorer(candidate: PlannerCandidate) -> float:
-            return _pregame_score(candidate, main_event)
+        scorer = lambda candidate: _pregame_score(candidate, main_event)
     elif selection.role == "main_event":
-        def scorer(candidate: PlannerCandidate) -> float:
-            return max(
-                _main_event_score(candidate, using_tonight_window=candidate.tonight),
-                _backup_score(candidate, main_event),
-            )
+        scorer = lambda candidate: max(
+            _main_event_score(candidate, using_tonight_window=candidate.tonight),
+            _backup_score(candidate, main_event),
+        )
     else:
-        def scorer(candidate: PlannerCandidate) -> float:
-            return max(
-                _late_option_score(candidate, main_event),
-                _backup_score(candidate, main_event),
-            )
+        scorer = lambda candidate: max(
+            _late_option_score(candidate, main_event),
+            _backup_score(candidate, main_event),
+        )
 
     ranked_options = sorted(
         (
@@ -540,12 +512,12 @@ def _build_fallbacks(
         reverse=True,
     )
 
-    results: list[EventPlanFallbackOption] = []
+    results: list[TonightPlannerFallbackOption] = []
     for candidate, score in ranked_options:
         if score < 0.44:
             continue
         results.append(
-            EventPlanFallbackOption(
+            TonightPlannerFallbackOption(
                 venueId=candidate.card.venueId,
                 venueName=candidate.card.venueName,
                 eventId=candidate.card.eventId,
@@ -603,7 +575,7 @@ def _role_reason(selection: PlannerSelection, main_event: PlannerCandidate) -> s
     return f"Keep this as the pivot if {main_event.card.venueName} slips or the fit softens."
 
 
-def _planner_summary(stops: list[EventPlanStop]) -> str:
+def _planner_summary(stops: list[TonightPlannerStop]) -> str:
     if not stops:
         return "Pulse has not found a workable night sequence yet."
 
@@ -631,7 +603,7 @@ def _planner_summary(stops: list[EventPlanStop]) -> str:
 
 
 def _apply_execution_state(
-    planner: EventPlanResponse,
+    planner: TonightPlannerResponse,
     *,
     selected_recommendation_id: str | None,
     selected_action: str | None,
@@ -639,8 +611,8 @@ def _apply_execution_state(
     if not selected_recommendation_id:
         return
 
-    selected_stop: EventPlanStop | None = None
-    selected_fallback: EventPlanFallbackOption | None = None
+    selected_stop: TonightPlannerStop | None = None
+    selected_fallback: TonightPlannerFallbackOption | None = None
 
     for stop in planner.stops:
         if stop.eventId == selected_recommendation_id:
@@ -672,7 +644,7 @@ def _apply_execution_state(
 
 
 def _apply_outcome_state(
-    planner: EventPlanResponse,
+    planner: TonightPlannerResponse,
     *,
     outcome_recommendation_id: str | None,
     outcome_action: str | None,
@@ -692,7 +664,7 @@ def _apply_outcome_state(
         planner.outcomeNote = f"{planner.activeTargetVenueName} was marked as passed tonight."
 
 
-def _apply_reroute_state(planner: EventPlanResponse) -> None:
+def _apply_reroute_state(planner: TonightPlannerResponse) -> None:
     if planner.outcomeStatus != "skipped" or not planner.activeTargetEventId:
         return
 
@@ -711,10 +683,10 @@ def _apply_reroute_state(planner: EventPlanResponse) -> None:
 
 
 def _find_reroute_option(
-    planner: EventPlanResponse,
+    planner: TonightPlannerResponse,
     *,
     skipped_event_id: str,
-) -> EventPlanRerouteOption | None:
+) -> TonightPlannerRerouteOption | None:
     for index, stop in enumerate(planner.stops):
         if stop.eventId == skipped_event_id:
             reroute = _reroute_from_stop_skip(planner.stops, stop_index=index)
@@ -732,10 +704,10 @@ def _find_reroute_option(
 
 
 def _reroute_from_stop_skip(
-    stops: list[EventPlanStop],
+    stops: list[TonightPlannerStop],
     *,
     stop_index: int,
-) -> EventPlanRerouteOption | None:
+) -> TonightPlannerRerouteOption | None:
     skipped_stop = stops[stop_index]
     for fallback in skipped_stop.fallbacks:
         if not fallback.selected:
@@ -754,11 +726,11 @@ def _reroute_from_stop_skip(
 
 
 def _reroute_from_fallback_skip(
-    stops: list[EventPlanStop],
+    stops: list[TonightPlannerStop],
     *,
     stop_index: int,
     skipped_event_id: str,
-) -> EventPlanRerouteOption | None:
+) -> TonightPlannerRerouteOption | None:
     parent_stop = stops[stop_index]
     for fallback in parent_stop.fallbacks:
         if fallback.eventId != skipped_event_id and not fallback.selected:
@@ -777,11 +749,11 @@ def _reroute_from_fallback_skip(
 
 
 def _next_reroute_stop(
-    stops: list[EventPlanStop],
+    stops: list[TonightPlannerStop],
     *,
     start_index: int,
     skipped_event_id: str,
-) -> EventPlanStop | None:
+) -> TonightPlannerStop | None:
     for stop in stops[start_index:]:
         if stop.eventId != skipped_event_id:
             return stop
@@ -789,11 +761,11 @@ def _next_reroute_stop(
 
 
 def _reroute_from_stop(
-    stop: EventPlanStop,
+    stop: TonightPlannerStop,
     *,
     reason: str,
-) -> EventPlanRerouteOption:
-    return EventPlanRerouteOption(
+) -> TonightPlannerRerouteOption:
+    return TonightPlannerRerouteOption(
         venueId=stop.venueId,
         venueName=stop.venueName,
         eventId=stop.eventId,
@@ -810,11 +782,11 @@ def _reroute_from_stop(
 
 
 def _reroute_from_fallback_option(
-    fallback: EventPlanFallbackOption,
+    fallback: TonightPlannerFallbackOption,
     *,
     reason: str,
-) -> EventPlanRerouteOption:
-    return EventPlanRerouteOption(
+) -> TonightPlannerRerouteOption:
+    return TonightPlannerRerouteOption(
         venueId=fallback.venueId,
         venueName=fallback.venueName,
         eventId=fallback.eventId,

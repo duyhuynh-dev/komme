@@ -1,4 +1,4 @@
-from app.services.planner import build_event_plan
+from app.services.planner import build_tonight_planner as build_event_plan
 from app.services.planner_sessions import (
     append_planner_action_event as append_event_plan_action,
     apply_planner_session_state as apply_event_plan_session_state,
