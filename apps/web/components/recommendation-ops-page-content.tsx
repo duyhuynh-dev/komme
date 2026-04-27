@@ -373,7 +373,7 @@ export function RecommendationOpsPageContent() {
                     {debugSummary.mapContext.fallbackReason ?? "No fallback in play for this run."}
                   </p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
                   <div className="rounded-[1.25rem] border border-stroke/80 bg-canvas px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Active topics</p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -382,6 +382,26 @@ export function RecommendationOpsPageContent() {
                           <span key={topic} className="rounded-full border border-stroke/80 bg-white px-3 py-1 text-xs font-medium text-slate-700">
                             {topic}
                           </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-500">None</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-stroke/80 bg-canvas px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Taste sources</p>
+                    <div className="mt-3 space-y-2">
+                      {debugSummary.activeTopicSources.length ? (
+                        debugSummary.activeTopicSources.map((source) => (
+                          <div key={source.sourceProvider} className="rounded-[1rem] border border-stroke/80 bg-white px-3 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-800">{source.label}</p>
+                              <span className="text-xs font-semibold text-slate-500">{source.topicCount}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Avg confidence {Math.round(source.averageConfidence * 100)}%
+                            </p>
+                          </div>
                         ))
                       ) : (
                         <span className="text-sm text-slate-500">None</span>

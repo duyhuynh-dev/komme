@@ -75,5 +75,6 @@ async def test_apply_taste_profile_persists_profile_run_and_interest_rows(monkey
     assert len(interest_rows) == 2
     assert len(profile_runs) == 1
     assert interest_rows[0].confidence == 0.48
+    assert interest_rows[0].source_provider == "manual"
     assert "Selected manually during onboarding." in interest_rows[0].source_signals_json
     assert refresh_calls == [("user-1", True, "manual", "pulse-manual-provider-v1")]

@@ -206,6 +206,14 @@ class RecommendationFeedbackReasonSummary(BaseModel):
     weightedStrength: float
 
 
+class RecommendationTopicSourceSummary(BaseModel):
+    sourceProvider: str
+    label: str
+    topicCount: int
+    averageConfidence: float
+    topTopics: list[str] = Field(default_factory=list)
+
+
 class RecommendationMovementCue(BaseModel):
     key: str
     label: str
@@ -233,6 +241,7 @@ class RecommendationDebugSummary(BaseModel):
     mapContext: MapContext = Field(default_factory=MapContext)
     activeTopics: list[str] = Field(default_factory=list)
     mutedTopics: list[str] = Field(default_factory=list)
+    activeTopicSources: list[RecommendationTopicSourceSummary] = Field(default_factory=list)
     topSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topConfirmedSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topDismissReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)

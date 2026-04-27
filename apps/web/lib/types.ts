@@ -4,6 +4,7 @@ export interface InterestTopic {
   id: string;
   label: string;
   confidence: number;
+  sourceProvider?: string;
   sourceSignals: string[];
   boosted: boolean;
   muted: boolean;
@@ -274,6 +275,14 @@ export interface RecommendationFeedbackReasonSummary {
   weightedStrength: number;
 }
 
+export interface RecommendationTopicSourceSummary {
+  sourceProvider: string;
+  label: string;
+  topicCount: number;
+  averageConfidence: number;
+  topTopics: string[];
+}
+
 export interface RecommendationMovementCue {
   key: string;
   label: string;
@@ -301,6 +310,7 @@ export interface RecommendationDebugSummary {
   mapContext: MapContext;
   activeTopics: string[];
   mutedTopics: string[];
+  activeTopicSources: RecommendationTopicSourceSummary[];
   topSaveReasons: RecommendationFeedbackReasonSummary[];
   topConfirmedSaveReasons: RecommendationFeedbackReasonSummary[];
   topDismissReasons: RecommendationFeedbackReasonSummary[];

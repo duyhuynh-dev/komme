@@ -7,6 +7,7 @@ class InterestTopic(BaseModel):
     id: str
     label: str
     confidence: float
+    sourceProvider: str = "unknown"
     sourceSignals: list[str] = Field(default_factory=list)
     boosted: bool = False
     muted: bool = False

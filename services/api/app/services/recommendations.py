@@ -28,6 +28,7 @@ from app.schemas.recommendations import (
     RecommendationDriverSummary,
     RecommendationFeedbackReasonSummary,
     RecommendationMovementCue,
+    RecommendationTopicSourceSummary,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
     MapVenuePin,
@@ -1484,12 +1485,50 @@ def _topic_labels(rows: list[UserInterestProfile], *, muted: bool) -> list[str]:
     return [row.label for row in rows if row.muted is muted]
 
 
+def _topic_source_label(source_provider: str) -> str:
+    labels = {
+        "spotify": "Spotify",
+        "manual": "Manual",
+        "reddit": "Reddit",
+        "reddit_export": "Reddit export",
+        "mock": "Demo seed",
+        "unknown": "Unknown",
+    }
+    return labels.get(source_provider, source_provider.replace("_", " ").title())
+
+
+def _topic_source_summaries(rows: list[UserInterestProfile]) -> list[RecommendationTopicSourceSummary]:
+    grouped: dict[str, list[UserInterestProfile]] = {}
+    for row in rows:
+        if row.muted:
+            continue
+        source_provider = row.source_provider or "unknown"
+        grouped.setdefault(source_provider, []).append(row)
+
+    summaries = [
+        RecommendationTopicSourceSummary(
+            sourceProvider=source_provider,
+            label=_topic_source_label(source_provider),
+            topicCount=len(source_rows),
+            averageConfidence=round(sum(row.confidence for row in source_rows) / len(source_rows), 3),
+            topTopics=[
+                row.label
+                for row in sorted(source_rows, key=lambda row: (-row.confidence, row.label.lower()))[:4]
+            ],
+        )
+        for source_provider, source_rows in grouped.items()
+        if source_rows
+    ]
+    return sorted(summaries, key=lambda item: (-item.topicCount, item.label.lower()))
+
+
 def _topic_snapshot(rows: list[UserInterestProfile]) -> list[dict]:
     return sorted(
         [
             {
                 "topicKey": row.topic_key,
                 "confidence": round(row.confidence, 3),
+                "sourceProvider": row.source_provider or "unknown",
                 "boosted": row.boosted,
                 "muted": row.muted,
             }
@@ -2484,6 +2523,7 @@ async def get_recommendation_debug_summary(
         mapContext=_build_map_context(anchor_resolution),
         activeTopics=_topic_labels(topic_rows, muted=False),
         mutedTopics=_topic_labels(topic_rows, muted=True),
+        activeTopicSources=_topic_source_summaries(topic_rows),
         topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
         topConfirmedSaveReasons=_confirmed_save_reason_summaries(feedback_signals),
         topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),

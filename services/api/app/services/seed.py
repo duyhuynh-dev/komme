@@ -322,6 +322,7 @@ async def bootstrap_user_with_mock_reddit(
                 topic_key=topic["key"],
                 label=topic["label"],
                 confidence=topic["confidence"],
+                source_provider="mock",
                 source_signals_json=topic["signals"],
                 boosted=topic["boosted"],
                 muted=topic["muted"],

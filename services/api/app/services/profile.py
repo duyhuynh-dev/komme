@@ -18,6 +18,7 @@ async def list_interests(session: AsyncSession, user: User) -> list[InterestTopi
             id=row.topic_key,
             label=row.label,
             confidence=row.confidence,
+            sourceProvider=row.source_provider,
             sourceSignals=row.source_signals_json or [],
             boosted=row.boosted,
             muted=row.muted,
@@ -46,6 +47,7 @@ async def update_interests(
                 topic_key=topic.id,
                 label=topic.label,
                 confidence=topic.confidence,
+                source_provider=topic.sourceProvider or "manual",
                 source_signals_json=topic.sourceSignals,
                 boosted=topic.boosted,
                 muted=topic.muted,
@@ -55,6 +57,7 @@ async def update_interests(
 
         row.label = topic.label
         row.confidence = topic.confidence
+        row.source_provider = topic.sourceProvider or row.source_provider or "manual"
         row.source_signals_json = topic.sourceSignals
         row.boosted = topic.boosted
         row.muted = topic.muted

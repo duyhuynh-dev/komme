@@ -1,5 +1,5 @@
 from sqlalchemy import JSON, Float, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
@@ -36,6 +36,7 @@ class UserInterestProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     topic_key: Mapped[str] = mapped_column(String(128), index=True)
     label: Mapped[str] = mapped_column(String(255))
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    source_provider: Mapped[str] = mapped_column(String(64), default="unknown")
     source_signals_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     boosted: Mapped[bool] = mapped_column(default=False)
     muted: Mapped[bool] = mapped_column(default=False)

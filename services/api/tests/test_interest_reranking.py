@@ -15,6 +15,7 @@ from app.services.recommendations import (
     _parse_occurrence_start,
     _score_band,
     _select_ranked_venues,
+    _topic_source_summaries,
 )
 from datetime import UTC, datetime, timedelta
 
@@ -73,6 +74,56 @@ def test_muted_topic_scores_lower_than_matching_active_topic() -> None:
     assert [topic.label for topic in underground_muted] == ["Underground dance"]
     assert [topic.label for topic in mixed_muted] == ["Underground dance"]
     assert [topic.label for topic in indie_matched] == ["Indie live music"]
+
+
+def test_topic_source_summaries_show_spotify_ranking_influence() -> None:
+    rows = [
+        UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.88,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        ),
+        UserInterestProfile(
+            user_id="user-1",
+            topic_key="indie_live_music",
+            label="Indie live music",
+            confidence=0.74,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        ),
+        UserInterestProfile(
+            user_id="user-1",
+            topic_key="gallery_nights",
+            label="Gallery nights",
+            confidence=0.64,
+            source_provider="manual",
+            boosted=False,
+            muted=False,
+        ),
+        UserInterestProfile(
+            user_id="user-1",
+            topic_key="muted_theme",
+            label="Muted theme",
+            confidence=0.91,
+            source_provider="spotify",
+            boosted=False,
+            muted=True,
+        ),
+    ]
+
+    summaries = _topic_source_summaries(rows)
+
+    assert summaries[0].sourceProvider == "spotify"
+    assert summaries[0].label == "Spotify"
+    assert summaries[0].topicCount == 2
+    assert summaries[0].averageConfidence == 0.81
+    assert summaries[0].topTopics == ["Underground dance", "Indie live music"]
+    assert summaries[1].sourceProvider == "manual"
 
 
 def test_score_band_thresholds_match_ranking_copy() -> None:

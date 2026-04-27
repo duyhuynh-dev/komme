@@ -51,6 +51,7 @@ async def apply_taste_profile(
                 topic_key=theme.id,
                 label=theme.label,
                 confidence=max(0.0, min(1.0, theme.confidence / 100)),
+                source_provider=profile.source,
                 source_signals_json=theme_signal_strings(theme),
                 boosted=False,
                 muted=False,
