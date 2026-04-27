@@ -375,6 +375,11 @@ export interface PlannerSessionDebugResponse {
   sessions: PlannerSessionDebugItem[];
 }
 
+export type EventPlanSessionDebugEvent = PlannerSessionDebugEvent;
+export type EventPlanSessionDebugStopScore = PlannerSessionDebugStopScore;
+export type EventPlanSessionDebugItem = PlannerSessionDebugItem;
+export type EventPlanSessionDebugResponse = PlannerSessionDebugResponse;
+
 export interface ArchiveSnapshot {
   runId: string;
   kind: "live" | "preview" | "scheduled" | "snapshot";

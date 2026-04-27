@@ -307,6 +307,12 @@ class PlannerSessionDebugResponse(BaseModel):
     sessions: list[PlannerSessionDebugItem] = Field(default_factory=list)
 
 
+EventPlanSessionDebugEvent = PlannerSessionDebugEvent
+EventPlanSessionDebugStopScore = PlannerSessionDebugStopScore
+EventPlanSessionDebugItem = PlannerSessionDebugItem
+EventPlanSessionDebugResponse = PlannerSessionDebugResponse
+
+
 class ArchiveSnapshot(BaseModel):
     runId: str
     kind: str

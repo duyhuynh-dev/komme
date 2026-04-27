@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.api.routes import recommendation_interactions
+from app.api.routes import event_plan_sessions, planner_sessions, recommendation_interactions
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.models.recommendation import (
@@ -685,6 +685,40 @@ async def test_planner_session_debug_payload_summarizes_timeline_and_scores() ->
             PLANNER_EVENT_SESSION_CREATED,
             PLANNER_EVENT_ROUTE_RECOMPUTED,
         ]
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_event_plan_sessions_route_matches_planner_sessions_alias() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="event-plan-route@example.com")
+        session.add(user)
+        await session.flush()
+        stop = _planner_stop(event_id="main-event")
+        planner_session = PlannerSession(
+            user_id=user.id,
+            recommendation_context_hash="route-hash",
+            initial_route_snapshot={"stops": [stop.model_dump(mode="json")]},
+            active_stop_event_id="main-event",
+            status="active",
+            budget_level="under_75",
+            timezone="America/New_York",
+        )
+        session.add(planner_session)
+        await session.flush()
+
+        neutral_response = await event_plan_sessions(session=session, user=user)
+        legacy_response = await planner_sessions(session=session, user=user)
+
+        assert neutral_response.model_dump() == legacy_response.model_dump()
+        assert neutral_response.sessions[0].sessionId == planner_session.id
 
     await engine.dispose()
 

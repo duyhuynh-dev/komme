@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getPlannerSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
+import { getEventPlanSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
 import type {
   PlannerSessionDebugItem,
   RecommendationDebugSummary,
@@ -318,8 +318,8 @@ export function RecommendationOpsPageContent() {
     queryFn: getRecommendationRunComparison,
   });
   const plannerSessionsQuery = useQuery({
-    queryKey: ["planner-session-debug"],
-    queryFn: getPlannerSessionDebug,
+    queryKey: ["event-plan-session-debug"],
+    queryFn: getEventPlanSessionDebug,
   });
 
   const isLoading = debugSummaryQuery.isLoading || comparisonQuery.isLoading || plannerSessionsQuery.isLoading;

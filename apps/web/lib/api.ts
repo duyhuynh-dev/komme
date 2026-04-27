@@ -7,6 +7,7 @@ import type {
   EmailPreferences,
   FeedbackReason,
   InterestTopic,
+  EventPlanSessionDebugResponse,
   LocationAnchorPayload,
   PlannerSessionDebugResponse,
   RecommendationDebugSummary,
@@ -181,6 +182,10 @@ export function getRecommendationRunComparison() {
 
 export function getPlannerSessionDebug() {
   return request<PlannerSessionDebugResponse>("/v1/planner/sessions");
+}
+
+export function getEventPlanSessionDebug() {
+  return request<EventPlanSessionDebugResponse>("/v1/event-plan/sessions");
 }
 
 export function getInterests() {

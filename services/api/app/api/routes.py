@@ -32,6 +32,7 @@ from app.schemas.recommendations import (
     RecommendationInteractionsPayload,
     RecommendationDebugSummary,
     RecommendationRunComparison,
+    EventPlanSessionDebugResponse,
     PlannerSessionDebugResponse,
     RecommendationsMapResponse,
 )
@@ -492,6 +493,14 @@ async def planner_sessions(
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
 ) -> PlannerSessionDebugResponse:
+    return await get_event_plan_session_debug(session, user_id=user.id)
+
+
+@router.get("/event-plan/sessions", response_model=EventPlanSessionDebugResponse)
+async def event_plan_sessions(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+) -> EventPlanSessionDebugResponse:
     return await get_event_plan_session_debug(session, user_id=user.id)
 
 
