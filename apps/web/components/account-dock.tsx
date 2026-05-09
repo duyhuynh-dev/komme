@@ -25,6 +25,11 @@ import {
   startSpotifyConnection,
   syncSpotifyTaste,
 } from "@/lib/api";
+import {
+  connectedSourceInfluenceLabel,
+  connectedSourceStatusLabel,
+  connectedSourceSyncLabel,
+} from "@/lib/connected-source-health";
 import type { TasteProfileResponse } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
@@ -84,15 +89,13 @@ export function AccountDock() {
   const isSignedIn = Boolean(isAuthenticated && !isLoading);
   const connectionMode = viewerQuery.data?.redditConnectionMode ?? "none";
   const status = statusCopy(connectionMode, isSignedIn);
-  const spotifyConnected = Boolean(viewerQuery.data?.spotifyConnected);
-  const spotifyTasteHealth = viewerQuery.data?.spotifyTasteHealth;
-  const spotifyHealthLabel = spotifyTasteHealth?.stale
-    ? "Needs refresh"
-    : spotifyTasteHealth?.currentlyInfluencingRanking
-      ? "Influencing ranking"
-      : spotifyConnected
-        ? "Connected"
-        : "Not connected";
+  const spotifyTasteHealth =
+    viewerQuery.data?.connectedSources?.find((source) => source.provider === "spotify") ??
+    viewerQuery.data?.spotifyTasteHealth;
+  const spotifyConnected = Boolean(spotifyTasteHealth?.connected ?? viewerQuery.data?.spotifyConnected);
+  const spotifyHealthLabel = connectedSourceStatusLabel(spotifyTasteHealth);
+  const spotifySyncLabel = connectedSourceSyncLabel(spotifyTasteHealth);
+  const spotifyInfluenceLabel = connectedSourceInfluenceLabel(spotifyTasteHealth);
 
   const spotifyPreviewQuery = useQuery({
     queryKey: ["spotify-taste-preview", user?.id ?? "demo"],
@@ -550,6 +553,10 @@ export function AccountDock() {
                   {spotifyTasteHealth?.healthReason ? (
                     <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyTasteHealth.healthReason}</p>
                   ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                    <span className="rounded-full border border-stroke bg-white px-3 py-1">{spotifySyncLabel}</span>
+                    <span className="rounded-full border border-stroke bg-white px-3 py-1">{spotifyInfluenceLabel}</span>
+                  </div>
                   {spotifyTasteHealth?.stale ? (
                     <button
                       type="button"

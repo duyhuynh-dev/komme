@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Bookmark, MapPin, MoveRight, XCircle } from "lucide-react";
+import { personalizationSourceLabel } from "@/lib/connected-source-health";
 import type { RecommendationRunComparisonItem, VenueRecommendationCard } from "@/lib/types";
 import { formatEventStart, formatRelativeTimestamp } from "@/lib/utils";
 
@@ -231,7 +232,7 @@ export function RecommendationDrawer({
                       ].join(" ")}
                       title={source.detail ?? undefined}
                     >
-                      {source.label} · {source.influence}
+                      {personalizationSourceLabel(source)}
                     </span>
                   ))}
                 </div>

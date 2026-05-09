@@ -144,8 +144,14 @@ def test_personalization_provenance_identifies_source_contributors() -> None:
     by_source = {item["sourceProvider"]: item for item in provenance}
     assert set(by_source) == {"manual", "spotify", "feedback"}
     assert by_source["manual"]["topicLabels"] == ["Gallery nights"]
+    assert by_source["manual"]["detail"] == "Manual preferences matched Gallery nights."
     assert by_source["spotify"]["topicLabels"] == ["Underground dance"]
+    assert by_source["spotify"]["detail"] == "Spotify-derived taste matched Underground dance."
     assert by_source["feedback"]["influence"] == "supporting"
+    assert (
+        by_source["feedback"]["detail"]
+        == "Your recent saves, dismissals, and planner actions adjusted this venue's rank."
+    )
 
 
 def test_personalization_provenance_marks_stale_spotify_suppression() -> None:

@@ -19,7 +19,7 @@ from app.models.recommendation import (
     RecommendationRun,
     VenueRecommendation,
 )
-from app.models.user import User, UserAnchorLocation, UserConstraint
+from app.models.user import OAuthConnection, User, UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
     ArchiveResponse,
     ArchiveSnapshot,
@@ -47,6 +47,7 @@ from app.services.event_plan import (
     build_event_plan,
     get_or_create_event_plan_session,
 )
+from app.services.source_health import build_connected_source_health, provider_label
 from app.services.travel import estimate_travel_bands
 
 DEFAULT_VIEWPORT = {
@@ -1474,7 +1475,7 @@ def _score_summary(score_breakdown: list[dict]) -> str | None:
 
 
 def _personalization_source_label(source_provider: str) -> str:
-    return _topic_source_label(source_provider)
+    return provider_label(source_provider)
 
 
 def _personalization_provenance(
@@ -1497,7 +1498,7 @@ def _personalization_provenance(
                 topic.label
                 for topic in sorted(source_topics, key=lambda topic: (-topic.confidence, topic.label.lower()))
             ],
-            "detail": f"Matched {_join_labels([topic.label for topic in source_topics])}.",
+            "detail": _personalization_source_detail(source_provider, source_topics),
         }
         for source_provider, source_topics in grouped_topics.items()
     ]
@@ -1506,10 +1507,10 @@ def _personalization_provenance(
         sources.append(
             {
                 "sourceProvider": "feedback",
-                "label": "Recent feedback",
+                "label": provider_label("feedback"),
                 "influence": "supporting" if feedback_adjustment > 0 else "reducing",
                 "topicLabels": [],
-                "detail": "Recent actions adjusted this venue's rank.",
+                "detail": "Your recent saves, dismissals, and planner actions adjusted this venue's rank.",
             }
         )
 
@@ -1518,7 +1519,7 @@ def _personalization_provenance(
         sources.append(
             {
                 "sourceProvider": "spotify",
-                "label": "Spotify",
+                "label": provider_label("spotify"),
                 "influence": "suppressed",
                 "topicLabels": [],
                 "detail": stale_items[0].get("detail"),
@@ -1532,6 +1533,17 @@ def _personalization_provenance(
             source["label"],
         ),
     )
+
+
+def _personalization_source_detail(source_provider: str, topics: list[UserInterestProfile]) -> str:
+    matched = _join_labels([topic.label for topic in topics])
+    if source_provider == "spotify":
+        return f"Spotify-derived taste matched {matched}."
+    if source_provider == "manual":
+        return f"Manual preferences matched {matched}."
+    if source_provider in {"reddit", "reddit_export"}:
+        return f"Connected profile taste matched {matched}."
+    return f"Matched {matched}."
 
 
 def _pack_reason_payload(
@@ -1620,15 +1632,7 @@ def _topic_labels(rows: list[UserInterestProfile], *, muted: bool) -> list[str]:
 
 
 def _topic_source_label(source_provider: str) -> str:
-    labels = {
-        "spotify": "Spotify",
-        "manual": "Manual",
-        "reddit": "Reddit",
-        "reddit_export": "Reddit export",
-        "mock": "Demo seed",
-        "unknown": "Unknown",
-    }
-    return labels.get(source_provider, source_provider.replace("_", " ").title())
+    return provider_label(source_provider)
 
 
 def _latest_profile_runs_by_provider(runs: list[ProfileRun]) -> dict[str, ProfileRun]:
@@ -1648,24 +1652,13 @@ def _stale_interest_provider_keys(latest_runs_by_provider: dict[str, ProfileRun]
     }
 
 
-def _profile_run_health_reason(run: ProfileRun | None) -> str | None:
-    if run is None:
-        return None
-    if run.status == "completed":
-        return "Latest provider sync completed."
-
-    summary = run.summary_json or {}
-    message = summary.get("message")
-    if isinstance(message, str) and message:
-        return f"Latest provider sync failed: {message}"
-    return "Latest provider sync failed."
-
-
 def _topic_source_summaries(
     rows: list[UserInterestProfile],
     latest_runs_by_provider: dict[str, ProfileRun] | None = None,
+    connected_providers: set[str] | None = None,
 ) -> list[RecommendationTopicSourceSummary]:
     latest_runs_by_provider = latest_runs_by_provider or {}
+    connected_providers = connected_providers or set()
     grouped: dict[str, list[UserInterestProfile]] = {}
     for row in rows:
         if row.muted:
@@ -1678,6 +1671,12 @@ def _topic_source_summaries(
         if not source_rows:
             continue
         latest_run = latest_runs_by_provider.get(source_provider)
+        health = build_connected_source_health(
+            provider=source_provider,
+            connected=source_provider in connected_providers or source_provider in {"manual", "feedback"},
+            latest_run=latest_run,
+            active_topic_count=len(source_rows),
+        )
         summaries.append(
             RecommendationTopicSourceSummary(
                 sourceProvider=source_provider,
@@ -1690,8 +1689,12 @@ def _topic_source_summaries(
                 ],
                 latestRunStatus=latest_run.status if latest_run else None,
                 latestRunAt=_timestamp_utc(latest_run.created_at).isoformat() if latest_run else None,
-                stale=latest_run is not None and latest_run.status != "completed",
-                healthReason=_profile_run_health_reason(latest_run),
+                connected=health.connected,
+                stale=health.stale,
+                currentlyInfluencingRanking=health.currentlyInfluencingRanking,
+                confidenceState=health.confidenceState,
+                healthReason=health.healthReason,
+                debugReason=health.debugReason,
             )
         )
     return sorted(summaries, key=lambda item: (-item.topicCount, item.label.lower()))
@@ -2750,7 +2753,11 @@ async def get_recommendation_debug_summary(
         mapContext=_build_map_context(anchor_resolution),
         activeTopics=_topic_labels(topic_rows, muted=False),
         mutedTopics=_topic_labels(topic_rows, muted=True),
-        activeTopicSources=_topic_source_summaries(topic_rows, _latest_profile_runs_by_provider(profile_runs)),
+        activeTopicSources=_topic_source_summaries(
+            topic_rows,
+            _latest_profile_runs_by_provider(profile_runs),
+            connected_providers,
+        ),
         topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
         topConfirmedSaveReasons=_confirmed_save_reason_summaries(feedback_signals),
         topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),

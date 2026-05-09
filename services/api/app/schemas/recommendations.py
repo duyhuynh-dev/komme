@@ -221,10 +221,14 @@ class RecommendationTopicSourceSummary(BaseModel):
     topicCount: int
     averageConfidence: float
     topTopics: list[str] = Field(default_factory=list)
+    connected: bool = False
     latestRunStatus: str | None = None
     latestRunAt: str | None = None
     stale: bool = False
+    currentlyInfluencingRanking: bool = False
+    confidenceState: str = "unknown"
     healthReason: str | None = None
+    debugReason: str | None = None
 
 
 class RecommendationMovementCue(BaseModel):

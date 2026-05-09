@@ -209,12 +209,15 @@ export interface FeedbackReason {
 }
 
 export interface ConnectedSourceHealth {
+  provider: string;
   connected: boolean;
   latestRunStatus?: string | null;
   latestRunAt?: string | null;
   stale: boolean;
   currentlyInfluencingRanking: boolean;
+  confidenceState: "healthy" | "degraded" | "inactive" | "disconnected" | "unknown" | string;
   healthReason?: string | null;
+  debugReason?: string | null;
 }
 
 export interface AuthViewer {
@@ -228,6 +231,7 @@ export interface AuthViewer {
   redditConnectionMode: "none" | "live" | "sample";
   spotifyConnected: boolean;
   spotifyTasteHealth: ConnectedSourceHealth;
+  connectedSources: ConnectedSourceHealth[];
 }
 
 export interface ThemeEvidenceCount {
@@ -300,10 +304,14 @@ export interface RecommendationTopicSourceSummary {
   topicCount: number;
   averageConfidence: number;
   topTopics: string[];
+  connected: boolean;
   latestRunStatus?: string | null;
   latestRunAt?: string | null;
   stale: boolean;
+  currentlyInfluencingRanking: boolean;
+  confidenceState: string;
   healthReason?: string | null;
+  debugReason?: string | null;
 }
 
 export interface RecommendationMovementCue {

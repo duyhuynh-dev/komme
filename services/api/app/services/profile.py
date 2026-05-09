@@ -1,11 +1,12 @@
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.profile import ProfileRun, UserInterestOverride, UserInterestProfile
-from app.models.user import EmailPreference, OAuthConnection, User
+from app.models.profile import UserInterestOverride, UserInterestProfile
+from app.models.user import EmailPreference, User
 from app.schemas.auth import ConnectedSourceHealth
 from app.schemas.profile import EmailPreferencePayload, EmailPreferenceResponse, InterestTopic
 from app.services.recommendations import refresh_recommendations_for_user
+from app.services.source_health import get_connected_source_health
 
 
 async def list_interests(session: AsyncSession, user: User) -> list[InterestTopic]:
@@ -28,68 +29,8 @@ async def list_interests(session: AsyncSession, user: User) -> list[InterestTopi
     ]
 
 
-def _profile_run_health_reason(run: ProfileRun | None, *, active_topic_count: int) -> str:
-    if run is None:
-        return (
-            "Spotify is connected, but its taste has not been applied to ranking yet."
-            if active_topic_count == 0
-            else "Spotify taste exists, but Pulse has no recent provider sync status."
-        )
-    if run.status == "completed":
-        return (
-            f"Spotify taste is currently influencing ranking through {active_topic_count} active themes."
-            if active_topic_count
-            else "Latest Spotify sync completed, but no active Spotify themes are influencing ranking."
-        )
-
-    summary = run.summary_json or {}
-    message = summary.get("message")
-    if isinstance(message, str) and message:
-        return f"Latest Spotify sync failed: {message}"
-    return "Latest Spotify sync failed."
-
-
 async def get_spotify_taste_health(session: AsyncSession, user: User) -> ConnectedSourceHealth:
-    connection = await session.scalar(
-        select(OAuthConnection).where(
-            OAuthConnection.user_id == user.id,
-            OAuthConnection.provider == "spotify",
-        )
-    )
-    if connection is None:
-        return ConnectedSourceHealth(
-            connected=False,
-            healthReason="Spotify is not connected.",
-        )
-
-    latest_run = await session.scalar(
-        select(ProfileRun)
-        .where(ProfileRun.user_id == user.id, ProfileRun.provider == "spotify")
-        .order_by(ProfileRun.created_at.desc())
-        .limit(1)
-    )
-    active_topic_count = (
-        await session.scalar(
-            select(func.count(UserInterestProfile.id))
-            .select_from(UserInterestProfile)
-            .where(
-                UserInterestProfile.user_id == user.id,
-                UserInterestProfile.source_provider == "spotify",
-                UserInterestProfile.muted.is_(False),
-            )
-        )
-        or 0
-    )
-    has_active_topics = active_topic_count > 0
-    stale = latest_run is not None and latest_run.status != "completed"
-    return ConnectedSourceHealth(
-        connected=True,
-        latestRunStatus=latest_run.status if latest_run else None,
-        latestRunAt=latest_run.created_at.isoformat() if latest_run else None,
-        stale=stale,
-        currentlyInfluencingRanking=has_active_topics and not stale,
-        healthReason=_profile_run_health_reason(latest_run, active_topic_count=active_topic_count),
-    )
+    return await get_connected_source_health(session, user, provider="spotify")
 
 
 async def update_interests(

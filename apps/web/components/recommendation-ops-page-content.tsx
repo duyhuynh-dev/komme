@@ -410,6 +410,15 @@ export function RecommendationOpsPageContent() {
                             <p className="mt-1 text-xs text-slate-500">
                               Avg confidence {Math.round(source.averageConfidence * 100)}%
                             </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {source.currentlyInfluencingRanking ? "Influencing ranking" : "Not influencing ranking"} ·{" "}
+                              {source.confidenceState}
+                            </p>
+                            {source.debugReason ? (
+                              <p className="mt-1 break-all font-mono text-[11px] leading-4 text-slate-500">
+                                {source.debugReason}
+                              </p>
+                            ) : null}
                           </div>
                         ))
                       ) : (

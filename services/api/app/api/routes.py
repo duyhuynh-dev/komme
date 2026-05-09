@@ -164,6 +164,7 @@ async def auth_me(
         )
     )
     connection_mode = "live" if live_connection else "sample" if sample_connection else "none"
+    spotify_health = await get_spotify_taste_health(session, identity.user)
     return AuthViewerResponse(
         userId=identity.user.id,
         email=identity.user.email,
@@ -174,7 +175,8 @@ async def auth_me(
         redditConnected=connection_mode != "none",
         redditConnectionMode=connection_mode,
         spotifyConnected=spotify_connection is not None,
-        spotifyTasteHealth=await get_spotify_taste_health(session, identity.user),
+        spotifyTasteHealth=spotify_health,
+        connectedSources=[spotify_health],
     )
 
 

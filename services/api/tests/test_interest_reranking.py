@@ -128,7 +128,7 @@ def test_topic_source_summaries_show_spotify_ranking_influence() -> None:
     )
     failed_run.created_at = datetime(2026, 4, 27, 12, 0, tzinfo=UTC)
 
-    summaries = _topic_source_summaries(rows, {"spotify": failed_run})
+    summaries = _topic_source_summaries(rows, {"spotify": failed_run}, {"spotify"})
 
     assert summaries[0].sourceProvider == "spotify"
     assert summaries[0].label == "Spotify"
@@ -137,8 +137,15 @@ def test_topic_source_summaries_show_spotify_ranking_influence() -> None:
     assert summaries[0].topTopics == ["Underground dance", "Indie live music"]
     assert summaries[0].latestRunStatus == "failed"
     assert summaries[0].latestRunAt == "2026-04-27T12:00:00+00:00"
+    assert summaries[0].connected is True
     assert summaries[0].stale is True
-    assert summaries[0].healthReason == "Latest provider sync failed: Spotify connection expired. Reconnect Spotify and try again."
+    assert summaries[0].currentlyInfluencingRanking is False
+    assert summaries[0].confidenceState == "degraded"
+    assert (
+        summaries[0].healthReason
+        == "Latest Spotify sync failed: Spotify connection expired. Reconnect Spotify and try again."
+    )
+    assert "influencing=False" in (summaries[0].debugReason or "")
     assert summaries[1].sourceProvider == "manual"
 
 
