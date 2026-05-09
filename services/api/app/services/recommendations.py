@@ -28,6 +28,7 @@ from app.schemas.recommendations import (
     RecommendationDriverSummary,
     RecommendationFeedbackReasonSummary,
     RecommendationMovementCue,
+    RecommendationMovementExplanation,
     RecommendationTopicSourceSummary,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
@@ -1946,6 +1947,104 @@ def _movement_cues(
     return cues[:2]
 
 
+def _movement_source_for_cue(cue: RecommendationMovementCue, detail: str | None) -> str:
+    if cue.key == "feedback":
+        text = (detail or "").lower()
+        if any(term in text for term in ["marked", "real night out", "made it", "night-out", "planner"]):
+            return "planner"
+        return "feedback"
+    if cue.key == "stale_provider_guard":
+        return "source_health"
+    if cue.key == "profile_fit":
+        return "profile"
+    return "score"
+
+
+def _movement_explanations(
+    *,
+    current_card: VenueRecommendationCard | None,
+    previous_card: VenueRecommendationCard | None,
+    movement_cues: list[RecommendationMovementCue],
+    movement: str,
+) -> list[RecommendationMovementExplanation]:
+    card = current_card or previous_card
+    if card is None:
+        return []
+
+    current_factors = {factor.key: factor for factor in current_card.scoreBreakdown} if current_card else {}
+    previous_factors = {factor.key: factor for factor in previous_card.scoreBreakdown} if previous_card else {}
+    explanations: list[RecommendationMovementExplanation] = []
+
+    for cue in movement_cues:
+        factor = current_factors.get(cue.key) or previous_factors.get(cue.key)
+        detail = factor.detail if factor else f"{cue.label} changed by {cue.delta:+.3f}."
+        explanations.append(
+            RecommendationMovementExplanation(
+                title=cue.label,
+                detail=detail,
+                direction=cue.direction,
+                source=_movement_source_for_cue(cue, detail),
+            )
+        )
+
+    provenance = current_card.personalizationProvenance if current_card else previous_card.personalizationProvenance
+    for source in provenance:
+        if source.influence == "suppressed" and source.detail:
+            explanations.append(
+                RecommendationMovementExplanation(
+                    title=f"{source.label} paused",
+                    detail=source.detail,
+                    direction="negative",
+                    source="source_health",
+                )
+            )
+            break
+        if source.sourceProvider in {"spotify", "manual"} and source.influence == "supporting" and source.detail:
+            explanations.append(
+                RecommendationMovementExplanation(
+                    title=f"{source.label} taste",
+                    detail=source.detail,
+                    direction="positive",
+                    source="profile",
+                )
+            )
+            break
+
+    if not explanations:
+        score_delta = None
+        if current_card is not None and previous_card is not None:
+            score_delta = round(current_card.score - previous_card.score, 3)
+        direction = "neutral"
+        if movement in {"up", "new"} or (score_delta is not None and score_delta > 0):
+            direction = "positive"
+        elif movement in {"down", "dropped"} or (score_delta is not None and score_delta < 0):
+            direction = "negative"
+        explanations.append(
+            RecommendationMovementExplanation(
+                title="Score movement",
+                detail=card.scoreSummary or "Ranking changed because the score mix shifted between runs.",
+                direction=direction,
+                source="score",
+            )
+        )
+
+    seen: set[tuple[str, str]] = set()
+    unique: list[RecommendationMovementExplanation] = []
+    for explanation in explanations:
+        key = (explanation.source, explanation.title)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(explanation)
+    unique.sort(
+        key=lambda explanation: (
+            {"source_health": 0, "planner": 1, "feedback": 2, "profile": 3, "score": 4}.get(explanation.source, 5),
+            explanation.title,
+        )
+    )
+    return unique[:2]
+
+
 def _comparison_item(
     *,
     current_rank: int | None,
@@ -1965,6 +2064,7 @@ def _comparison_item(
     if current_score is not None and previous_score is not None:
         score_delta = round(current_score - previous_score, 3)
 
+    movement_cues = _movement_cues(current_card, previous_card)
     return RecommendationRunComparisonItem(
         venueId=card.venueId,
         venueName=card.venueName,
@@ -1977,7 +2077,13 @@ def _comparison_item(
         scoreDelta=score_delta,
         scoreBand=current_card.scoreBand if current_card is not None else previous_card.scoreBand if previous_card is not None else None,
         scoreSummary=current_card.scoreSummary if current_card is not None else previous_card.scoreSummary if previous_card is not None else None,
-        movementCues=_movement_cues(current_card, previous_card),
+        movementCues=movement_cues,
+        movementExplanation=_movement_explanations(
+            current_card=current_card,
+            previous_card=previous_card,
+            movement_cues=movement_cues,
+            movement=movement,
+        ),
         movement=movement,
     )
 

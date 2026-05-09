@@ -321,6 +321,13 @@ export interface RecommendationMovementCue {
   direction: "positive" | "negative";
 }
 
+export interface RecommendationMovementExplanation {
+  title: string;
+  detail: string;
+  direction: "positive" | "negative" | "neutral" | string;
+  source: "feedback" | "planner" | "source_health" | "profile" | "score" | string;
+}
+
 export interface RecommendationDebugVenue {
   rank: number;
   venueId: string;
@@ -363,6 +370,7 @@ export interface RecommendationRunComparisonItem {
   scoreBand?: ScoreBand | null;
   scoreSummary?: string | null;
   movementCues: RecommendationMovementCue[];
+  movementExplanation: RecommendationMovementExplanation[];
   movement: "new" | "dropped" | "up" | "down" | "steady";
 }
 

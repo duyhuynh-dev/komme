@@ -19,6 +19,7 @@ from app.models.user import User
 from app.models.user import UserAnchorLocation, UserConstraint
 from app.schemas.recommendations import (
     RecommendationFreshness,
+    RecommendationPersonalizationSource,
     RecommendationProvenance,
     RecommendationScoreBreakdownItem,
     TravelEstimate,
@@ -190,6 +191,7 @@ def _sample_card(
     score_band: str,
     score_summary: str,
     score_breakdown: list[RecommendationScoreBreakdownItem],
+    personalization_provenance: list[RecommendationPersonalizationSource] | None = None,
 ) -> VenueRecommendationCard:
     return VenueRecommendationCard(
         venueId=venue_id,
@@ -219,6 +221,7 @@ def _sample_card(
         ),
         scoreSummary=score_summary,
         scoreBreakdown=score_breakdown,
+        personalizationProvenance=personalization_provenance or [],
         secondaryEvents=[],
     )
 
@@ -503,6 +506,15 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
     assert dropped_venues[0].venueId == "venue-c"
     assert {item.venueId for item in movers} == {"venue-a", "venue-b"}
     assert any(cue.key == "feedback" and cue.direction == "positive" for cue in movers[0].movementCues + movers[1].movementCues)
+    feedback_mover = next(
+        item
+        for item in movers
+        if any(explanation.source == "feedback" for explanation in item.movementExplanation)
+    )
+    feedback_explanation = feedback_mover.movementExplanation[0]
+    assert feedback_explanation.title == "Recent feedback"
+    assert feedback_explanation.direction == "positive"
+    assert feedback_explanation.source == "feedback"
     assert steady_leaders == []
 
     summary = _comparison_summary_sentence(
@@ -513,6 +525,99 @@ def test_compare_shortlists_identifies_new_dropped_and_moved_venues() -> None:
     assert summary is not None
     assert "entered the shortlist" in summary
     assert "dropped out" in summary
+
+
+def test_compare_shortlists_explains_stale_provider_suppression() -> None:
+    current_items = [
+        _sample_card(
+            venue_id="venue-a",
+            venue_name="Public Records",
+            score=0.72,
+            score_band="medium",
+            score_summary="Provider freshness is holding this back.",
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="stale_provider_guard",
+                    label="Provider freshness",
+                    impactLabel="holding it back",
+                    detail="Latest Spotify sync failed, so Pulse suppressed stale Underground dance signals for this run.",
+                    contribution=-0.18,
+                    direction="negative",
+                ),
+            ],
+            personalization_provenance=[
+                RecommendationPersonalizationSource(
+                    sourceProvider="spotify",
+                    label="Spotify",
+                    influence="suppressed",
+                    topicLabels=[],
+                    detail="Latest Spotify sync failed, so Pulse suppressed stale Underground dance signals for this run.",
+                )
+            ],
+        )
+    ]
+    previous_items = [
+        _sample_card(
+            venue_id="venue-a",
+            venue_name="Public Records",
+            score=0.9,
+            score_band="high",
+            score_summary="Spotify taste helped this pick.",
+            score_breakdown=[
+                RecommendationScoreBreakdownItem(
+                    key="profile_fit",
+                    label="Profile fit",
+                    impactLabel="strong support",
+                    detail="Spotify-derived taste matched Underground dance.",
+                    contribution=0.34,
+                    direction="positive",
+                ),
+            ],
+        )
+    ]
+
+    _, _, _, steady_leaders = _compare_shortlists(current_items, previous_items)
+
+    assert steady_leaders[0].movementExplanation[0].model_dump() == {
+        "title": "Provider freshness",
+        "detail": "Latest Spotify sync failed, so Pulse suppressed stale Underground dance signals for this run.",
+        "direction": "negative",
+        "source": "source_health",
+    }
+
+
+def test_compare_shortlists_includes_movement_explanation_payload_shape() -> None:
+    current_items = [
+        _sample_card(
+            venue_id="venue-a",
+            venue_name="Public Records",
+            score=0.88,
+            score_band="high",
+            score_summary="Manual taste helped this pick.",
+            score_breakdown=[],
+            personalization_provenance=[
+                RecommendationPersonalizationSource(
+                    sourceProvider="manual",
+                    label="Manual",
+                    influence="supporting",
+                    topicLabels=["Gallery nights"],
+                    detail="Manual preferences matched Gallery nights.",
+                )
+            ],
+        )
+    ]
+
+    new_entrants, _, _, _ = _compare_shortlists(current_items, [])
+
+    payload = new_entrants[0].model_dump()
+    assert payload["movementExplanation"] == [
+        {
+            "title": "Manual taste",
+            "detail": "Manual preferences matched Gallery nights.",
+            "direction": "positive",
+            "source": "profile",
+        }
+    ]
 
 
 @pytest.mark.asyncio

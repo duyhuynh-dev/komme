@@ -238,6 +238,13 @@ class RecommendationMovementCue(BaseModel):
     direction: str = "positive"
 
 
+class RecommendationMovementExplanation(BaseModel):
+    title: str
+    detail: str
+    direction: str = "neutral"
+    source: str = "score"
+
+
 class RecommendationDebugVenue(BaseModel):
     rank: int
     venueId: str
@@ -280,6 +287,7 @@ class RecommendationRunComparisonItem(BaseModel):
     scoreBand: str | None = None
     scoreSummary: str | None = None
     movementCues: list[RecommendationMovementCue] = Field(default_factory=list)
+    movementExplanation: list[RecommendationMovementExplanation] = Field(default_factory=list)
     movement: str
 
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getEventPlanSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
+import { movementExplanationSourceLabel, movementExplanationTone } from "@/lib/recommendation-movement";
 import type {
   PlannerSessionDebugItem,
   RecommendationDebugSummary,
@@ -188,6 +189,27 @@ function ComparisonTable({
                 </div>
               ) : item.scoreSummary ? (
                 <p className="mt-3 text-sm leading-6 text-slate-600">{item.scoreSummary}</p>
+              ) : null}
+              {item.movementExplanation.length ? (
+                <div className="mt-3 space-y-2">
+                  {item.movementExplanation.map((explanation) => (
+                    <div
+                      key={`${item.venueId}-${explanation.source}-${explanation.title}`}
+                      className={[
+                        "rounded-[0.9rem] border px-3 py-2 text-sm",
+                        movementExplanationTone(explanation),
+                      ].join(" ")}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{explanation.title}</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
+                          {movementExplanationSourceLabel(explanation.source)}
+                        </span>
+                      </div>
+                      <p className="mt-1 leading-5">{explanation.detail}</p>
+                    </div>
+                  ))}
+                </div>
               ) : null}
             </div>
           ))}
