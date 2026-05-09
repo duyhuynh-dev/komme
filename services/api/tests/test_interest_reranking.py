@@ -371,6 +371,57 @@ def test_feedback_and_planner_outcomes_can_outweigh_passive_source_weighting() -
     assert feedback_reason["title"] == "Went before"
 
 
+def test_digest_outcomes_can_outweigh_passive_source_weighting() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.92,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        )
+    }
+    venue = Venue(
+        id="venue-1",
+        name="Public Records",
+        neighborhood="Gowanus",
+        address="233 Butler St",
+        city="Brooklyn",
+        state="NY",
+        latitude=40.6787,
+        longitude=-73.9831,
+    )
+    feedback_signals = FeedbackSignals(
+        digest_click_venues={"venue-1": 1.0},
+        ticket_click_venues={"venue-1": 1.0},
+        archive_revisit_venues={"venue-1": 1.0},
+        digest_click_topics={"underground_dance": 0.9},
+    )
+
+    _, _, _, components = _candidate_score_with_components(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=24,
+        budget_fit=0.9,
+    )
+    feedback_adjustment, feedback_reason = _feedback_adjustment(
+        ["underground_dance"],
+        profiles_by_key,
+        venue,
+        feedback_signals,
+        transit_minutes=24,
+        budget_fit=0.9,
+        source_confidence=0.84,
+    )
+
+    assert feedback_adjustment > abs(components.source_weight_adjustment)
+    assert feedback_reason is not None
+    assert feedback_reason["title"] == "Digest-to-ticket intent"
+
+
 def test_stale_interest_provider_keys_only_marks_failed_spotify() -> None:
     spotify_failed = ProfileRun(user_id="user-1", provider="spotify", model_name="spotify", status="failed")
     manual_failed = ProfileRun(user_id="user-1", provider="manual", model_name="manual", status="failed")
