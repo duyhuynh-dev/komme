@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   connectedSourceInfluenceLabel,
+  connectedSourceSetupState,
   connectedSourceStatusLabel,
   connectedSourceSyncLabel,
   personalizationSourceLabel,
@@ -39,6 +40,74 @@ test("connected source status helper marks stale Spotify as refreshable", () => 
   assert.equal(connectedSourceStatusLabel(staleSpotify), "Needs refresh");
   assert.equal(connectedSourceSyncLabel(staleSpotify), "Last sync failed");
   assert.equal(connectedSourceInfluenceLabel(staleSpotify), "Not shaping recommendations");
+});
+
+test("connected source setup state guides disconnected Spotify connection", () => {
+  const state = connectedSourceSetupState({
+    provider: "spotify",
+    connected: false,
+    stale: false,
+    currentlyInfluencingRanking: false,
+    confidenceState: "disconnected",
+    healthReason: "Spotify is not connected.",
+  });
+
+  assert.equal(state.statusLabel, "Not connected");
+  assert.equal(state.syncLabel, "Disconnected");
+  assert.equal(state.influenceLabel, "Not shaping recommendations");
+  assert.equal(state.action, "connect");
+  assert.equal(state.tone, "neutral");
+});
+
+test("connected source setup state distinguishes unsynced Spotify", () => {
+  const state = connectedSourceSetupState({
+    ...healthySpotify,
+    latestRunStatus: null,
+    latestRunAt: null,
+    currentlyInfluencingRanking: false,
+    confidenceState: "inactive",
+    healthReason: "Spotify is connected, but its taste has not been applied to ranking yet.",
+  });
+
+  assert.equal(state.statusLabel, "Connected");
+  assert.equal(state.syncLabel, "No sync yet");
+  assert.equal(state.influenceLabel, "Not shaping recommendations");
+  assert.equal(state.action, "sync");
+});
+
+test("connected source setup state distinguishes failed and stale Spotify", () => {
+  const failedState = connectedSourceSetupState({
+    ...healthySpotify,
+    latestRunStatus: "failed",
+    stale: false,
+    currentlyInfluencingRanking: false,
+    confidenceState: "degraded",
+    healthReason: "Latest Spotify sync failed.",
+  });
+  const staleState = connectedSourceSetupState({
+    ...healthySpotify,
+    latestRunStatus: "failed",
+    stale: true,
+    currentlyInfluencingRanking: false,
+    confidenceState: "degraded",
+    healthReason: "Latest Spotify sync failed.",
+  });
+
+  assert.equal(failedState.statusLabel, "Sync failed");
+  assert.equal(failedState.action, "sync");
+  assert.equal(staleState.statusLabel, "Taste paused");
+  assert.equal(staleState.action, "sync");
+  assert.equal(staleState.tone, "warning");
+});
+
+test("connected source setup state marks influencing Spotify as healthy", () => {
+  const state = connectedSourceSetupState(healthySpotify);
+
+  assert.equal(state.statusLabel, "Influencing ranking");
+  assert.equal(state.syncLabel, "Last sync succeeded");
+  assert.equal(state.influenceLabel, "Currently shaping recommendations");
+  assert.equal(state.action, null);
+  assert.equal(state.tone, "healthy");
 });
 
 test("personalization source copy names provider-backed and learning signals", () => {

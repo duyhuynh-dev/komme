@@ -26,9 +26,7 @@ import {
   syncSpotifyTaste,
 } from "@/lib/api";
 import {
-  connectedSourceInfluenceLabel,
-  connectedSourceStatusLabel,
-  connectedSourceSyncLabel,
+  connectedSourceSetupState,
 } from "@/lib/connected-source-health";
 import type { TasteProfileResponse } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -93,9 +91,13 @@ export function AccountDock() {
     viewerQuery.data?.connectedSources?.find((source) => source.provider === "spotify") ??
     viewerQuery.data?.spotifyTasteHealth;
   const spotifyConnected = Boolean(spotifyTasteHealth?.connected ?? viewerQuery.data?.spotifyConnected);
-  const spotifyHealthLabel = connectedSourceStatusLabel(spotifyTasteHealth);
-  const spotifySyncLabel = connectedSourceSyncLabel(spotifyTasteHealth);
-  const spotifyInfluenceLabel = connectedSourceInfluenceLabel(spotifyTasteHealth);
+  const spotifySetupState = connectedSourceSetupState(spotifyTasteHealth);
+  const spotifyStatusTone =
+    spotifySetupState.tone === "warning"
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : spotifySetupState.tone === "healthy"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-stroke bg-white text-slate-500";
 
   const spotifyPreviewQuery = useQuery({
     queryKey: ["spotify-taste-preview", user?.id ?? "demo"],
@@ -529,70 +531,82 @@ export function AccountDock() {
                 ) : null}
               </div>
 
-              {spotifyConnected ? (
-                <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                      <Disc3 className="h-3.5 w-3.5" />
-                      Spotify connected
-                    </span>
-                    <span
-                      className={[
-                        "inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
-                        spotifyTasteHealth?.stale
-                          ? "border-amber-200 bg-amber-50 text-amber-800"
-                          : spotifyTasteHealth?.currentlyInfluencingRanking
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-stroke bg-white text-slate-500",
-                      ].join(" ")}
-                      title={spotifyTasteHealth?.healthReason ?? undefined}
-                    >
-                      {spotifyHealthLabel}
-                    </span>
-                  </div>
-                  {spotifyTasteHealth?.healthReason ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyTasteHealth.healthReason}</p>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-                    <span className="rounded-full border border-stroke bg-white px-3 py-1">{spotifySyncLabel}</span>
-                    <span className="rounded-full border border-stroke bg-white px-3 py-1">{spotifyInfluenceLabel}</span>
-                  </div>
-                  {spotifyTasteHealth?.stale ? (
-                    <button
-                      type="button"
-                      onClick={() => void retrySpotifySync()}
-                      disabled={isSyncingSpotify}
-                      className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60"
-                    >
-                      {isSyncingSpotify ? "Refreshing Spotify..." : "Retry Spotify sync"}
-                    </button>
-                  ) : null}
-                  {spotifyPreviewQuery.data && hasSpotifyThemes ? (
-                    <>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        Pulse found {spotifyThemes.length} possible themes from your listening history.
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {spotifyThemes.slice(0, 3).map((theme) => (
-                          <span
-                            key={theme.id}
-                            className="rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
-                          >
-                            {theme.label} · {theme.confidenceLabel}
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  ) : spotifyPreviewQuery.data ? (
-                    <>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyLowSignalReason}</p>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">
-                        Keep listening on Spotify for a bit longer, then tap refresh and Pulse will try again.
-                      </p>
-                    </>
-                  ) : null}
+              <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={[
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                      spotifyConnected
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-stroke bg-white text-slate-500",
+                    ].join(" ")}
+                  >
+                    <Disc3 className="h-3.5 w-3.5" />
+                    {spotifyConnected ? "Spotify connected" : "Spotify disconnected"}
+                  </span>
+                  <span
+                    className={[
+                      "inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                      spotifyStatusTone,
+                    ].join(" ")}
+                    title={spotifySetupState.detail}
+                  >
+                    {spotifySetupState.statusLabel}
+                  </span>
                 </div>
-              ) : null}
+                <p className="mt-3 text-sm leading-6 text-slate-600">{spotifySetupState.detail}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                  <span className="rounded-full border border-stroke bg-white px-3 py-1">
+                    {spotifySetupState.syncLabel}
+                  </span>
+                  <span className="rounded-full border border-stroke bg-white px-3 py-1">
+                    {spotifySetupState.influenceLabel}
+                  </span>
+                </div>
+                {spotifySetupState.action === "connect" ? (
+                  <button
+                    type="button"
+                    onClick={() => void connectSpotify()}
+                    disabled={isConnectingSpotify}
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+                  >
+                    {isConnectingSpotify ? "Redirecting..." : "Connect Spotify"}
+                  </button>
+                ) : spotifySetupState.action === "sync" ? (
+                  <button
+                    type="button"
+                    onClick={() => void retrySpotifySync()}
+                    disabled={isSyncingSpotify}
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60"
+                  >
+                    {isSyncingSpotify ? "Refreshing Spotify..." : "Retry Spotify sync"}
+                  </button>
+                ) : null}
+                {spotifyConnected && spotifyPreviewQuery.data && hasSpotifyThemes ? (
+                  <>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      Pulse found {spotifyThemes.length} possible themes from your listening history.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {spotifyThemes.slice(0, 3).map((theme) => (
+                        <span
+                          key={theme.id}
+                          className="rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
+                        >
+                          {theme.label} · {theme.confidenceLabel}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : spotifyConnected && spotifyPreviewQuery.data ? (
+                  <>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyLowSignalReason}</p>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Keep listening on Spotify for a bit longer, then tap refresh and Pulse will try again.
+                    </p>
+                  </>
+                ) : null}
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stroke/80 pt-3">
                 {authMethod === "supabase" ? (
                   <button
