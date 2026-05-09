@@ -239,6 +239,138 @@ def test_stale_spotify_adjustment_is_exposed_in_score_breakdown() -> None:
     assert "Underground dance" in stale_items[0]["detail"]
 
 
+def test_manual_taste_stays_stronger_than_bounded_fresh_spotify() -> None:
+    manual_profiles = {
+        "gallery_nights": UserInterestProfile(
+            user_id="user-1",
+            topic_key="gallery_nights",
+            label="Gallery nights",
+            confidence=0.82,
+            source_provider="manual",
+            boosted=False,
+            muted=False,
+        )
+    }
+    spotify_profiles = {
+        "gallery_nights": UserInterestProfile(
+            user_id="user-1",
+            topic_key="gallery_nights",
+            label="Gallery nights",
+            confidence=0.82,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        )
+    }
+
+    manual_score, _, _, manual_components = _candidate_score_with_components(
+        ["gallery_nights"],
+        manual_profiles,
+        source_confidence=0.84,
+        transit_minutes=24,
+        budget_fit=0.9,
+        category="gallery",
+    )
+    spotify_score, _, _, spotify_components = _candidate_score_with_components(
+        ["gallery_nights"],
+        spotify_profiles,
+        source_confidence=0.84,
+        transit_minutes=24,
+        budget_fit=0.9,
+        category="gallery",
+    )
+
+    assert manual_score > spotify_score
+    assert manual_components.source_weight_adjustment == 0.0
+    assert spotify_components.source_weight_adjustment < 0
+    assert spotify_components.source_weight_labels == ["Spotify 0.78x"]
+
+
+def test_source_weight_contribution_is_exposed_in_score_breakdown() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.92,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        )
+    }
+
+    _, matched_topics, muted_topics, components = _candidate_score_with_components(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=28,
+        budget_fit=0.9,
+        category="club",
+    )
+    breakdown = _score_breakdown_items(
+        components=components,
+        matched_labels=[topic.label for topic in matched_topics],
+        muted_labels=[topic.label for topic in muted_topics],
+        feedback_adjustment=0.0,
+        feedback_reason=None,
+    )
+    source_weight_items = [item for item in breakdown if item["key"] == "taste_source_weight"]
+
+    assert source_weight_items
+    assert source_weight_items[0]["direction"] == "negative"
+    assert source_weight_items[0]["contribution"] < 0
+    assert "Spotify 0.78x" in source_weight_items[0]["detail"]
+
+
+def test_feedback_and_planner_outcomes_can_outweigh_passive_source_weighting() -> None:
+    profiles_by_key = {
+        "underground_dance": UserInterestProfile(
+            user_id="user-1",
+            topic_key="underground_dance",
+            label="Underground dance",
+            confidence=0.92,
+            source_provider="spotify",
+            boosted=False,
+            muted=False,
+        )
+    }
+    venue = Venue(
+        id="venue-1",
+        name="Public Records",
+        neighborhood="Gowanus",
+        address="233 Butler St",
+        city="Brooklyn",
+        state="NY",
+        latitude=40.6787,
+        longitude=-73.9831,
+    )
+    feedback_signals = FeedbackSignals(
+        saved_venues={"venue-1": 1.0},
+        planner_attended_venues={"venue-1": 2.0},
+    )
+
+    _, _, _, components = _candidate_score_with_components(
+        ["underground_dance"],
+        profiles_by_key,
+        source_confidence=0.84,
+        transit_minutes=24,
+        budget_fit=0.9,
+    )
+    feedback_adjustment, feedback_reason = _feedback_adjustment(
+        ["underground_dance"],
+        profiles_by_key,
+        venue,
+        feedback_signals,
+        transit_minutes=24,
+        budget_fit=0.9,
+        source_confidence=0.84,
+    )
+
+    assert feedback_adjustment > abs(components.source_weight_adjustment)
+    assert feedback_reason is not None
+    assert feedback_reason["title"] == "Went before"
+
+
 def test_stale_interest_provider_keys_only_marks_failed_spotify() -> None:
     spotify_failed = ProfileRun(user_id="user-1", provider="spotify", model_name="spotify", status="failed")
     manual_failed = ProfileRun(user_id="user-1", provider="manual", model_name="manual", status="failed")

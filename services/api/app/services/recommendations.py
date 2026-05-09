@@ -173,6 +173,8 @@ class CandidateScoreComponents:
     weighted_distance: float
     weighted_budget: float
     weighted_source: float
+    source_weight_adjustment: float = 0.0
+    source_weight_labels: list[str] = field(default_factory=list)
     stale_provider_adjustment: float = 0.0
     stale_provider_labels: list[str] = field(default_factory=list)
 
@@ -840,12 +842,29 @@ def _average_feedback_weight(keys: list[str], store: dict[str, float]) -> float:
     return sum(weights) / len(weights)
 
 
-def _topic_weight(topic: UserInterestProfile) -> float:
+def _taste_source_weight(source_provider: str | None) -> float:
+    if not source_provider:
+        return 1.0
+    provider = source_provider
+    weights = {
+        "manual": 1.0,
+        "spotify": 0.78,
+        "reddit_export": 0.9,
+        "reddit": 0.9,
+        "mock": 0.72,
+        "unknown": 0.82,
+    }
+    return weights.get(provider, 0.82)
+
+
+def _topic_weight(topic: UserInterestProfile, *, apply_source_weight: bool = True) -> float:
     if topic.muted:
         return 0.05
     base = 0.24 + (topic.confidence * 0.64)
     if topic.boosted:
         base += 0.12
+    if apply_source_weight:
+        base *= _taste_source_weight(topic.source_provider)
     return min(0.99, base)
 
 
@@ -858,6 +877,7 @@ def _interest_fit(
     profiles_by_key: dict[str, UserInterestProfile],
     *,
     stale_provider_keys: set[str] | None = None,
+    apply_source_weights: bool = True,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile], list[UserInterestProfile]]:
     stale_provider_keys = stale_provider_keys or set()
     if not topic_keys:
@@ -881,7 +901,7 @@ def _interest_fit(
             muted_topics.append(topic)
         else:
             matched_topics.append(topic)
-        weights.append(_topic_weight(topic))
+        weights.append(_topic_weight(topic, apply_source_weight=apply_source_weights))
 
     if not weights:
         return (0.34, [], [], stale_topics)
@@ -904,6 +924,7 @@ def _category_affinity(
     profiles_by_key: dict[str, UserInterestProfile],
     *,
     stale_provider_keys: set[str] | None = None,
+    apply_source_weights: bool = True,
 ) -> float:
     stale_provider_keys = stale_provider_keys or set()
     blob = " ".join(
@@ -924,7 +945,7 @@ def _category_affinity(
             continue
         hints = TOPIC_CATEGORY_HINTS.get(topic_key, [])
         if any(hint in blob for hint in hints):
-            matching_weights.append(_topic_weight(topic))
+            matching_weights.append(_topic_weight(topic, apply_source_weight=apply_source_weights))
 
     if not matching_weights:
         return 0.0
@@ -1316,6 +1337,7 @@ def _reason_items(
     budget_fit: float,
     venue: Venue,
     feedback_reason: dict | None = None,
+    source_weight_labels: list[str] | None = None,
 ) -> list[dict]:
     reasons: list[dict] = []
     boosted_labels = [topic.label for topic in matched_topics if topic.boosted]
@@ -1333,6 +1355,17 @@ def _reason_items(
             {
                 "title": "Profile match",
                 "detail": f"This venue lines up with your {_join_labels(matched_labels)} signals.",
+            }
+        )
+
+    if source_weight_labels:
+        reasons.append(
+            {
+                "title": "Source-weighted taste",
+                "detail": (
+                    f"{venue.name} matched your taste, but passive source signals were bounded by "
+                    f"{_join_labels(source_weight_labels)}."
+                ),
             }
         )
 
@@ -1400,11 +1433,22 @@ def _candidate_score_with_components(
     stale_provider_keys: set[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile], CandidateScoreComponents]:
     stale_provider_keys = stale_provider_keys or set()
-    baseline_interest_fit, _, _, _ = _interest_fit(topic_keys, profiles_by_key)
+    unweighted_interest_fit, _, _, _ = _interest_fit(
+        topic_keys,
+        profiles_by_key,
+        apply_source_weights=False,
+    )
     interest_fit, matched_topics, muted_topics, stale_topics = _interest_fit(
         topic_keys,
         profiles_by_key,
         stale_provider_keys=stale_provider_keys,
+    )
+    unweighted_category_fit = _category_affinity(
+        category,
+        tags or [],
+        profiles_by_key,
+        stale_provider_keys=stale_provider_keys,
+        apply_source_weights=False,
     )
     category_fit = _category_affinity(
         category,
@@ -1441,7 +1485,22 @@ def _candidate_score_with_components(
             weighted_distance=weighted_distance,
             weighted_budget=weighted_budget,
             weighted_source=weighted_source,
-            stale_provider_adjustment=round((interest_fit - baseline_interest_fit) * 0.64, 3)
+            source_weight_adjustment=round(
+                ((interest_fit - unweighted_interest_fit) * 0.64)
+                + ((category_fit - unweighted_category_fit) * 0.15),
+                3,
+            ),
+            source_weight_labels=sorted(
+                {
+                    (
+                        f"{provider_label(topic.source_provider or 'unknown')} "
+                        f"{round(_taste_source_weight(topic.source_provider), 2)}x"
+                    )
+                    for topic in matched_topics
+                    if abs(_taste_source_weight(topic.source_provider) - 1.0) >= 0.03
+                }
+            ),
+            stale_provider_adjustment=round((interest_fit - unweighted_interest_fit) * 0.64, 3)
             if stale_topics
             else 0.0,
             stale_provider_labels=sorted({topic.label for topic in stale_topics}),
@@ -1538,6 +1597,22 @@ def _score_breakdown_items(
                 "contribution": round(components.weighted_category, 3),
                 "direction": "positive",
                 "summaryLabel": "category overlap",
+            }
+        )
+
+    if abs(components.source_weight_adjustment) >= 0.015 and components.source_weight_labels:
+        items.append(
+            {
+                "key": "taste_source_weight",
+                "label": "Taste source weight",
+                "impactLabel": _impact_label(components.source_weight_adjustment),
+                "detail": (
+                    "Passive taste was weighted by source trust: "
+                    f"{_join_labels(components.source_weight_labels)}."
+                ),
+                "contribution": components.source_weight_adjustment,
+                "direction": "positive" if components.source_weight_adjustment >= 0 else "negative",
+                "summaryLabel": "taste source weighting",
             }
         )
 
@@ -2696,6 +2771,9 @@ async def refresh_recommendations_for_user(
                 budget_fit=budget_fit,
                 venue=venue,
                 feedback_reason=feedback_reason,
+                source_weight_labels=score_components.source_weight_labels
+                if abs(score_components.source_weight_adjustment) >= 0.015
+                else None,
             ),
             "score_summary": score_summary,
             "score_breakdown": score_breakdown,
