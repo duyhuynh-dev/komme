@@ -724,6 +724,7 @@ def _attribution_explanation(
     venue_name: str | None,
     reason_labels: list[str],
     topic_keys: list[str],
+    digest_driven: bool = False,
 ) -> str:
     target = venue_name or "this recommendation"
     if action == "save":
@@ -733,12 +734,21 @@ def _attribution_explanation(
         suffix = f" with {_join_labels(reason_labels)}" if reason_labels else ""
         return f"Recent dismiss on {target}{suffix} is feeding cautionary feedback weights."
     if action == PLANNER_ATTENDED_FEEDBACK_ACTION:
+        if digest_driven:
+            return (
+                f"You first clicked {target} from a digest, then marked it attended in the planner, "
+                "so Pulse treats this as high-trust real-world intent."
+            )
         return f"Planner attendance at {target} is treated as strong real-world positive intent."
     if action == PLANNER_SKIPPED_FEEDBACK_ACTION:
         return f"Planner skip for {target} is visible here, but does not add negative ranking weight."
     if action == "ticket_click":
+        if digest_driven:
+            return f"Ticket click on {target} followed a digest click, so Pulse treats it as stronger intent."
         return f"Ticket click on {target} is feeding positive intent weights."
     if action == "archive_revisit":
+        if digest_driven:
+            return f"Archive revisit for {target} followed a digest click, keeping this outcome trace warmer."
         return f"Archive revisit for {target} keeps this venue or similar topics active."
     if action == "digest_click":
         return f"Digest click on {target} is feeding positive response weights."
@@ -795,6 +805,13 @@ async def _outcome_attributions(
     )
     venues_by_id = {venue.id: venue for venue in venues}
     events_by_id = {event.id: event for event in events}
+    digest_clicks_by_occurrence: dict[str, datetime] = {}
+    for row in rows:
+        if row.action != "digest_click":
+            continue
+        current = digest_clicks_by_occurrence.get(row.recommendation_id)
+        if current is None or _timestamp_utc(row.created_at) < _timestamp_utc(current):
+            digest_clicks_by_occurrence[row.recommendation_id] = row.created_at
 
     attributions: list[RecommendationOutcomeAttribution] = []
     for row in rows:
@@ -808,6 +825,12 @@ async def _outcome_attributions(
         reason_entries = _feedback_reason_entries(row.reasons_json)
         reason_keys = [key for key, _ in reason_entries]
         reason_labels = [label for _, label in reason_entries]
+        digest_clicked_at = digest_clicks_by_occurrence.get(row.recommendation_id)
+        digest_driven = (
+            digest_clicked_at is not None
+            and row.action in {"ticket_click", "archive_revisit", PLANNER_ATTENDED_FEEDBACK_ACTION}
+            and _timestamp_utc(row.created_at) >= _timestamp_utc(digest_clicked_at)
+        )
         attributions.append(
             RecommendationOutcomeAttribution(
                 action=row.action,
@@ -825,6 +848,7 @@ async def _outcome_attributions(
                     venue_name=venue.name if venue is not None else None,
                     reason_labels=reason_labels,
                     topic_keys=topic_keys,
+                    digest_driven=digest_driven,
                 ),
             )
         )
@@ -1220,10 +1244,34 @@ def _feedback_adjustment(
     feedback_reason: dict | None = None
     topic_labels = _feedback_topic_labels(topic_keys, profiles_by_key)
 
-    if planner_attended_venue_weight >= 0.35:
+    if planner_attended_venue_weight >= 0.35 and digest_click_venue_weight >= 0.35:
+        feedback_reason = {
+            "title": "Digest-to-attendance",
+            "detail": (
+                f"You clicked {venue.name} from a Pulse digest and later marked it attended, "
+                "so Pulse treats this as high-trust real-world intent."
+            ),
+        }
+    elif planner_attended_venue_weight >= 0.35:
         feedback_reason = {
             "title": "Went before",
             "detail": f"You marked {venue.name} as part of a real night out, so Pulse now trusts it as higher-confidence intent.",
+        }
+    elif ticket_click_venue_weight >= 0.45 and digest_click_venue_weight >= 0.35:
+        feedback_reason = {
+            "title": "Digest-to-ticket intent",
+            "detail": (
+                f"You clicked {venue.name} from a Pulse digest and then opened tickets, "
+                "so Pulse treats it as stronger intent."
+            ),
+        }
+    elif archive_revisit_venue_weight >= 0.4 and digest_click_venue_weight >= 0.35:
+        feedback_reason = {
+            "title": "Digest-to-archive revisit",
+            "detail": (
+                f"You clicked {venue.name} from a Pulse digest and later revisited it in the archive, "
+                "so Pulse keeps this signal warmer."
+            ),
         }
     elif confirmed_saved_venue_weight >= 0.35:
         feedback_reason = {
@@ -1649,7 +1697,13 @@ def _score_breakdown_items(
         feedback_title = feedback_reason.get("title") if feedback_reason is not None else ""
         if feedback_adjustment >= 0 and isinstance(feedback_title, str) and feedback_title.startswith("Validated"):
             summary_label = "validated saves"
-        elif feedback_adjustment >= 0 and feedback_title in {"Acted from digest", "Digest response pattern"}:
+        elif feedback_adjustment >= 0 and feedback_title in {
+            "Acted from digest",
+            "Digest response pattern",
+            "Digest-to-attendance",
+            "Digest-to-ticket intent",
+            "Digest-to-archive revisit",
+        }:
             summary_label = "digest clicks"
         elif feedback_adjustment >= 0 and feedback_title in {"Clicked through before", "Click-through pattern"}:
             summary_label = "ticket clicks"

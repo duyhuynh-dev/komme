@@ -33,6 +33,7 @@ from app.services.recommendations import (
     _context_hash,
     _deletable_run_ids,
     _driver_summaries,
+    _feedback_adjustment,
     _feedback_signals,
     _outcome_attributions,
     _pack_reason_payload,
@@ -782,6 +783,13 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
         assert signals.digest_click_topics["underground_dance"] > 0
         assert signals.ticket_click_topics["underground_dance"] > 0
         assert signals.archive_revisit_topics["underground_dance"] > 0
+        digest_attribution = next(item for item in attributions if item.action == "digest_click")
+        ticket_attribution = next(item for item in attributions if item.action == "ticket_click")
+        archive_attribution = next(item for item in attributions if item.action == "archive_revisit")
+        assert digest_attribution.source == "digest"
+        assert "positive response weights" in digest_attribution.explanation
+        assert "followed a digest click" in ticket_attribution.explanation
+        assert "followed a digest click" in archive_attribution.explanation
         save_attribution = next(item for item in attributions if item.action == "save")
         dismiss_attribution = next(item for item in attributions if item.action == "dismiss")
         assert save_attribution.reasonKeys == ["easy_to_get_to"]
@@ -906,6 +914,13 @@ async def test_feedback_signals_capture_planner_attendance_without_turning_skips
                 FeedbackEvent(
                     user_id=user.id,
                     recommendation_id=occurrence.id,
+                    action="digest_click",
+                    reasons_json=[],
+                    created_at=datetime.now(tz=UTC) - timedelta(hours=7),
+                ),
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
                     action=PLANNER_ATTENDED_FEEDBACK_ACTION,
                     reasons_json=[],
                     created_at=datetime.now(tz=UTC) - timedelta(hours=5),
@@ -926,6 +941,7 @@ async def test_feedback_signals_capture_planner_attendance_without_turning_skips
 
         assert signals.planner_attended_venues[venue.id] > 0
         assert signals.planner_attended_topics["underground_dance"] > 0
+        assert signals.digest_click_venues[venue.id] > 0
         assert signals.dismissed_venues.get(venue.id, 0.0) == 0.0
         assert signals.dismissed_topics.get("underground_dance", 0.0) == 0.0
         attended = next(item for item in attributions if item.action == PLANNER_ATTENDED_FEEDBACK_ACTION)
@@ -934,8 +950,30 @@ async def test_feedback_signals_capture_planner_attendance_without_turning_skips
         assert attended.direction == "positive"
         assert attended.venueName == "Elsewhere"
         assert attended.topicKeys == ["underground_dance"]
-        assert "strong real-world positive intent" in attended.explanation
+        assert "first clicked Elsewhere from a digest" in attended.explanation
         assert skipped.direction == "neutral"
         assert "does not add negative ranking weight" in skipped.explanation
+        feedback_adjustment, feedback_reason = _feedback_adjustment(
+            ["underground_dance"],
+            {
+                "underground_dance": UserInterestProfile(
+                    user_id=user.id,
+                    topic_key="underground_dance",
+                    label="Underground dance",
+                    confidence=0.9,
+                    source_provider="manual",
+                    boosted=False,
+                    muted=False,
+                )
+            },
+            venue,
+            signals,
+            transit_minutes=24,
+            budget_fit=0.9,
+            source_confidence=0.86,
+        )
+        assert feedback_adjustment > 0
+        assert feedback_reason is not None
+        assert feedback_reason["title"] == "Digest-to-attendance"
 
     await engine.dispose()
