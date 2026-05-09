@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getEventPlanSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
 import { movementExplanationSourceLabel, movementExplanationTone } from "@/lib/recommendation-movement";
+import { outcomeAttributionSourceLabel, outcomeAttributionTone } from "@/lib/outcome-attribution";
 import type {
   PlannerSessionDebugItem,
   RecommendationDebugSummary,
@@ -517,6 +518,46 @@ export function RecommendationOpsPageContent() {
                     <p className="text-sm text-slate-500">No dismiss reasons have been captured yet.</p>
                   )}
                 </div>
+              </div>
+              <div className="mt-5 rounded-[1.25rem] border border-stroke/80 bg-canvas/80 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-slate-900">Recent outcome attribution</h3>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {debugSummary.outcomeAttributions.length}
+                  </span>
+                </div>
+                {debugSummary.outcomeAttributions.length ? (
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {debugSummary.outcomeAttributions.map((item, index) => (
+                      <div
+                        key={`${item.action}-${item.venueId ?? item.eventId ?? index}`}
+                        className={[
+                          "rounded-[1rem] border px-3 py-3 text-sm",
+                          outcomeAttributionTone(item),
+                        ].join(" ")}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold">{item.action.replaceAll("_", " ")}</span>
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
+                            {outcomeAttributionSourceLabel(item.source)} · {item.recencyLabel}
+                          </span>
+                        </div>
+                        <p className="mt-1 leading-5">{item.explanation}</p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium opacity-80">
+                          {item.venueName ? <span>{item.venueName}</span> : null}
+                          {item.topicKeys.slice(0, 3).map((topic) => (
+                            <span key={`${item.action}-${topic}`}>{topic}</span>
+                          ))}
+                          {item.reasonKeys.map((reason) => (
+                            <span key={`${item.action}-${reason}`}>{reason}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No recent feedback or planner outcomes are feeding weights yet.</p>
+                )}
               </div>
             </SectionShell>
 

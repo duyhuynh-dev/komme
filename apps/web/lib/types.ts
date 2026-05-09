@@ -298,6 +298,20 @@ export interface RecommendationFeedbackReasonSummary {
   weightedStrength: number;
 }
 
+export interface RecommendationOutcomeAttribution {
+  action: string;
+  source: "feedback" | "planner" | "digest" | string;
+  venueId?: string | null;
+  venueName?: string | null;
+  eventId?: string | null;
+  eventTitle?: string | null;
+  topicKeys: string[];
+  reasonKeys: string[];
+  recencyLabel: string;
+  direction: "positive" | "negative" | "neutral" | string;
+  explanation: string;
+}
+
 export interface RecommendationTopicSourceSummary {
   sourceProvider: string;
   label: string;
@@ -352,6 +366,7 @@ export interface RecommendationDebugSummary {
   topSaveReasons: RecommendationFeedbackReasonSummary[];
   topConfirmedSaveReasons: RecommendationFeedbackReasonSummary[];
   topDismissReasons: RecommendationFeedbackReasonSummary[];
+  outcomeAttributions: RecommendationOutcomeAttribution[];
   topPositiveDrivers: RecommendationDriverSummary[];
   topNegativeDrivers: RecommendationDriverSummary[];
   venues: RecommendationDebugVenue[];

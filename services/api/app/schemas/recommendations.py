@@ -215,6 +215,20 @@ class RecommendationFeedbackReasonSummary(BaseModel):
     weightedStrength: float
 
 
+class RecommendationOutcomeAttribution(BaseModel):
+    action: str
+    source: str
+    venueId: str | None = None
+    venueName: str | None = None
+    eventId: str | None = None
+    eventTitle: str | None = None
+    topicKeys: list[str] = Field(default_factory=list)
+    reasonKeys: list[str] = Field(default_factory=list)
+    recencyLabel: str
+    direction: str = "neutral"
+    explanation: str
+
+
 class RecommendationTopicSourceSummary(BaseModel):
     sourceProvider: str
     label: str
@@ -269,6 +283,7 @@ class RecommendationDebugSummary(BaseModel):
     topSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topConfirmedSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topDismissReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
+    outcomeAttributions: list[RecommendationOutcomeAttribution] = Field(default_factory=list)
     topPositiveDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
     topNegativeDrivers: list[RecommendationDriverSummary] = Field(default_factory=list)
     venues: list[RecommendationDebugVenue] = Field(default_factory=list)

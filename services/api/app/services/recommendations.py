@@ -29,6 +29,7 @@ from app.schemas.recommendations import (
     RecommendationFeedbackReasonSummary,
     RecommendationMovementCue,
     RecommendationMovementExplanation,
+    RecommendationOutcomeAttribution,
     RecommendationTopicSourceSummary,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
@@ -679,6 +680,156 @@ def _feedback_reason_entries(payload: list[dict] | None) -> list[tuple[str, str]
         seen_keys.add(key)
         entries.append((key, _feedback_reason_label(key, item.get("label"))))
     return entries
+
+
+def _feedback_recency_label(created_at: datetime, *, now: datetime | None = None) -> str:
+    delta = _timestamp_utc(now or datetime.now(tz=UTC)) - _timestamp_utc(created_at)
+    if delta < timedelta(hours=1):
+        minutes = max(1, int(delta.total_seconds() // 60))
+        return f"{minutes}m ago"
+    if delta < timedelta(days=1):
+        hours = max(1, int(delta.total_seconds() // 3600))
+        return f"{hours}h ago"
+    days = max(1, delta.days)
+    return f"{days}d ago"
+
+
+def _attribution_source(action: str) -> str:
+    if action in {PLANNER_ATTENDED_FEEDBACK_ACTION, PLANNER_SKIPPED_FEEDBACK_ACTION}:
+        return "planner"
+    if action == "digest_click":
+        return "digest"
+    return "feedback"
+
+
+def _attribution_direction(action: str) -> str:
+    if action in {
+        "save",
+        "digest_click",
+        "ticket_click",
+        "archive_revisit",
+        PLANNER_ATTENDED_FEEDBACK_ACTION,
+    }:
+        return "positive"
+    if action == "dismiss":
+        return "negative"
+    return "neutral"
+
+
+def _attribution_explanation(
+    *,
+    action: str,
+    venue_name: str | None,
+    reason_labels: list[str],
+    topic_keys: list[str],
+) -> str:
+    target = venue_name or "this recommendation"
+    if action == "save":
+        suffix = f" with {_join_labels(reason_labels)}" if reason_labels else ""
+        return f"Recent save on {target}{suffix} is feeding positive feedback weights."
+    if action == "dismiss":
+        suffix = f" with {_join_labels(reason_labels)}" if reason_labels else ""
+        return f"Recent dismiss on {target}{suffix} is feeding cautionary feedback weights."
+    if action == PLANNER_ATTENDED_FEEDBACK_ACTION:
+        return f"Planner attendance at {target} is treated as strong real-world positive intent."
+    if action == PLANNER_SKIPPED_FEEDBACK_ACTION:
+        return f"Planner skip for {target} is visible here, but does not add negative ranking weight."
+    if action == "ticket_click":
+        return f"Ticket click on {target} is feeding positive intent weights."
+    if action == "archive_revisit":
+        return f"Archive revisit for {target} keeps this venue or similar topics active."
+    if action == "digest_click":
+        return f"Digest click on {target} is feeding positive response weights."
+    topic_suffix = f" for {_join_labels(topic_keys)}" if topic_keys else ""
+    return f"Recent {action.replace('_', ' ')}{topic_suffix} is visible in feedback history."
+
+
+async def _outcome_attributions(
+    session: AsyncSession,
+    user_id: str,
+    *,
+    limit: int = 8,
+    now: datetime | None = None,
+) -> list[RecommendationOutcomeAttribution]:
+    since = datetime.now(tz=UTC) - FEEDBACK_LOOKBACK_WINDOW
+    supported_actions = {
+        "save",
+        "dismiss",
+        "digest_click",
+        "ticket_click",
+        "archive_revisit",
+        PLANNER_ATTENDED_FEEDBACK_ACTION,
+        PLANNER_SKIPPED_FEEDBACK_ACTION,
+    }
+    rows = list(
+        (
+            await session.scalars(
+                select(FeedbackEvent)
+                .where(
+                    FeedbackEvent.user_id == user_id,
+                    FeedbackEvent.created_at >= since,
+                    FeedbackEvent.action.in_(supported_actions),
+                )
+                .order_by(desc(FeedbackEvent.created_at), desc(FeedbackEvent.id))
+                .limit(limit * 2)
+            )
+        ).all()
+    )
+    if not rows:
+        return []
+
+    occurrence_ids = {row.recommendation_id for row in rows}
+    occurrences = list(
+        (await session.scalars(select(EventOccurrence).where(EventOccurrence.id.in_(occurrence_ids)))).all()
+    )
+    occurrences_by_id = {occurrence.id: occurrence for occurrence in occurrences}
+    venue_ids = {occurrence.venue_id for occurrence in occurrences}
+    event_ids = {occurrence.event_id for occurrence in occurrences}
+    venues = list((await session.scalars(select(Venue).where(Venue.id.in_(venue_ids)))).all()) if venue_ids else []
+    events = (
+        list((await session.scalars(select(CanonicalEvent).where(CanonicalEvent.id.in_(event_ids)))).all())
+        if event_ids
+        else []
+    )
+    venues_by_id = {venue.id: venue for venue in venues}
+    events_by_id = {event.id: event for event in events}
+
+    attributions: list[RecommendationOutcomeAttribution] = []
+    for row in rows:
+        occurrence = occurrences_by_id.get(row.recommendation_id)
+        venue = venues_by_id.get(occurrence.venue_id) if occurrence is not None else None
+        event = events_by_id.get(occurrence.event_id) if occurrence is not None else None
+        metadata = (occurrence.metadata_json or {}) if occurrence is not None else {}
+        topic_keys = metadata.get("topicKeys") or (
+            _derive_topic_keys(event, metadata.get("tags", [])) if event is not None else []
+        )
+        reason_entries = _feedback_reason_entries(row.reasons_json)
+        reason_keys = [key for key, _ in reason_entries]
+        reason_labels = [label for _, label in reason_entries]
+        attributions.append(
+            RecommendationOutcomeAttribution(
+                action=row.action,
+                source=_attribution_source(row.action),
+                venueId=venue.id if venue is not None else None,
+                venueName=venue.name if venue is not None else None,
+                eventId=event.id if event is not None else None,
+                eventTitle=event.title if event is not None else None,
+                topicKeys=topic_keys,
+                reasonKeys=reason_keys,
+                recencyLabel=_feedback_recency_label(row.created_at, now=now),
+                direction=_attribution_direction(row.action),
+                explanation=_attribution_explanation(
+                    action=row.action,
+                    venue_name=venue.name if venue is not None else None,
+                    reason_labels=reason_labels,
+                    topic_keys=topic_keys,
+                ),
+            )
+        )
+        if len(attributions) >= limit:
+            break
+
+    return attributions
 
 
 def _average_feedback_weight(keys: list[str], store: dict[str, float]) -> float:
@@ -2840,6 +2991,12 @@ async def get_recommendation_debug_summary(
         ).all()
     )
     feedback_signals = await _feedback_signals(session, user.id)
+    outcome_attributions = await _outcome_attributions(session, user.id)
+    connected_providers = set(
+        (
+            await session.scalars(select(OAuthConnection.provider).where(OAuthConnection.user_id == user.id))
+        ).all()
+    )
     _, items, _ = await _cards_for_run(session, run)
     positive_drivers, negative_drivers = _driver_summaries(items)
 
@@ -2867,6 +3024,7 @@ async def get_recommendation_debug_summary(
         topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
         topConfirmedSaveReasons=_confirmed_save_reason_summaries(feedback_signals),
         topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),
+        outcomeAttributions=outcome_attributions,
         topPositiveDrivers=positive_drivers,
         topNegativeDrivers=negative_drivers,
         venues=[

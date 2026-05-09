@@ -34,6 +34,7 @@ from app.services.recommendations import (
     _deletable_run_ids,
     _driver_summaries,
     _feedback_signals,
+    _outcome_attributions,
     _pack_reason_payload,
     _personalization_provenance,
     _score_breakdown_items,
@@ -717,6 +718,13 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
                     reasons_json=[],
                     created_at=saved_at + timedelta(hours=20),
                 ),
+                FeedbackEvent(
+                    user_id=user.id,
+                    recommendation_id=occurrence.id,
+                    action="dismiss",
+                    reasons_json=[{"key": "too_far", "label": "Too far"}],
+                    created_at=saved_at + timedelta(hours=21),
+                ),
             ]
         )
         await session.flush()
@@ -757,8 +765,10 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
         await session.flush()
 
         signals = await _feedback_signals(session, user.id)
+        attributions = await _outcome_attributions(session, user.id)
 
         assert signals.saved_reasons["easy_to_get_to"] > 0
+        assert signals.dismissed_reasons["too_far"] > 0
         assert signals.confirmed_saved_reasons["easy_to_get_to"] > 0
         assert signals.confirmed_saved_reason_counts["easy_to_get_to"] == 1
         assert signals.confirmed_saved_venues[venue.id] > 0
@@ -772,6 +782,14 @@ async def test_feedback_signals_confirm_saved_reasons_from_reranks_and_sent_dige
         assert signals.digest_click_topics["underground_dance"] > 0
         assert signals.ticket_click_topics["underground_dance"] > 0
         assert signals.archive_revisit_topics["underground_dance"] > 0
+        save_attribution = next(item for item in attributions if item.action == "save")
+        dismiss_attribution = next(item for item in attributions if item.action == "dismiss")
+        assert save_attribution.reasonKeys == ["easy_to_get_to"]
+        assert save_attribution.direction == "positive"
+        assert save_attribution.venueName == "Public Records"
+        assert dismiss_attribution.reasonKeys == ["too_far"]
+        assert dismiss_attribution.direction == "negative"
+        assert "cautionary feedback weights" in dismiss_attribution.explanation
 
     await engine.dispose()
 
@@ -831,9 +849,11 @@ async def test_feedback_signals_ignore_digest_security_clicks_from_learning() ->
         await session.flush()
 
         signals = await _feedback_signals(session, user.id)
+        attributions = await _outcome_attributions(session, user.id)
 
         assert signals.digest_click_venues.get(venue.id, 0.0) == 0.0
         assert signals.digest_click_topics.get("underground_dance", 0.0) == 0.0
+        assert attributions == []
 
     await engine.dispose()
 
@@ -902,10 +922,20 @@ async def test_feedback_signals_capture_planner_attendance_without_turning_skips
         await session.flush()
 
         signals = await _feedback_signals(session, user.id)
+        attributions = await _outcome_attributions(session, user.id)
 
         assert signals.planner_attended_venues[venue.id] > 0
         assert signals.planner_attended_topics["underground_dance"] > 0
         assert signals.dismissed_venues.get(venue.id, 0.0) == 0.0
         assert signals.dismissed_topics.get("underground_dance", 0.0) == 0.0
+        attended = next(item for item in attributions if item.action == PLANNER_ATTENDED_FEEDBACK_ACTION)
+        skipped = next(item for item in attributions if item.action == PLANNER_SKIPPED_FEEDBACK_ACTION)
+        assert attended.source == "planner"
+        assert attended.direction == "positive"
+        assert attended.venueName == "Elsewhere"
+        assert attended.topicKeys == ["underground_dance"]
+        assert "strong real-world positive intent" in attended.explanation
+        assert skipped.direction == "neutral"
+        assert "does not add negative ranking weight" in skipped.explanation
 
     await engine.dispose()
