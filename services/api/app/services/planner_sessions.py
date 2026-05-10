@@ -142,10 +142,7 @@ async def get_or_create_planner_session(
 
     fresh_reason = None
     if stale_session is not None:
-        fresh_reason = (
-            f"Created a fresh event plan because prior session {stale_session.id} "
-            f"was {stale_session.status}."
-        )
+        fresh_reason = "Plan refreshed."
 
     active_stop = _initial_active_stop(planner.stops)
     planner_session = PlannerSession(
@@ -819,6 +816,7 @@ def _fallback_to_stop(
         startsAt=fallback.startsAt,
         priceLabel=fallback.priceLabel,
         scoreBand=fallback.scoreBand,
+        eventUrl=fallback.eventUrl,
         sourceConfidence=fallback.sourceConfidence,
         hopLabel=fallback.hopLabel,
         roleReason=fallback.fallbackReason,

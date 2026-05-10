@@ -80,9 +80,9 @@ export function RecommendationDrawer({
           ].join(" ")}
           aria-expanded={isRail ? isExpanded : undefined}
         >
-          <h2 className={`${isRail ? "text-base" : "text-2xl"} font-semibold`}>Top events this week</h2>
+          <h2 className={`${isRail ? "text-base" : "text-2xl"} font-semibold`}>Top events</h2>
           <p className={`${isRail ? "mt-0.5 text-xs leading-5" : "mt-1 text-sm"} text-slate-500`}>
-            Choose an event to focus the map and compare why it is ranking now.
+            {isRail ? "Tap to focus." : "Choose an event to focus the map."}
           </p>
         </button>
       </div>
@@ -104,6 +104,7 @@ export function RecommendationDrawer({
           const selected = card.venueId === selectedVenueId;
           const comparison = comparisonByVenueId[card.venueId];
           const movementCues = comparison?.movementCues ?? [];
+          const eventUrl = card.eventUrl ?? card.ticketUrl;
           const movementLabel =
             comparison?.movement === "new"
               ? "New"
@@ -148,30 +149,34 @@ export function RecommendationDrawer({
               <div className={`${isRail ? "mt-2.5 gap-2 text-xs" : "mt-4 gap-3 text-sm"} flex flex-wrap items-center text-slate-600`}>
                 <span>{formatEventStart(card.startsAt, timezone)}</span>
                 <span>{card.priceLabel}</span>
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className={isRail ? "h-3.5 w-3.5" : "h-4 w-4"} />
-                  {card.address}
-                </span>
+                {!isRail ? (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    {card.address}
+                  </span>
+                ) : null}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
                 <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
-                  Source: {card.provenance.sourceName}
+                  {card.provenance.sourceName}
                 </span>
                 <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
                   {card.provenance.sourceConfidenceLabel}
                 </span>
-                <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
-                  {card.freshness.freshnessLabel}
-                  {card.freshness.lastVerifiedAt ? ` · ${formatRelativeTimestamp(card.freshness.lastVerifiedAt)}` : ""}
-                </span>
+                {!isRail ? (
+                  <span className="rounded-full border border-stroke/80 bg-white px-3 py-1">
+                    {card.freshness.freshnessLabel}
+                    {card.freshness.lastVerifiedAt ? ` · ${formatRelativeTimestamp(card.freshness.lastVerifiedAt)}` : ""}
+                  </span>
+                ) : null}
               </div>
 
-              {card.scoreSummary ? (
+              {!isRail && card.scoreSummary ? (
                 <p className="mt-4 text-sm leading-6 text-slate-700">{card.scoreSummary}</p>
               ) : null}
 
-              {movementLabel || movementCues.length ? (
+              {!isRail && (movementLabel || movementCues.length) ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
                   {movementLabel ? (
                     <span
@@ -185,7 +190,7 @@ export function RecommendationDrawer({
                       {movementLabel}
                     </span>
                   ) : null}
-                  {movementCues.slice(0, mode === "rail" ? 2 : 3).map((cue) => (
+                  {movementCues.slice(0, 3).map((cue) => (
                     <span
                       key={`${card.venueId}-movement-${cue.key}`}
                       className={[
@@ -202,7 +207,7 @@ export function RecommendationDrawer({
                 </div>
               ) : null}
 
-              {card.scoreBreakdown.length ? (
+              {!isRail && card.scoreBreakdown.length ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
                   {card.scoreBreakdown.slice(0, breakdownPreviewCount).map((item) => (
                     <span
@@ -221,7 +226,7 @@ export function RecommendationDrawer({
                 </div>
               ) : null}
 
-              {card.personalizationProvenance.length ? (
+              {!isRail && card.personalizationProvenance.length ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
                   {card.personalizationProvenance.slice(0, 4).map((source) => (
                     <span
@@ -240,26 +245,30 @@ export function RecommendationDrawer({
                 </div>
               ) : null}
 
-              <div className="mt-4 space-y-2">
-                {card.reasons.filter((reason) => reason.title !== "Travel fit").map((reason) => (
-                  <div key={reason.title} className="rounded-2xl bg-white/70 px-3 py-2 text-sm text-slate-700">
-                    <span className="font-semibold">{reason.title}:</span> {reason.detail}
-                  </div>
-                ))}
-              </div>
+              {!isRail ? (
+                <div className="mt-4 space-y-2">
+                  {card.reasons.filter((reason) => reason.title !== "Travel fit").map((reason) => (
+                    <div key={reason.title} className="rounded-2xl bg-white/70 px-3 py-2 text-sm text-slate-700">
+                      <span className="font-semibold">{reason.title}:</span> {reason.detail}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
-              <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-600">
-                {card.travel.map((travel) => (
-                  <span key={`${card.venueId}-${travel.mode}`} className="rounded-full bg-white px-3 py-1">
-                    {travel.label}
-                  </span>
-                ))}
-              </div>
+              {!isRail ? (
+                <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-600">
+                  {card.travel.map((travel) => (
+                    <span key={`${card.venueId}-${travel.mode}`} className="rounded-full bg-white px-3 py-1">
+                      {travel.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {card.ticketUrl ? (
+                {eventUrl ? (
                   <a
-                    href={card.ticketUrl}
+                    href={eventUrl}
                     target="_blank"
                     rel="noreferrer"
                     onClick={(event) => {
@@ -268,7 +277,7 @@ export function RecommendationDrawer({
                     }}
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium text-slate-700"
                   >
-                    Tickets
+                    Open event
                   </a>
                 ) : null}
                 <button

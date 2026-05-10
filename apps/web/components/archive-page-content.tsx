@@ -46,15 +46,15 @@ function SnapshotSection({
                   {travel.label}
                 </span>
               ))}
-              {item.ticketUrl ? (
+              {item.eventUrl || item.ticketUrl ? (
                 <a
-                  href={item.ticketUrl}
+                  href={item.eventUrl ?? item.ticketUrl ?? "#"}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => onTrackInteraction?.(item.eventId, "ticket_click")}
                   className="rounded-full border border-stroke/80 bg-white px-3 py-1 text-sm font-medium text-slate-700"
                 >
-                  Tickets
+                  Open event
                 </a>
               ) : null}
             </div>

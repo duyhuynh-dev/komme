@@ -56,6 +56,7 @@ export function TonightPlannerPanel({
   outcomePending,
   onMarkOutcome,
   onApplyReroute,
+  onOpenEvent,
 }: {
   loading: boolean;
   planner: TonightPlannerResponse | null | undefined;
@@ -68,6 +69,7 @@ export function TonightPlannerPanel({
   outcomePending: boolean;
   onMarkOutcome: (action: "planner_attended" | "planner_skipped") => void;
   onApplyReroute: (option: TonightPlannerRerouteOption) => void;
+  onOpenEvent?: (eventId: string) => void;
 }) {
   const panelState = buildTonightPlannerPanelState(planner);
   const outcomePrompt = plannerOutcomePrompt(
@@ -110,9 +112,9 @@ export function TonightPlannerPanel({
             {panelState.executionNote}
           </div>
         ) : null}
-        {panelState.sessionId && (panelState.recompositionReason || panelState.lifecycleReason) ? (
+        {panelState.sessionId && panelState.recompositionReason ? (
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            {panelState.recompositionReason ?? panelState.lifecycleReason}
+            {panelState.recompositionReason}
           </p>
         ) : null}
         {panelState.activeTargetVenueName && outcomePrompt ? (
@@ -164,19 +166,36 @@ export function TonightPlannerPanel({
                 </p>
               </div>
               {panelState.rerouteOption ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!panelState.rerouteOption) {
-                      return;
-                    }
-                    onApplyReroute(panelState.rerouteOption);
-                  }}
-                  disabled={actionPending}
-                  className="rounded-full bg-amber-500 px-3 py-2 text-xs font-medium text-white transition disabled:opacity-60"
-                >
-                  {plannerRerouteButtonLabel(panelState.rerouteOption)}
-                </button>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {panelState.rerouteOption.eventUrl ? (
+                    <a
+                      href={panelState.rerouteOption.eventUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => {
+                        if (panelState.rerouteOption?.eventId) {
+                          onOpenEvent?.(panelState.rerouteOption.eventId);
+                        }
+                      }}
+                      className="rounded-full border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-900"
+                    >
+                      Open event
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!panelState.rerouteOption) {
+                        return;
+                      }
+                      onApplyReroute(panelState.rerouteOption);
+                    }}
+                    disabled={actionPending}
+                    className="rounded-full bg-amber-500 px-3 py-2 text-xs font-medium text-white transition disabled:opacity-60"
+                  >
+                    {plannerRerouteButtonLabel(panelState.rerouteOption)}
+                  </button>
+                </div>
               ) : null}
             </div>
             {panelState.rerouteOption ? (
@@ -310,6 +329,20 @@ export function TonightPlannerPanel({
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  {stop.eventUrl ? (
+                    <a
+                      href={stop.eventUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenEvent?.(stop.eventId);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-medium text-slate-700"
+                    >
+                      Open event
+                    </a>
+                  ) : null}
                   <button
                     type="button"
                     onClick={(event) => {
@@ -342,6 +375,7 @@ export function TonightPlannerPanel({
                           actionPending={actionPending}
                           onSelectVenue={onSelectVenue}
                           onSwapFallback={onSwapFallback}
+                          onOpenEvent={onOpenEvent}
                         />
                       ))}
                     </div>
@@ -365,6 +399,7 @@ function FallbackOptionButton({
   actionPending,
   onSelectVenue,
   onSwapFallback,
+  onOpenEvent,
 }: {
   option: TonightPlannerFallbackOption;
   timezone: string;
@@ -372,6 +407,7 @@ function FallbackOptionButton({
   actionPending: boolean;
   onSelectVenue: (venueId: string) => void;
   onSwapFallback: (option: TonightPlannerFallbackOption) => void;
+  onOpenEvent?: (eventId: string) => void;
 }) {
   return (
     <div
@@ -394,6 +430,20 @@ function FallbackOptionButton({
       </div>
       <p className="mt-2 text-xs leading-5 text-amber-900">{option.fallbackReason}</p>
       <div className="mt-3 flex flex-wrap gap-2">
+        {option.eventUrl ? (
+          <a
+            href={option.eventUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenEvent?.(option.eventId);
+            }}
+            className="rounded-full border border-stroke bg-white px-3 py-2 text-xs font-medium text-slate-700"
+          >
+            Open event
+          </a>
+        ) : null}
         <button
           type="button"
           onClick={(event) => {

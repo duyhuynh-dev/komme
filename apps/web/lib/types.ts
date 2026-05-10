@@ -73,6 +73,7 @@ export interface VenueRecommendationCard {
   startsAt: string;
   priceLabel: string;
   ticketUrl?: string | null;
+  eventUrl?: string | null;
   scoreBand: ScoreBand;
   score: number;
   travel: TravelEstimate[];
@@ -126,6 +127,7 @@ export interface TonightPlannerFallbackOption {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  eventUrl?: string | null;
   sourceConfidence?: number;
   hopLabel?: string | null;
   fallbackReason: string;
@@ -141,6 +143,7 @@ export interface TonightPlannerRerouteOption {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  eventUrl?: string | null;
   sourceConfidence?: number;
   hopLabel?: string | null;
   roleLabel?: string | null;
@@ -159,6 +162,7 @@ export interface TonightPlannerStop {
   startsAt: string;
   priceLabel: string;
   scoreBand: ScoreBand;
+  eventUrl?: string | null;
   sourceConfidence?: number;
   hopLabel?: string | null;
   roleReason: string;

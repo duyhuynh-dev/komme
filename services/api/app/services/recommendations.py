@@ -2978,6 +2978,7 @@ async def _cards_for_run(
             recommendation.reasons_json
         )
 
+        event_url = _event_url(source, occurrence)
         card = VenueRecommendationCard(
             venueId=venue.id,
             venueName=venue.name,
@@ -2988,6 +2989,7 @@ async def _cards_for_run(
             startsAt=occurrence.starts_at,
             priceLabel=_price_label(occurrence.min_price, occurrence.max_price),
             ticketUrl=occurrence.ticket_url,
+            eventUrl=event_url,
             scoreBand=recommendation.score_band,
             score=recommendation.score,
             travel=[TravelEstimate(**item) for item in travel],
@@ -3025,6 +3027,11 @@ def _build_freshness(occurrence: EventOccurrence) -> RecommendationFreshness:
         lastVerifiedAt=last_verified_at,
         freshnessLabel=freshness_label,
     )
+
+
+def _event_url(source: EventSource, occurrence: EventOccurrence) -> str | None:
+    metadata = occurrence.metadata_json or {}
+    return occurrence.ticket_url or metadata.get("sourceUrl") or metadata.get("url") or source.base_url
 
 
 def _supply_trust_assessment(

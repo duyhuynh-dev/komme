@@ -76,6 +76,7 @@ def _planner_card(
         eventId=f"{venue_id}-event",
         startsAt=starts_at,
         priceLabel=price_label,
+        eventUrl=f"https://events.example.com/{venue_id}",
         scoreBand=score_band,
         score=score,
         travel=[
@@ -111,6 +112,7 @@ def _planner_pin(
     return MapVenuePin(
         venueId=venue_id,
         venueName=venue_name,
+        eventTitle=f"{venue_name} event",
         latitude=latitude,
         longitude=longitude,
         scoreBand=score_band,
@@ -218,6 +220,7 @@ def test_build_tonight_planner_sequences_pregame_main_and_late_option() -> None:
     assert planner.stops[1].venueId == "main-venue"
     assert planner.stops[2].venueId == "late-venue"
     assert planner.stops[1].sourceConfidence == 0.91
+    assert planner.stops[1].eventUrl == "https://events.example.com/main-venue"
     assert planner.stops[1].confidence == "high"
     assert planner.stops[1].hopLabel is not None
     assert "Elsewhere" in (planner.summary or "")
@@ -1041,14 +1044,14 @@ async def test_get_or_create_planner_session_rejects_changed_explicit_plan_windo
             event_id="shared-event",
             venue_id="shared-venue",
             venue_name="Shared Venue",
-            starts_at="2026-04-27T22:00:00+00:00",
+            starts_at="2099-04-27T22:00:00+00:00",
         )
         old_session = PlannerSession(
             user_id=user.id,
             recommendation_context_hash="same-context",
             initial_route_snapshot={
-                "planWindowStart": "2026-04-27T18:00:00-04:00",
-                "planWindowEnd": "2026-04-28T02:00:00-04:00",
+                "planWindowStart": "2099-04-27T18:00:00-04:00",
+                "planWindowEnd": "2099-04-28T02:00:00-04:00",
                 "planWindowLabel": "Event window",
                 "stops": [route_stop.model_dump(mode="json")],
             },
@@ -1056,7 +1059,7 @@ async def test_get_or_create_planner_session_rejects_changed_explicit_plan_windo
             status=PLANNER_SESSION_ACTIVE,
             budget_level="under_75",
             timezone="America/New_York",
-            created_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
+            created_at=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
         session.add(old_session)
         await session.flush()
@@ -1065,8 +1068,8 @@ async def test_get_or_create_planner_session_rejects_changed_explicit_plan_windo
             status="ready",
             stops=[route_stop],
             summary="Same route, later requested window.",
-            planWindowStart="2026-04-28T18:00:00-04:00",
-            planWindowEnd="2026-04-29T02:00:00-04:00",
+            planWindowStart="2099-04-28T18:00:00-04:00",
+            planWindowEnd="2099-04-29T02:00:00-04:00",
             planWindowLabel="Event window",
         )
 
@@ -1091,9 +1094,9 @@ async def test_get_or_create_planner_session_rejects_changed_explicit_plan_windo
         assert fresh_session.id != old_session.id
         assert old_session.status == PLANNER_SESSION_EXPIRED
         assert old_events[-1].metadata_json["rule"] == "planning_window_changed"
-        assert fresh_events[0].metadata_json["planWindowStart"] == "2026-04-28T18:00:00-04:00"
-        assert fresh_state.plan_window_start == "2026-04-28T18:00:00-04:00"
-        assert fresh_debug.planWindowStart == "2026-04-28T18:00:00-04:00"
+        assert fresh_events[0].metadata_json["planWindowStart"] == "2099-04-28T18:00:00-04:00"
+        assert fresh_state.plan_window_start == "2099-04-28T18:00:00-04:00"
+        assert fresh_debug.planWindowStart == "2099-04-28T18:00:00-04:00"
         assert fresh_debug.createdFreshBecauseStale is True
 
     await engine.dispose()

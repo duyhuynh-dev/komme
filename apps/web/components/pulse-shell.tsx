@@ -578,6 +578,7 @@ export function PulseShell() {
                   metadata: { venueName },
                 });
               }}
+              onOpenEvent={(eventId) => handleTrackInteraction(eventId, "ticket_click")}
             />
 
             <div className="min-h-[22rem] shrink-0 xl:flex-1">

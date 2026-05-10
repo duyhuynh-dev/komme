@@ -61,6 +61,7 @@ class VenueRecommendationCard(BaseModel):
     startsAt: str
     priceLabel: str
     ticketUrl: str | None = None
+    eventUrl: str | None = None
     scoreBand: str
     score: float
     travel: list[TravelEstimate] = Field(default_factory=list)
@@ -110,6 +111,7 @@ class TonightPlannerFallbackOption(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    eventUrl: str | None = None
     sourceConfidence: float = 0.75
     hopLabel: str | None = None
     fallbackReason: str
@@ -125,6 +127,7 @@ class TonightPlannerRerouteOption(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    eventUrl: str | None = None
     sourceConfidence: float = 0.75
     hopLabel: str | None = None
     roleLabel: str | None = None
@@ -143,6 +146,7 @@ class TonightPlannerStop(BaseModel):
     startsAt: str
     priceLabel: str
     scoreBand: str
+    eventUrl: str | None = None
     sourceConfidence: float = 0.75
     hopLabel: str | None = None
     roleReason: str
