@@ -77,24 +77,24 @@ export function TonightPlannerPanel({
   );
 
   return (
-    <section className="shrink-0 rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
-      <div className="px-2 pb-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-slate-500">
-          <Sparkles className="h-4 w-4 text-accent" />
+    <section className="shrink-0 rounded-[1.6rem] border border-stroke/80 bg-card/80 p-3.5 shadow-float backdrop-blur">
+      <div className="px-1.5 pb-2.5">
+        <div className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium uppercase tracking-[0.2em] text-slate-500">
+          <Sparkles className="h-3.5 w-3.5 text-accent" />
           <span>{panelState.title}</span>
           {panelState.stopCountLabel ? (
-            <span className="rounded-full border border-stroke/80 bg-white/70 px-3 py-1 text-[11px] tracking-[0.18em] text-slate-600">
+            <span className="rounded-full border border-stroke/80 bg-white/70 px-2.5 py-0.5 text-[10px] tracking-[0.16em] text-slate-600">
               {panelState.stopCountLabel}
             </span>
           ) : null}
           {panelState.fallbackCount ? (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] tracking-[0.18em] text-amber-800">
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] tracking-[0.16em] text-amber-800">
               {panelState.fallbackCount === 1 ? "1 swap flagged" : `${panelState.fallbackCount} swaps flagged`}
             </span>
           ) : null}
         </div>
-        <h2 className="mt-2 text-xl font-semibold text-slate-900">{panelState.headline}</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-500">
+        <h2 className="mt-1.5 text-lg font-semibold text-slate-900">{panelState.headline}</h2>
+        <p className="mt-1 text-[13px] leading-5 text-slate-500">
           {loading ? "Pulse is sequencing the live shortlist into a workable night..." : panelState.summary}
         </p>
         {panelState.executionNote ? (
@@ -235,20 +235,20 @@ export function TonightPlannerPanel({
       </div>
 
       {loading ? (
-        <div className="rounded-[1.75rem] border border-stroke bg-white/70 p-5 text-sm text-slate-500">
+        <div className="rounded-[1.35rem] border border-stroke bg-white/70 p-4 text-[13px] text-slate-500">
           Loading tonight&apos;s route from the current shortlist...
         </div>
       ) : null}
 
       {!loading && panelState.mode === "empty" ? (
-        <div className="rounded-[1.75rem] border border-dashed border-stroke bg-white/70 p-5 text-sm leading-6 text-slate-500">
+        <div className="rounded-[1.35rem] border border-dashed border-stroke bg-white/70 p-4 text-[13px] leading-5 text-slate-500">
           {panelState.summary}
-          {panelState.planningNote ? <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-400">{panelState.planningNote}</p> : null}
+          {panelState.planningNote ? <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-slate-400">{panelState.planningNote}</p> : null}
         </div>
       ) : null}
 
       {!loading && panelState.mode === "plan" ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {panelState.stops.map((stop) => {
             const selected = stop.venueId === selectedVenueId;
             return (
@@ -264,7 +264,7 @@ export function TonightPlannerPanel({
                   }
                 }}
                 className={[
-                  "rounded-[1.75rem] border p-4 text-left transition",
+                  "rounded-[1.35rem] border p-3 text-left transition",
                   selected ? "border-accent bg-accentSoft/60" : "border-stroke bg-white/80 hover:bg-white",
                 ].join(" ")}
               >
@@ -282,12 +282,12 @@ export function TonightPlannerPanel({
                   </span>
                 </div>
 
-                <div className="mt-3">
-                  <h3 className="text-lg font-semibold text-slate-900">{stop.venueName}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{stop.eventTitle}</p>
+                <div className="mt-2.5">
+                  <h3 className="text-base font-semibold text-slate-900">{stop.venueName}</h3>
+                  <p className="mt-1 text-[13px] text-slate-600">{stop.eventTitle}</p>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[13px] text-slate-600">
                   <span className="inline-flex items-center gap-1">
                     <Clock3 className="h-4 w-4" />
                     {formatEventStart(stop.startsAt, timezone)}

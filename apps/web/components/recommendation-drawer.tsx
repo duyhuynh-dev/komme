@@ -37,10 +37,11 @@ export function RecommendationDrawer({
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
 }) {
+  const isRail = mode === "rail";
   const orderedCards = Object.values(cards).sort((left, right) => right.score - left.score);
-  const visibleCards = mode === "rail" ? orderedCards.slice(0, previewCount) : orderedCards;
-  const canShowAll = mode === "rail" && orderedCards.length > visibleCards.length;
-  const breakdownPreviewCount = mode === "rail" ? 3 : 5;
+  const visibleCards = isRail ? orderedCards.slice(0, previewCount) : orderedCards;
+  const canShowAll = isRail && orderedCards.length > visibleCards.length;
+  const breakdownPreviewCount = isRail ? 3 : 5;
   const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const visibleCardSignature = visibleCards.map((card) => card.eventId).join("|");
 
@@ -64,37 +65,37 @@ export function RecommendationDrawer({
     <aside
       className={[
         "flex min-h-0 flex-col",
-        mode === "rail"
-          ? "h-full rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur"
+        isRail
+          ? "h-full rounded-[1.6rem] border border-stroke/80 bg-card/80 p-3.5 shadow-float backdrop-blur"
           : ""
       ].join(" ")}
     >
-      <div className="px-2 pb-3">
+      <div className={isRail ? "px-1.5 pb-2.5" : "px-2 pb-3"}>
         <button
           type="button"
-          onClick={mode === "rail" ? onToggleExpanded : undefined}
+          onClick={isRail ? onToggleExpanded : undefined}
           className={[
             "min-w-0 text-left",
-            mode === "rail" ? "transition hover:opacity-80" : ""
+            isRail ? "transition hover:opacity-80" : ""
           ].join(" ")}
-          aria-expanded={mode === "rail" ? isExpanded : undefined}
+          aria-expanded={isRail ? isExpanded : undefined}
         >
-          <h2 className="text-2xl font-semibold">Top spots this week</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <h2 className={`${isRail ? "text-lg" : "text-2xl"} font-semibold`}>Top spots this week</h2>
+          <p className={`${isRail ? "mt-1 text-[13px] leading-5" : "mt-1 text-sm"} text-slate-500`}>
             Choose a card to focus the map and compare this week&apos;s strongest venue fits.
           </p>
         </button>
       </div>
 
-      <div className={["min-h-0 pr-1", mode === "rail" ? "flex-1 space-y-3 overflow-y-auto" : "space-y-4"].join(" ")}>
+      <div className={["min-h-0 pr-1", isRail ? "flex-1 space-y-2.5 overflow-y-auto" : "space-y-4"].join(" ")}>
         {loading ? (
-          <div className="rounded-3xl border border-stroke bg-white/70 p-5 text-sm text-slate-500">
+          <div className={`${isRail ? "rounded-[1.35rem] p-4 text-[13px]" : "rounded-3xl p-5 text-sm"} border border-stroke bg-white/70 text-slate-500`}>
             Loading your current venue shortlist...
           </div>
         ) : null}
 
         {!loading && !orderedCards.length ? (
-          <div className="rounded-3xl border border-dashed border-stroke bg-white/70 p-5 text-sm text-slate-500">
+          <div className={`${isRail ? "rounded-[1.35rem] p-4 text-[13px]" : "rounded-3xl p-5 text-sm"} border border-dashed border-stroke bg-white/70 text-slate-500`}>
             No saved recommendation run yet. Use Sync supply to pull in fresh events, then refresh picks to populate this drawer.
           </div>
         ) : null}
@@ -128,26 +129,27 @@ export function RecommendationDrawer({
                 }
               }}
               className={[
-                "w-full rounded-[1.75rem] border p-4 text-left transition",
+                "w-full border text-left transition",
+                isRail ? "rounded-[1.35rem] p-3" : "rounded-[1.75rem] p-4",
                 selected ? "border-accent bg-accentSoft/60" : "border-stroke bg-white/80 hover:bg-white"
               ].join(" ")}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{card.neighborhood}</p>
-                  <h3 className="mt-2 text-lg font-semibold text-slate-900">{card.venueName}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{card.eventTitle}</p>
+                  <p className={`${isRail ? "text-[11px] tracking-[0.2em]" : "text-xs tracking-[0.22em]"} uppercase text-slate-500`}>{card.neighborhood}</p>
+                  <h3 className={`${isRail ? "mt-1.5 text-base" : "mt-2 text-lg"} font-semibold text-slate-900`}>{card.venueName}</h3>
+                  <p className={`${isRail ? "mt-0.5 text-[13px]" : "mt-1 text-sm"} text-slate-600`}>{card.eventTitle}</p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                <span className={`${isRail ? "px-2.5 py-0.5 text-[10px] tracking-[0.18em]" : "px-3 py-1 text-xs tracking-[0.2em]"} rounded-full bg-white font-semibold uppercase text-accent`}>
                   {card.scoreBand}
                 </span>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+              <div className={`${isRail ? "mt-3 gap-2.5 text-[13px]" : "mt-4 gap-3 text-sm"} flex flex-wrap items-center text-slate-600`}>
                 <span>{formatEventStart(card.startsAt, timezone)}</span>
                 <span>{card.priceLabel}</span>
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
+                  <MapPin className={isRail ? "h-3.5 w-3.5" : "h-4 w-4"} />
                   {card.address}
                 </span>
               </div>
