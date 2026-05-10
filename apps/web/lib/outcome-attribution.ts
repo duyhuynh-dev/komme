@@ -1,5 +1,18 @@
 import type { RecommendationOutcomeAttribution } from "@/lib/types";
 
+export function outcomeAttributionActionLabel(action: RecommendationOutcomeAttribution["action"]) {
+  const labels: Record<string, string> = {
+    save: "Save",
+    dismiss: "Dismiss",
+    digest_click: "Digest click",
+    ticket_click: "Ticket click",
+    archive_revisit: "Archive revisit",
+    planner_attended: "Planner attended",
+    planner_skipped: "Planner skipped",
+  };
+  return labels[action] ?? action.replaceAll("_", " ");
+}
+
 export function outcomeAttributionSourceLabel(source: RecommendationOutcomeAttribution["source"]) {
   const labels: Record<string, string> = {
     feedback: "Feedback",

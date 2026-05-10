@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { outcomeAttributionSourceLabel, outcomeAttributionTone } from "./outcome-attribution.ts";
+import {
+  outcomeAttributionActionLabel,
+  outcomeAttributionSourceLabel,
+  outcomeAttributionTone,
+} from "./outcome-attribution.ts";
+
+test("outcome attribution helper labels supported actions", () => {
+  assert.equal(outcomeAttributionActionLabel("save"), "Save");
+  assert.equal(outcomeAttributionActionLabel("dismiss"), "Dismiss");
+  assert.equal(outcomeAttributionActionLabel("digest_click"), "Digest click");
+  assert.equal(outcomeAttributionActionLabel("ticket_click"), "Ticket click");
+  assert.equal(outcomeAttributionActionLabel("archive_revisit"), "Archive revisit");
+  assert.equal(outcomeAttributionActionLabel("planner_attended"), "Planner attended");
+  assert.equal(outcomeAttributionActionLabel("planner_skipped"), "Planner skipped");
+});
 
 test("outcome attribution helper labels ops sources", () => {
   assert.equal(outcomeAttributionSourceLabel("feedback"), "Feedback");

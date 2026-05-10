@@ -5,7 +5,11 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getEventPlanSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
 import { movementExplanationSourceLabel, movementExplanationTone } from "@/lib/recommendation-movement";
-import { outcomeAttributionSourceLabel, outcomeAttributionTone } from "@/lib/outcome-attribution";
+import {
+  outcomeAttributionActionLabel,
+  outcomeAttributionSourceLabel,
+  outcomeAttributionTone,
+} from "@/lib/outcome-attribution";
 import {
   supplyQualityConfidenceDelta,
   supplyQualityIssueCount,
@@ -597,7 +601,7 @@ export function RecommendationOpsPageContent() {
                         ].join(" ")}
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold">{item.action.replaceAll("_", " ")}</span>
+                          <span className="font-semibold">{outcomeAttributionActionLabel(item.action)}</span>
                           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
                             {outcomeAttributionSourceLabel(item.source)} · {item.recencyLabel}
                           </span>
