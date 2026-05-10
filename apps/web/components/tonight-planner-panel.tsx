@@ -262,7 +262,6 @@ export function TonightPlannerPanel({
       {!loading && panelState.mode === "empty" ? (
         <div className="rounded-[1.35rem] border border-dashed border-stroke bg-white/70 p-4 text-[13px] leading-5 text-slate-500">
           {panelState.summary}
-          {panelState.planningNote ? <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-slate-400">{panelState.planningNote}</p> : null}
         </div>
       ) : null}
 
