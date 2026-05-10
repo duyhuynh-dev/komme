@@ -23,7 +23,7 @@ const healthySpotify: ConnectedSourceHealth = {
 };
 
 test("connected source status helper distinguishes healthy Spotify influence", () => {
-  assert.equal(connectedSourceStatusLabel(healthySpotify), "Influencing ranking");
+  assert.equal(connectedSourceStatusLabel(healthySpotify), "Influencing recommendations");
   assert.equal(connectedSourceSyncLabel(healthySpotify), "Last sync succeeded");
   assert.equal(connectedSourceInfluenceLabel(healthySpotify), "Currently shaping recommendations");
 });
@@ -37,9 +37,23 @@ test("connected source status helper marks stale Spotify as refreshable", () => 
     confidenceState: "degraded",
   };
 
-  assert.equal(connectedSourceStatusLabel(staleSpotify), "Needs refresh");
+  assert.equal(connectedSourceStatusLabel(staleSpotify), "Stale taste suppressed");
   assert.equal(connectedSourceSyncLabel(staleSpotify), "Last sync failed");
   assert.equal(connectedSourceInfluenceLabel(staleSpotify), "Not shaping recommendations");
+});
+
+test("connected source status helper distinguishes failed Spotify sync", () => {
+  const failedSpotify: ConnectedSourceHealth = {
+    ...healthySpotify,
+    latestRunStatus: "failed",
+    stale: false,
+    currentlyInfluencingRanking: false,
+    confidenceState: "degraded",
+  };
+
+  assert.equal(connectedSourceStatusLabel(failedSpotify), "Last sync failed");
+  assert.equal(connectedSourceSyncLabel(failedSpotify), "Last sync failed");
+  assert.equal(connectedSourceInfluenceLabel(failedSpotify), "Not shaping recommendations");
 });
 
 test("connected source setup state guides disconnected Spotify connection", () => {

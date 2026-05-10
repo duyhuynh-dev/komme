@@ -12,19 +12,7 @@ export interface ConnectedSourceSetupState {
 }
 
 export function connectedSourceStatusLabel(health?: ConnectedSourceHealth | null) {
-  if (!health?.connected) {
-    return "Not connected";
-  }
-  if (health.stale || health.confidenceState === "degraded") {
-    return "Needs refresh";
-  }
-  if (health.currentlyInfluencingRanking) {
-    return "Influencing ranking";
-  }
-  if (health.latestRunStatus === "failed") {
-    return "Sync failed";
-  }
-  return "Connected";
+  return connectedSourceSetupState(health).statusLabel;
 }
 
 export function connectedSourceSyncLabel(health?: ConnectedSourceHealth | null) {
