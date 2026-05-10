@@ -2,6 +2,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote_plus
 
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +73,8 @@ PLANNER_EXECUTION_LOOKBACK_WINDOW = timedelta(hours=36)
 OCCURRENCE_LOOKBACK_WINDOW = timedelta(hours=2)
 OCCURRENCE_LOOKAHEAD_WINDOW = timedelta(days=60)
 RECOMMENDATION_RUN_HISTORY_LIMIT = 3
+DEMO_SOURCE_NAME = "Pulse Demo Source"
+DEMO_URL_HOST = "pulse.local"
 TOPIC_KEYWORD_MAP = {
     "underground_dance": ["techno", "warehouse", "club", "dance", "rave", "dj"],
     "indie_live_music": ["indie", "band", "concert", "live music", "show", "songwriter", "alt-pop"],
@@ -2798,6 +2801,7 @@ async def refresh_recommendations_for_user(
             .order_by(EventOccurrence.starts_at.asc())
         )
     ).all()
+    real_supply_available = await _has_real_supply(session)
 
     venue_entries: dict[str, list[dict]] = {}
     for occurrence in occurrence_rows:
@@ -2808,6 +2812,8 @@ async def refresh_recommendations_for_user(
         if not venue or not event:
             continue
         source = await session.get(EventSource, event.source_id)
+        if real_supply_available and _source_is_demo(source):
+            continue
         if venue.city not in {"New York City", "New York", "Brooklyn", "Queens", "Bronx", "Staten Island"}:
             continue
 
@@ -2978,7 +2984,7 @@ async def _cards_for_run(
             recommendation.reasons_json
         )
 
-        event_url = _event_url(source, occurrence)
+        event_url = _event_url(source, occurrence, event, venue)
         card = VenueRecommendationCard(
             venueId=venue.id,
             venueName=venue.name,
@@ -3029,9 +3035,40 @@ def _build_freshness(occurrence: EventOccurrence) -> RecommendationFreshness:
     )
 
 
-def _event_url(source: EventSource, occurrence: EventOccurrence) -> str | None:
+def _event_url(source: EventSource, occurrence: EventOccurrence, event: CanonicalEvent, venue: Venue) -> str | None:
     metadata = occurrence.metadata_json or {}
-    return occurrence.ticket_url or metadata.get("sourceUrl") or metadata.get("url") or source.base_url
+    for value in (occurrence.ticket_url, metadata.get("sourceUrl"), metadata.get("url"), source.base_url):
+        if _usable_external_url(value):
+            return value
+    return _event_search_url(event, venue, occurrence)
+
+
+def _usable_external_url(value: object) -> bool:
+    return isinstance(value, str) and value.startswith(("http://", "https://")) and DEMO_URL_HOST not in value
+
+
+def _event_search_url(event: CanonicalEvent, venue: Venue, occurrence: EventOccurrence) -> str:
+    starts_at = _parse_occurrence_start(occurrence.starts_at)
+    date_fragment = f"{starts_at.strftime('%b')} {starts_at.day} {starts_at.year}" if starts_at else ""
+    return f"https://www.google.com/search?q={quote_plus(f'{event.title} {venue.name} {date_fragment}')}"
+
+
+async def _has_real_supply(session: AsyncSession) -> bool:
+    occurrence_id = await session.scalar(
+        select(EventOccurrence.id)
+        .join(CanonicalEvent, CanonicalEvent.id == EventOccurrence.event_id)
+        .join(EventSource, EventSource.id == CanonicalEvent.source_id)
+        .where(
+            EventOccurrence.is_active.is_(True),
+            EventSource.name != DEMO_SOURCE_NAME,
+        )
+        .limit(1)
+    )
+    return occurrence_id is not None
+
+
+def _source_is_demo(source: EventSource | None) -> bool:
+    return source is not None and (source.name == DEMO_SOURCE_NAME or source.base_url == f"https://{DEMO_URL_HOST}")
 
 
 def _supply_trust_assessment(

@@ -38,11 +38,13 @@ from app.services.recommendations import (
     _driver_summaries,
     _feedback_adjustment,
     _feedback_signals,
+    _event_url,
     _outcome_attributions,
     _pack_reason_payload,
     _personalization_provenance,
     _score_breakdown_items,
     _score_summary,
+    _source_is_demo,
     _supply_quality_rollups,
     _supply_trust_assessment,
     _unpack_reason_payload,
@@ -194,6 +196,67 @@ def test_missing_ticket_and_source_url_reduces_supply_trust() -> None:
 
     assert "Missing ticket/source URL" in assessment.labels
     assert assessment.effective_confidence < 0.82
+
+
+def test_event_url_uses_real_links_before_search_fallback() -> None:
+    source = EventSource(kind="api_connector", name="ticketmaster", base_url="https://ticketmaster.com")
+    venue = Venue(
+        name="Le Poisson Rouge",
+        neighborhood="Greenwich Village",
+        address="158 Bleecker St, New York, NY",
+        city="New York",
+        state="NY",
+        latitude=40.7285,
+        longitude=-74.0005,
+    )
+    event = CanonicalEvent(
+        source_id="source-1",
+        source_event_key="ticketmaster:lpr",
+        title="Intimate Alt-Pop Performance",
+        category="live music",
+    )
+    occurrence = _supply_occurrence(
+        ticket_url="https://tickets.example.com/lpr",
+        source_confidence=0.82,
+        updated_at=datetime.now(tz=UTC),
+    )
+
+    assert _event_url(source, occurrence, event, venue) == "https://tickets.example.com/lpr"
+
+
+def test_event_url_falls_back_to_search_when_only_demo_url_exists() -> None:
+    source = EventSource(kind="curated", name="Pulse Demo Source", base_url="https://pulse.local")
+    venue = Venue(
+        name="Le Poisson Rouge",
+        neighborhood="Greenwich Village",
+        address="158 Bleecker St, New York, NY",
+        city="New York",
+        state="NY",
+        latitude=40.7285,
+        longitude=-74.0005,
+    )
+    event = CanonicalEvent(
+        source_id="source-1",
+        source_event_key="demo:lpr",
+        title="Intimate Alt-Pop Performance",
+        category="live music",
+    )
+    occurrence = _supply_occurrence(
+        ticket_url="https://pulse.local/tickets",
+        source_confidence=0.82,
+        updated_at=datetime.now(tz=UTC),
+    )
+
+    event_url = _event_url(source, occurrence, event, venue)
+
+    assert event_url.startswith("https://www.google.com/search?q=")
+    assert "pulse.local" not in event_url
+    assert "Intimate+Alt-Pop+Performance" in event_url
+
+
+def test_demo_source_detection_catches_seeded_catalog_source() -> None:
+    assert _source_is_demo(EventSource(kind="curated", name="Pulse Demo Source", base_url="https://pulse.local"))
+    assert not _source_is_demo(EventSource(kind="api_connector", name="ticketmaster", base_url="https://ticketmaster.com"))
 
 
 def test_supply_trust_penalty_is_visible_in_score_breakdown() -> None:
