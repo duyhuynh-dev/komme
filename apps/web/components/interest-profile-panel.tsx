@@ -65,8 +65,8 @@ export function InterestProfilePanel({
 
       <div
         className={[
-          "mt-5 min-h-0 pr-1",
-          mode === "rail" ? "flex-1 space-y-3 overflow-y-auto" : "space-y-4"
+          "mt-5 pr-1",
+          mode === "rail" ? "space-y-3" : "space-y-4"
         ].join(" ")}
       >
         {isLoading ? (
