@@ -17,6 +17,7 @@ import {
 import {
   applyRedditExportTaste,
   applySpotifyTaste,
+  consumePulseSessionTokenFromUrl,
   getAuthViewer,
   getSpotifyTastePreview,
   previewRedditExportTaste,
@@ -152,6 +153,7 @@ export function AccountDock() {
       return;
     }
 
+    consumePulseSessionTokenFromUrl();
     setOpen(true);
     setMessage("Spotify connected. Review the inferred taste themes and apply them when they look right.");
     void refresh();
@@ -555,6 +557,12 @@ export function AccountDock() {
                   </span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">{spotifySetupState.detail}</p>
+                {spotifyConnected && !isSignedIn ? (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                    Spotify connected, but Pulse could not start a browser session. Try normal Chrome or allow cookies
+                    for Pulse, then reconnect Spotify.
+                  </div>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
                   <span className="rounded-full border border-stroke bg-white px-3 py-1">
                     {spotifySetupState.syncLabel}

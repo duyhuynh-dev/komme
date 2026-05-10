@@ -36,6 +36,60 @@ function resolveApiUrl() {
 }
 
 const API_URL = resolveApiUrl();
+const PULSE_SESSION_STORAGE_KEY = "pulse.sessionToken";
+
+export function getStoredPulseSessionToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(PULSE_SESSION_STORAGE_KEY);
+}
+
+export function storePulseSessionToken(token: string) {
+  if (typeof window === "undefined" || !token) {
+    return;
+  }
+
+  window.localStorage.setItem(PULSE_SESSION_STORAGE_KEY, token);
+}
+
+export function clearStoredPulseSessionToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(PULSE_SESSION_STORAGE_KEY);
+}
+
+export function consumePulseSessionTokenFromUrl() {
+  if (typeof window === "undefined" || !window.location.hash) {
+    return false;
+  }
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = hashParams.get("pulse_session");
+  if (!token) {
+    return false;
+  }
+
+  storePulseSessionToken(token);
+  hashParams.delete("pulse_session");
+  const nextHash = hashParams.toString();
+  window.history.replaceState(
+    {},
+    "",
+    `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ""}`,
+  );
+  return true;
+}
+
+function attachPulseSessionHeader(headers: Headers) {
+  const token = getStoredPulseSessionToken();
+  if (token && !headers.has("X-Pulse-Session-Token")) {
+    headers.set("X-Pulse-Session-Token", token);
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
@@ -53,6 +107,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         headers.set("Authorization", `Bearer ${session.access_token}`);
       }
     }
+    attachPulseSessionHeader(headers);
   }
 
   const response = await fetch(`${API_URL}${path}`, {
@@ -100,6 +155,7 @@ async function uploadBinary<T>(path: string, file: File): Promise<T> {
         headers.set("Authorization", `Bearer ${session.access_token}`);
       }
     }
+    attachPulseSessionHeader(headers);
   }
 
   const response = await fetch(`${API_URL}${path}`, {

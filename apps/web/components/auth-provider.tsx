@@ -10,7 +10,12 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { signOutPulseSession } from "@/lib/api";
+import {
+  clearStoredPulseSessionToken,
+  consumePulseSessionTokenFromUrl,
+  getStoredPulseSessionToken,
+  signOutPulseSession,
+} from "@/lib/api";
 import type { AuthViewer } from "@/lib/types";
 
 interface PulseAuthUser {
@@ -37,6 +42,10 @@ async function fetchAuthViewer(session: Session | null): Promise<AuthViewer | nu
   const headers = new Headers();
   if (session?.access_token) {
     headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+  const pulseSessionToken = getStoredPulseSessionToken();
+  if (pulseSessionToken) {
+    headers.set("X-Pulse-Session-Token", pulseSessionToken);
   }
 
   const response = await fetch(`${API_URL}/v1/auth/me`, {
@@ -66,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    consumePulseSessionTokenFromUrl();
 
     const syncViewer = async (nextSession: Session | null) => {
       const nextViewer = await fetchAuthViewer(nextSession);
@@ -121,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authMethod: viewer?.authMethod ?? "demo",
       signOut: async () => {
         await signOutPulseSession().catch(() => undefined);
+        clearStoredPulseSessionToken();
         if (client) {
           await client.auth.signOut();
         }

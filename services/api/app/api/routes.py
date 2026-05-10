@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Annotated
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -47,9 +47,11 @@ from app.schemas.taste import (
 from app.services.apple_maps import build_mapkit_token
 from app.services.auth import (
     build_oauth_state,
+    build_pulse_session_token,
     clear_pulse_session_cookie,
     get_or_create_user,
     parse_oauth_state,
+    pulse_session_secret,
     require_authenticated_user,
     resolve_user,
     set_pulse_session_cookie,
@@ -111,9 +113,10 @@ async def current_identity(
     session: AsyncSession = Depends(get_db),
     authorization: Annotated[str | None, Header()] = None,
     x_pulse_user_email: Annotated[str | None, Header()] = None,
+    x_pulse_session_token: Annotated[str | None, Header()] = None,
 ):
     settings = get_settings()
-    pulse_session_token = request.cookies.get(settings.pulse_session_cookie_name)
+    pulse_session_token = x_pulse_session_token or request.cookies.get(settings.pulse_session_cookie_name)
     return await resolve_user(session, authorization, x_pulse_user_email, pulse_session_token)
 
 
@@ -122,9 +125,10 @@ async def authenticated_identity(
     session: AsyncSession = Depends(get_db),
     authorization: Annotated[str | None, Header()] = None,
     x_pulse_user_email: Annotated[str | None, Header()] = None,
+    x_pulse_session_token: Annotated[str | None, Header()] = None,
 ):
     settings = get_settings()
-    pulse_session_token = request.cookies.get(settings.pulse_session_cookie_name)
+    pulse_session_token = x_pulse_session_token or request.cookies.get(settings.pulse_session_cookie_name)
     return await require_authenticated_user(session, authorization, x_pulse_user_email, pulse_session_token)
 
 
@@ -372,7 +376,15 @@ async def spotify_connect_callback(
     connection.scope_csv = token_payload.get("scope")
     await session.commit()
     web_app_url = _resolve_web_app_url(settings, request)
-    response = RedirectResponse(f"{web_app_url}/?spotify=connected", status_code=status.HTTP_302_FOUND)
+    session_token = build_pulse_session_token(
+        user.id,
+        pulse_session_secret(settings),
+        expires_in_seconds=settings.pulse_session_ttl_seconds,
+    )
+    response = RedirectResponse(
+        f"{web_app_url}/?spotify=connected#pulse_session={quote(session_token)}",
+        status_code=status.HTTP_302_FOUND,
+    )
     set_pulse_session_cookie(response, user.id)
     return response
 
