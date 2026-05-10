@@ -9,7 +9,6 @@ import {
   Disc3,
   LogOut,
   Mail,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import {
@@ -243,28 +242,23 @@ export function AccountDock() {
             </button>
           </div>
 
-          <div className="mt-3 rounded-[1.15rem] border border-stroke/80 bg-canvas/70 p-3">
+          <div className="mt-3 rounded-[1rem] border border-stroke/80 bg-canvas/70 p-2.5">
             {isConfigured ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  {isSignedIn ? (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm">
-                      <CheckCircle2 className="h-4 w-4 text-accent" />
-                      <span className="max-w-[12rem] truncate">{user?.email}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm">
-                      <Mail className="h-4 w-4 text-accent" />
-                      No active session
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    <ShieldCheck className="h-3.5 w-3.5 text-accent" />
-                    {status.eyebrow}
-                  </span>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-accent shadow-sm">
+                  {isSignedIn ? <CheckCircle2 className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {isSignedIn ? user?.email : "No active session"}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                    <span className="font-semibold uppercase tracking-[0.14em]">{status.eyebrow}</span>
+                    <span className="mx-1.5 text-slate-300">/</span>
+                    {status.detail}
+                  </p>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-slate-500">{status.detail}</p>
-              </>
+              </div>
             ) : (
               <p className="text-sm leading-6 text-slate-600">
                 Pulse auth is not configured in this environment yet.
@@ -308,34 +302,34 @@ export function AccountDock() {
                 )}
               </div>
 
-              <div className="rounded-[1.05rem] border border-stroke/80 bg-white/80 px-3 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
+              <div className="rounded-[1rem] border border-stroke/80 bg-white/80 px-3 py-2.5">
+                <div className="grid gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
                     <h4 className="text-sm font-semibold text-slate-900">Spotify</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{spotifyShortDetail}</p>
+                    <span
+                      className={[
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
+                        spotifyConnected
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-stroke bg-white text-slate-500",
+                      ].join(" ")}
+                    >
+                      <Disc3 className="h-3.5 w-3.5" />
+                      {spotifyConnected ? "Connected" : "Off"}
+                    </span>
                   </div>
-                  <span
-                    className={[
-                      "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
-                      spotifyConnected
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-stroke bg-white text-slate-500",
-                    ].join(" ")}
-                  >
-                    <Disc3 className="h-3.5 w-3.5" />
-                    {spotifyConnected ? "Connected" : "Off"}
-                  </span>
+                  <p className="text-xs leading-5 text-slate-500">{spotifyShortDetail}</p>
                 </div>
                 {spotifyConnected && !isSignedIn ? (
                   <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
                     Allow cookies for Pulse, then reconnect Spotify.
                   </div>
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-                  <span className="rounded-full border border-stroke bg-white px-3 py-1">
+                <div className="mt-2.5 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                  <span className="rounded-full border border-stroke bg-white px-2.5 py-1">
                     {spotifySetupState.syncLabel}
                   </span>
-                  <span className="rounded-full border border-stroke bg-white px-3 py-1">
+                  <span className="rounded-full border border-stroke bg-white px-2.5 py-1">
                     {spotifyTasteHealth?.currentlyInfluencingRanking ? "Shaping picks" : "Not shaping picks"}
                   </span>
                 </div>
@@ -344,7 +338,7 @@ export function AccountDock() {
                     type="button"
                     onClick={() => void connectSpotify()}
                     disabled={isConnectingSpotify}
-                    className="mt-3 inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-60"
+                    className="mt-2.5 inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60"
                   >
                     {isConnectingSpotify ? "Redirecting..." : "Connect Spotify"}
                   </button>
@@ -353,7 +347,7 @@ export function AccountDock() {
                     type="button"
                     onClick={() => void retrySpotifySync()}
                     disabled={isSyncingSpotify}
-                    className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 disabled:opacity-60"
+                    className="mt-2.5 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-60"
                   >
                     {isSyncingSpotify ? "Refreshing Spotify..." : "Retry Spotify sync"}
                   </button>

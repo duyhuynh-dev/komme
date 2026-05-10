@@ -83,7 +83,7 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
   };
 
   return (
-    <div className={compact ? "rounded-[1.15rem] border border-stroke/80 bg-white/60 p-3 backdrop-blur" : "rounded-[1.75rem] border border-stroke bg-white/70 p-4"}>
+    <div className={compact ? "rounded-[1.1rem] border border-stroke/80 bg-white/60 p-2.5 backdrop-blur" : "rounded-[1.75rem] border border-stroke bg-white/70 p-4"}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <MapPinned className={compact ? "h-4 w-4 text-accent" : "h-5 w-5 text-accent"} />
@@ -113,27 +113,30 @@ export function LocationOnboardingCard({ compact = false }: { compact?: boolean 
         </div>
       ) : null}
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className={compact ? "mt-3 grid gap-2.5 sm:grid-cols-2" : "mt-4 grid gap-3"}>
-        <label className="grid gap-1">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className={compact ? "mt-3 grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "mt-4 grid gap-3"}
+      >
+        <label className="grid min-w-0 gap-1">
           <span className={compact ? "text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500" : "text-sm font-medium text-slate-700"}>ZIP</span>
           <input
             {...form.register("zipCode")}
-            className="rounded-[0.95rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
+            className="w-full min-w-0 rounded-[0.9rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
           />
         </label>
-        <label className={compact ? "grid gap-1 sm:col-span-1" : "grid gap-1"}>
+        <label className={compact ? "grid min-w-0 gap-1 sm:col-span-1" : "grid gap-1"}>
           <span className={compact ? "text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500" : "text-sm font-medium text-slate-700"}>Radius</span>
           <input
             type="number"
             {...form.register("radiusMiles")}
-            className="rounded-[0.95rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
+            className="w-full min-w-0 rounded-[0.9rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
           />
         </label>
-        <label className={compact ? "grid gap-1 sm:col-span-2" : "grid gap-1"}>
+        <label className={compact ? "grid min-w-0 gap-1 sm:col-span-2" : "grid gap-1"}>
           <span className={compact ? "text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500" : "text-sm font-medium text-slate-700"}>Neighborhood</span>
           <input
             {...form.register("neighborhood")}
-            className="rounded-[0.95rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
+            className="w-full min-w-0 rounded-[0.9rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15"
           />
         </label>
 

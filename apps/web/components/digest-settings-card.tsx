@@ -82,7 +82,7 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
 
   const values = form.watch();
   const containerClass = compact
-    ? "rounded-[1.15rem] border border-stroke/80 bg-white/60 p-3 backdrop-blur"
+    ? "rounded-[1.1rem] border border-stroke/80 bg-white/60 p-2.5 backdrop-blur"
     : "rounded-[1.75rem] border border-stroke bg-white/70 p-4";
 
   return (
@@ -130,13 +130,13 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
           />
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <label className="grid min-w-0 gap-1">
             <span className={compact ? "text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500" : "text-sm font-medium text-slate-700"}>Day</span>
             <select
               {...form.register("digestDay")}
               disabled={!values.weeklyDigestEnabled}
-              className="rounded-[0.95rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15 disabled:bg-canvas/70 disabled:text-slate-400"
+              className="w-full min-w-0 rounded-[0.9rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15 disabled:bg-canvas/70 disabled:text-slate-400"
             >
               {digestDays.map((day) => (
                 <option key={day} value={day}>
@@ -146,13 +146,13 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
             </select>
           </label>
 
-          <label className="grid gap-1">
+          <label className="grid min-w-0 gap-1">
             <span className={compact ? "text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500" : "text-sm font-medium text-slate-700"}>Time</span>
             <input
               type="time"
               {...form.register("digestTimeLocal")}
               disabled={!values.weeklyDigestEnabled}
-              className="rounded-[0.95rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15 disabled:bg-canvas/70 disabled:text-slate-400"
+              className="w-full min-w-0 rounded-[0.9rem] border border-stroke bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-accent/35 focus:ring-2 focus:ring-accent/15 disabled:bg-canvas/70 disabled:text-slate-400"
             />
           </label>
         </div>
