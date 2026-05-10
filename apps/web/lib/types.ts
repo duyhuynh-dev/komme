@@ -92,6 +92,7 @@ export interface VenueRecommendationCard {
 export interface MapVenuePin {
   venueId: string;
   venueName: string;
+  eventTitle: string;
   latitude: number;
   longitude: number;
   scoreBand: ScoreBand;

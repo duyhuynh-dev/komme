@@ -3005,6 +3005,7 @@ async def _cards_for_run(
             MapVenuePin(
                 venueId=venue.id,
                 venueName=venue.name,
+                eventTitle=event.title,
                 latitude=venue.latitude,
                 longitude=venue.longitude,
                 scoreBand=recommendation.score_band,

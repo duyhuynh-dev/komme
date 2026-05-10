@@ -76,6 +76,7 @@ class VenueRecommendationCard(BaseModel):
 class MapVenuePin(BaseModel):
     venueId: str
     venueName: str
+    eventTitle: str
     latitude: float
     longitude: float
     scoreBand: str

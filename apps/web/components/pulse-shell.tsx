@@ -468,7 +468,7 @@ export function PulseShell() {
               <div className="min-w-0 max-w-2xl">
                 <p className="text-sm font-medium uppercase tracking-[0.22em] text-slate-500">This week on the map</p>
                 <h1 className="mt-2 text-2xl font-semibold leading-tight text-slate-900">
-                  {mapQuery.data?.pins.length ? `${mapQuery.data.pins.length} venues leading right now` : "Waiting on recommendations"}
+                  {mapQuery.data?.pins.length ? `${mapQuery.data.pins.length} events leading right now` : "Waiting on recommendations"}
                 </h1>
               </div>
 
@@ -623,7 +623,7 @@ export function PulseShell() {
 
       <RailModal
         open={activeRailModal === "spots"}
-        title="Top spots this week"
+        title="Top events this week"
         onClose={() => setActiveRailModal(null)}
       >
         <RecommendationDrawer

@@ -80,9 +80,9 @@ export function RecommendationDrawer({
           ].join(" ")}
           aria-expanded={isRail ? isExpanded : undefined}
         >
-          <h2 className={`${isRail ? "text-base" : "text-2xl"} font-semibold`}>Top spots this week</h2>
+          <h2 className={`${isRail ? "text-base" : "text-2xl"} font-semibold`}>Top events this week</h2>
           <p className={`${isRail ? "mt-0.5 text-xs leading-5" : "mt-1 text-sm"} text-slate-500`}>
-            Choose a card to focus the map and compare this week&apos;s strongest venue fits.
+            Choose an event to focus the map and compare why it is ranking now.
           </p>
         </button>
       </div>
@@ -90,13 +90,13 @@ export function RecommendationDrawer({
       <div className={["min-h-0 pr-1", isRail ? "flex-1 space-y-2.5 overflow-y-auto" : "space-y-4"].join(" ")}>
         {loading ? (
           <div className={`${isRail ? "rounded-[1.25rem] p-3 text-xs" : "rounded-3xl p-5 text-sm"} border border-stroke bg-white/70 text-slate-500`}>
-            Loading your current venue shortlist...
+            Loading your current event shortlist...
           </div>
         ) : null}
 
         {!loading && !orderedCards.length ? (
           <div className={`${isRail ? "rounded-[1.25rem] p-3 text-xs" : "rounded-3xl p-5 text-sm"} border border-dashed border-stroke bg-white/70 text-slate-500`}>
-            No saved recommendation run yet. Use Sync supply to pull in fresh events, then refresh picks to populate this drawer.
+            No saved recommendation run yet. Check for new events, then refresh picks to populate this drawer.
           </div>
         ) : null}
 
@@ -137,8 +137,8 @@ export function RecommendationDrawer({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className={`${isRail ? "text-[11px] tracking-[0.2em]" : "text-xs tracking-[0.22em]"} uppercase text-slate-500`}>{card.neighborhood}</p>
-                  <h3 className={`${isRail ? "mt-1 text-[15px]" : "mt-2 text-lg"} font-semibold text-slate-900`}>{card.venueName}</h3>
-                  <p className={`${isRail ? "mt-0.5 text-xs" : "mt-1 text-sm"} text-slate-600`}>{card.eventTitle}</p>
+                  <h3 className={`${isRail ? "mt-1 text-[15px]" : "mt-2 text-lg"} font-semibold text-slate-900`}>{card.eventTitle}</h3>
+                  <p className={`${isRail ? "mt-0.5 text-xs" : "mt-1 text-sm"} text-slate-600`}>at {card.venueName}</p>
                 </div>
                 <span className={`${isRail ? "px-2.5 py-0.5 text-[10px] tracking-[0.18em]" : "px-3 py-1 text-xs tracking-[0.2em]"} rounded-full bg-white font-semibold uppercase text-accent`}>
                   {card.scoreBand}
