@@ -34,7 +34,7 @@ export function InterestProfilePanel({
       className={[
         "flex min-h-0 flex-col",
         mode === "rail"
-          ? "shrink-0 rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur"
+          ? "max-h-[18rem] min-h-[12.5rem] shrink-0 overflow-hidden rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur"
           : ""
       ].join(" ")}
     >
@@ -66,7 +66,7 @@ export function InterestProfilePanel({
       <div
         className={[
           "mt-5 pr-1",
-          mode === "rail" ? "space-y-3" : "space-y-4"
+          mode === "rail" ? "min-h-0 flex-1 space-y-3 overflow-y-auto" : "space-y-4"
         ].join(" ")}
       >
         {isLoading ? (
