@@ -20,9 +20,7 @@ import {
   startSpotifyConnection,
   syncSpotifyTaste,
 } from "@/lib/api";
-import {
-  connectedSourceSetupState,
-} from "@/lib/connected-source-health";
+import { connectedSourceSetupState } from "@/lib/connected-source-health";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 
@@ -30,12 +28,12 @@ function statusCopy(isSignedIn: boolean) {
   if (isSignedIn) {
     return {
       eyebrow: "Pulse account",
-      detail: "Spotify and direct taste controls can shape the map around your night-out preferences.",
+      detail: "Taste controls shape your map.",
     };
   }
   return {
     eyebrow: "Demo mode",
-    detail: "Start with Spotify for the fastest path in, or use a magic link if you prefer email.",
+    detail: "Use Spotify or email to start.",
   };
 }
 
@@ -44,9 +42,7 @@ export function AccountDock() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState(
-    "Continue with Spotify to jump into Pulse fast, or use a magic link if you prefer email.",
-  );
+  const [message, setMessage] = useState("");
   const [showSwitchForm, setShowSwitchForm] = useState(false);
   const [isConnectingSpotify, setIsConnectingSpotify] = useState(false);
   const [isSyncingSpotify, setIsSyncingSpotify] = useState(false);
@@ -66,13 +62,6 @@ export function AccountDock() {
     viewerQuery.data?.spotifyTasteHealth;
   const spotifyConnected = Boolean(spotifyTasteHealth?.connected ?? viewerQuery.data?.spotifyConnected);
   const spotifySetupState = connectedSourceSetupState(spotifyTasteHealth);
-  const spotifyStatusTone =
-    spotifySetupState.tone === "warning"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : spotifySetupState.tone === "healthy"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-stroke bg-white text-slate-500";
-
   const spotifyPreviewQuery = useQuery({
     queryKey: ["spotify-taste-preview", user?.id ?? "demo"],
     queryFn: getSpotifyTastePreview,
@@ -80,10 +69,18 @@ export function AccountDock() {
   });
   const spotifyThemes = spotifyPreviewQuery.data?.themes ?? [];
   const hasSpotifyThemes = spotifyThemes.length > 0;
-  const spotifyLowSignalReason =
-    typeof spotifyPreviewQuery.data?.unmatchedActivity?.reason === "string"
-      ? spotifyPreviewQuery.data.unmatchedActivity.reason
-      : "Pulse needs a little more Spotify listening history before it can infer strong nightlife themes.";
+  const spotifyLowSignalReason = "Not enough nightlife signal yet.";
+  const spotifyShortDetail = !spotifyConnected
+    ? "Connect Spotify to personalize taste."
+    : spotifyTasteHealth?.stale
+      ? "Stale taste is paused. Refresh to use it."
+      : spotifyTasteHealth?.latestRunStatus && spotifyTasteHealth.latestRunStatus !== "completed"
+        ? "Last sync failed. Retry when ready."
+        : !spotifyTasteHealth?.latestRunStatus
+          ? "Connected. Not shaping picks yet."
+          : spotifyTasteHealth.currentlyInfluencingRanking
+            ? "Shaping recommendations now."
+            : "Connected. Not enough active signal yet.";
 
   useEffect(() => {
     if (!open) {
@@ -128,7 +125,7 @@ export function AccountDock() {
 
     consumePulseSessionTokenFromUrl();
     setOpen(true);
-    setMessage("Spotify connected. Review the inferred taste themes and apply them when they look right.");
+    setMessage("Spotify connected.");
     void refresh();
     void queryClient.invalidateQueries({ queryKey: ["auth-viewer"] });
     void queryClient.invalidateQueries({ queryKey: ["spotify-taste-preview"] });
@@ -186,7 +183,7 @@ export function AccountDock() {
         queryClient.invalidateQueries({ queryKey: ["archive"] }),
         queryClient.invalidateQueries({ queryKey: ["spotify-taste-preview"] }),
       ]);
-      setMessage("Spotify taste applied. The map and signals just refreshed with the new provider profile.");
+      setMessage("Spotify taste applied.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to apply the Spotify taste profile.");
     }
@@ -203,7 +200,7 @@ export function AccountDock() {
         queryClient.invalidateQueries({ queryKey: ["archive"] }),
         queryClient.invalidateQueries({ queryKey: ["spotify-taste-preview"] }),
       ]);
-      setMessage("Spotify sync refreshed. Pulse is using the latest listening signals again.");
+      setMessage("Spotify sync refreshed.");
     } catch (error) {
       await queryClient.invalidateQueries({ queryKey: ["auth-viewer"] });
       setMessage(error instanceof Error ? error.message : "Unable to refresh Spotify taste right now.");
@@ -227,26 +224,26 @@ export function AccountDock() {
       {open ? (
         <div
           ref={panelRef}
-          className="absolute right-0 top-[calc(100%+0.5rem)] z-[90] w-[min(24rem,calc(100vw-2rem))] max-h-[calc(100vh-120px)] overflow-y-auto rounded-[1.5rem] border border-stroke bg-white p-4 shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-[90] w-[min(23rem,calc(100vw-2rem))] max-h-[calc(100vh-120px)] overflow-y-auto rounded-[1.35rem] border border-stroke bg-white p-3.5 shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
         >
           <div className="absolute right-6 top-0 h-3.5 w-3.5 -translate-y-1/2 rotate-45 border-l border-t border-stroke bg-white" />
 
           <div className="relative flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Account</p>
-              <h3 className="mt-1 text-xl font-semibold text-slate-900">{isSignedIn ? "Profile" : "Start quietly"}</h3>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Account</p>
+              <h3 className="mt-0.5 text-lg font-semibold text-slate-900">{isSignedIn ? "Profile" : "Start quietly"}</h3>
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stroke bg-white text-slate-500 transition hover:text-slate-900"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-stroke bg-white text-slate-500 transition hover:text-slate-900"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="mt-4 rounded-[1.35rem] border border-stroke/80 bg-canvas/70 p-4">
+          <div className="mt-3 rounded-[1.15rem] border border-stroke/80 bg-canvas/70 p-3">
             {isConfigured ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
@@ -261,12 +258,12 @@ export function AccountDock() {
                       No active session
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     <ShieldCheck className="h-3.5 w-3.5 text-accent" />
                     {status.eyebrow}
                   </span>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{status.detail}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{status.detail}</p>
               </>
             ) : (
               <p className="text-sm leading-6 text-slate-600">
@@ -306,39 +303,32 @@ export function AccountDock() {
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-60"
                   >
                     <Disc3 className="h-4 w-4" />
-                    {spotifyPreviewQuery.isLoading ? "Reading Spotify..." : "Refresh Spotify read"}
+                    {spotifyPreviewQuery.isLoading ? "Reading Spotify..." : "Refresh Spotify"}
                   </button>
                 )}
               </div>
 
-              <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-[1.05rem] border border-stroke/80 bg-white/80 px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">Spotify</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{spotifyShortDetail}</p>
+                  </div>
                   <span
                     className={[
-                      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
                       spotifyConnected
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                         : "border-stroke bg-white text-slate-500",
                     ].join(" ")}
                   >
                     <Disc3 className="h-3.5 w-3.5" />
-                    {spotifyConnected ? "Spotify connected" : "Spotify disconnected"}
-                  </span>
-                  <span
-                    className={[
-                      "inline-flex rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]",
-                      spotifyStatusTone,
-                    ].join(" ")}
-                    title={spotifySetupState.detail}
-                  >
-                    {spotifySetupState.statusLabel}
+                    {spotifyConnected ? "Connected" : "Off"}
                   </span>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{spotifySetupState.detail}</p>
                 {spotifyConnected && !isSignedIn ? (
                   <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-                    Spotify connected, but Pulse could not start a browser session. Try normal Chrome or allow cookies
-                    for Pulse, then reconnect Spotify.
+                    Allow cookies for Pulse, then reconnect Spotify.
                   </div>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
@@ -346,7 +336,7 @@ export function AccountDock() {
                     {spotifySetupState.syncLabel}
                   </span>
                   <span className="rounded-full border border-stroke bg-white px-3 py-1">
-                    {spotifySetupState.influenceLabel}
+                    {spotifyTasteHealth?.currentlyInfluencingRanking ? "Shaping picks" : "Not shaping picks"}
                   </span>
                 </div>
                 {spotifySetupState.action === "connect" ? (
@@ -354,7 +344,7 @@ export function AccountDock() {
                     type="button"
                     onClick={() => void connectSpotify()}
                     disabled={isConnectingSpotify}
-                    className="mt-3 inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-60"
                   >
                     {isConnectingSpotify ? "Redirecting..." : "Connect Spotify"}
                   </button>
@@ -363,21 +353,19 @@ export function AccountDock() {
                     type="button"
                     onClick={() => void retrySpotifySync()}
                     disabled={isSyncingSpotify}
-                    className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60"
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-amber-200 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 disabled:opacity-60"
                   >
                     {isSyncingSpotify ? "Refreshing Spotify..." : "Retry Spotify sync"}
                   </button>
                 ) : null}
                 {spotifyConnected && spotifyPreviewQuery.data && hasSpotifyThemes ? (
                   <>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      Pulse found {spotifyThemes.length} possible themes from your listening history.
-                    </p>
+                    <p className="mt-3 text-xs leading-5 text-slate-500">{spotifyThemes.length} themes found.</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {spotifyThemes.slice(0, 3).map((theme) => (
                         <span
                           key={theme.id}
-                          className="rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
+                          className="rounded-full border border-stroke bg-white px-2.5 py-1 text-xs font-medium text-slate-700"
                         >
                           {theme.label} · {theme.confidenceLabel}
                         </span>
@@ -386,10 +374,7 @@ export function AccountDock() {
                   </>
                 ) : spotifyConnected && spotifyPreviewQuery.data ? (
                   <>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">{spotifyLowSignalReason}</p>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
-                      Keep listening on Spotify for a bit longer, then tap refresh and Pulse will try again.
-                    </p>
+                    <p className="mt-3 text-xs leading-5 text-slate-500">{spotifyLowSignalReason}</p>
                   </>
                 ) : null}
               </div>
@@ -404,9 +389,7 @@ export function AccountDock() {
                     Use another email
                   </button>
                 ) : (
-                  <span className="text-xs leading-5 text-slate-500">
-                    Spotify started this Pulse session. You can still add magic-link sign-in anytime.
-                  </span>
+                  <span className="text-xs leading-5 text-slate-500">Spotify session active.</span>
                 )}
                 <button
                   type="button"
@@ -439,7 +422,7 @@ export function AccountDock() {
                 className="rounded-2xl border border-stroke bg-white px-3 py-2 text-sm"
               />
               <button type="submit" className="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">
-                {isSignedIn ? "Send magic link to this email" : "Send magic link"}
+                {isSignedIn ? "Send magic link" : "Send magic link"}
               </button>
             </form>
           ) : null}
@@ -458,7 +441,7 @@ export function AccountDock() {
             </div>
           ) : null}
 
-          <p className="mt-4 text-xs leading-5 text-slate-500">{message}</p>
+          {message ? <p className="mt-4 text-xs leading-5 text-slate-500">{message}</p> : null}
         </div>
       ) : null}
     </div>
