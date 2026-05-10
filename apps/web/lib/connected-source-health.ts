@@ -47,7 +47,7 @@ export function connectedSourceInfluenceLabel(health?: ConnectedSourceHealth | n
 export function connectedSourceSetupState(health?: ConnectedSourceHealth | null): ConnectedSourceSetupState {
   if (!health?.connected) {
     return {
-      statusLabel: "Not connected",
+      statusLabel: "Spotify disconnected",
       syncLabel: "Disconnected",
       influenceLabel: "Not shaping recommendations",
       detail: health?.healthReason ?? "Connect Spotify when you want listening history to help shape your map.",
@@ -61,12 +61,12 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
 
   if (health.stale) {
     return {
-      statusLabel: "Taste paused",
+      statusLabel: "Stale taste suppressed",
       syncLabel,
       influenceLabel,
       detail:
         health.healthReason ??
-        "Pulse paused Spotify taste because the latest sync is stale. Retry sync to use fresh listening signals.",
+        "Pulse suppressed stale Spotify taste so old listening data does not quietly shape recommendations. Retry sync to refresh it.",
       tone: "warning",
       action: "sync",
     };
@@ -74,7 +74,7 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
 
   if (health.latestRunStatus && health.latestRunStatus !== "completed") {
     return {
-      statusLabel: "Sync failed",
+      statusLabel: "Last sync failed",
       syncLabel,
       influenceLabel,
       detail: health.healthReason ?? "The latest Spotify sync failed. Retry sync when you are ready.",
@@ -85,7 +85,7 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
 
   if (!health.latestRunStatus) {
     return {
-      statusLabel: "Connected",
+      statusLabel: "Connected, not synced",
       syncLabel,
       influenceLabel,
       detail:
@@ -98,7 +98,7 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
 
   if (health.currentlyInfluencingRanking) {
     return {
-      statusLabel: "Influencing ranking",
+      statusLabel: "Influencing recommendations",
       syncLabel,
       influenceLabel,
       detail: health.healthReason ?? "Spotify taste is currently shaping recommendations.",
