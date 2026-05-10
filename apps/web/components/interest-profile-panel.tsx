@@ -34,7 +34,7 @@ export function InterestProfilePanel({
       className={[
         "flex min-h-0 flex-col",
         mode === "rail"
-          ? "h-full rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur"
+          ? "rounded-[2rem] border border-stroke/80 bg-card/70 p-5 shadow-float backdrop-blur"
           : ""
       ].join(" ")}
     >

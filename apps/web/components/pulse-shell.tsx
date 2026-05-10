@@ -452,7 +452,7 @@ export function PulseShell() {
             </div>
           </div>
 
-          <div className="grid min-h-0 gap-4 xl:grid-rows-[auto_auto_minmax(22rem,1fr)]">
+          <div className="flex min-h-0 flex-col gap-4">
             <InterestProfilePanel
               topics={interestsQuery.data?.topics ?? []}
               isLoading={interestsQuery.isLoading}
@@ -521,21 +521,23 @@ export function PulseShell() {
               }}
             />
 
-            <RecommendationDrawer
-              loading={mapQuery.isLoading}
-              cards={mapQuery.data?.cards ?? {}}
-              timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
-              selectedVenueId={selectedVenueId}
-              previewCount={2}
-              isExpanded={activeRailModal === "spots"}
-              onToggleExpanded={() => toggleRailModal("spots")}
-              onSelectVenue={setSelectedVenueId}
-              onExposeCards={handleExposeCards}
-              onTrackInteraction={handleTrackInteraction}
-              comparisonByVenueId={comparisonByVenueId}
-              onSave={(card) => queueFeedback(card, "save")}
-              onDismiss={(card) => queueFeedback(card, "dismiss")}
-            />
+            <div className="min-h-[22rem] flex-1">
+              <RecommendationDrawer
+                loading={mapQuery.isLoading}
+                cards={mapQuery.data?.cards ?? {}}
+                timezone={mapQuery.data?.displayTimezone ?? "America/New_York"}
+                selectedVenueId={selectedVenueId}
+                previewCount={2}
+                isExpanded={activeRailModal === "spots"}
+                onToggleExpanded={() => toggleRailModal("spots")}
+                onSelectVenue={setSelectedVenueId}
+                onExposeCards={handleExposeCards}
+                onTrackInteraction={handleTrackInteraction}
+                comparisonByVenueId={comparisonByVenueId}
+                onSave={(card) => queueFeedback(card, "save")}
+                onDismiss={(card) => queueFeedback(card, "dismiss")}
+              />
+            </div>
           </div>
         </section>
       </div>
