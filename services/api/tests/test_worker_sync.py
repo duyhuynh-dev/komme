@@ -52,6 +52,7 @@ async def test_trigger_worker_supply_sync_posts_to_worker_with_shared_secret(
 
     assert captured["url"] == "http://127.0.0.1:8001/v1/supply/sync"
     assert captured["headers"] == {"x-pulse-ingest-secret": "pulse-secret"}
+    assert captured["timeout"] is not None
     assert response.candidateCount == 6
     assert response.accepted == 4
     assert response.eventsCreated == 3

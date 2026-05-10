@@ -46,6 +46,15 @@ DEFAULT_SUPPLY_QUERIES = [
     RetrievalQuery(query="community workshop brooklyn", source="curated_venues", category="community"),
 ]
 SUPPLY_LOOKAHEAD = timedelta(days=90)
+INGEST_BATCH_SIZE = 50
+INGEST_TIMEOUT_SECONDS = 60.0
+INGEST_COUNT_FIELDS = (
+    "accepted",
+    "sources_created",
+    "venues_created",
+    "events_created",
+    "occurrences_created",
+)
 
 
 @dataclass
@@ -167,17 +176,29 @@ async def sync_supply_to_api(candidates: list[CandidateEvent]) -> dict:
     if settings.internal_ingest_secret:
         headers["x-pulse-ingest-secret"] = settings.internal_ingest_secret
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(
-            f"{settings.api_base_url}/v1/internal/ingest/candidates",
-            json={"items": [candidate.model_dump(mode="json") for candidate in candidates]},
-            headers=headers,
-        )
-        response.raise_for_status()
-        payload = response.json()
+    payload = {"status": "synced", "ingest_batches": 0}
+    for count_field in INGEST_COUNT_FIELDS:
+        payload[count_field] = 0
 
-    payload["status"] = "synced"
+    timeout = httpx.Timeout(INGEST_TIMEOUT_SECONDS, connect=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        for batch in _candidate_batches(candidates, INGEST_BATCH_SIZE):
+            response = await client.post(
+                f"{settings.api_base_url}/v1/internal/ingest/candidates",
+                json={"items": [candidate.model_dump(mode="json") for candidate in batch]},
+                headers=headers,
+            )
+            response.raise_for_status()
+            batch_payload = response.json()
+            payload["ingest_batches"] += 1
+            for count_field in INGEST_COUNT_FIELDS:
+                payload[count_field] += int(batch_payload.get(count_field, 0) or 0)
+
     return payload
+
+
+def _candidate_batches(candidates: list[CandidateEvent], batch_size: int) -> list[list[CandidateEvent]]:
+    return [candidates[index : index + batch_size] for index in range(0, len(candidates), batch_size)]
 
 
 async def run_daily_supply_sync() -> dict:

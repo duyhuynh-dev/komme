@@ -6,6 +6,7 @@ from app.services.supply_sync import (
     build_daily_supply_queries,
     collect_supply_candidates,
     collect_supply_candidates_with_diagnostics,
+    sync_supply_to_api,
 )
 
 
@@ -178,3 +179,77 @@ def test_candidate_is_usable_rejects_stale_or_invalid_coordinates() -> None:
     assert _candidate_is_usable(too_far_future) is False
     assert _candidate_is_usable(invalid_coordinates) is False
     assert _candidate_is_usable(missing_source_url) is False
+
+
+@pytest.mark.asyncio
+async def test_sync_supply_to_api_batches_large_candidate_payloads(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_batches: list[list[dict]] = []
+    captured_headers: list[dict[str, str]] = []
+
+    class FakeResponse:
+        def __init__(self, accepted: int) -> None:
+            self.accepted = accepted
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, int]:
+            return {
+                "accepted": self.accepted,
+                "sources_created": 1,
+                "venues_created": 2,
+                "events_created": self.accepted,
+                "occurrences_created": self.accepted,
+            }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.timeout = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, json: dict[str, list[dict]], headers: dict[str, str]) -> FakeResponse:
+            assert url == "http://api.test/v1/internal/ingest/candidates"
+            captured_batches.append(json["items"])
+            captured_headers.append(headers)
+            return FakeResponse(accepted=len(json["items"]))
+
+    class FakeSettings:
+        api_base_url = "http://api.test"
+        internal_ingest_secret = "pulse-secret"
+
+    candidates = [
+        CandidateEvent(
+            source="ticketmaster",
+            source_event_key=f"event-{index}",
+            venue_name="Elsewhere",
+            neighborhood="Bushwick",
+            address="599 Johnson Ave, Brooklyn, NY",
+            title=f"Warehouse textures {index}",
+            starts_at="2026-06-25T23:30:00+00:00",
+            latitude=40.7063,
+            longitude=-73.9232,
+            source_url="https://example.com/event",
+        )
+        for index in range(5)
+    ]
+
+    monkeypatch.setattr("app.services.supply_sync.get_settings", lambda: FakeSettings())
+    monkeypatch.setattr("app.services.supply_sync.INGEST_BATCH_SIZE", 2)
+    monkeypatch.setattr("app.services.supply_sync.httpx.AsyncClient", FakeClient)
+
+    payload = await sync_supply_to_api(candidates)
+
+    assert [len(batch) for batch in captured_batches] == [2, 2, 1]
+    assert captured_headers == [{"x-pulse-ingest-secret": "pulse-secret"}] * 3
+    assert payload["status"] == "synced"
+    assert payload["ingest_batches"] == 3
+    assert payload["accepted"] == 5
+    assert payload["sources_created"] == 3
+    assert payload["venues_created"] == 6
+    assert payload["events_created"] == 5
+    assert payload["occurrences_created"] == 5

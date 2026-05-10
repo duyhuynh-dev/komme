@@ -12,7 +12,8 @@ async def trigger_worker_supply_sync() -> SupplySyncResponse:
         headers["x-pulse-ingest-secret"] = settings.internal_ingest_secret
 
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        timeout = httpx.Timeout(180.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"{settings.worker_base_url}/v1/supply/sync",
                 headers=headers,
