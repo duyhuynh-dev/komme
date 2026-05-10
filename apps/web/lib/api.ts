@@ -139,55 +139,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function uploadBinary<T>(path: string, file: File): Promise<T> {
-  const headers = new Headers({
-    "Content-Type": "application/octet-stream",
-    "x-upload-filename": file.name,
-  });
-
-  if (typeof window !== "undefined") {
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers.set("Authorization", `Bearer ${session.access_token}`);
-      }
-    }
-    attachPulseSessionHeader(headers);
-  }
-
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: await file.arrayBuffer(),
-    cache: "no-store",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    let detail = `Request failed for ${path} with status ${response.status}`;
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (contentType.includes("application/json")) {
-      const payload = await response.json().catch(() => null);
-      if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
-        detail = payload.detail;
-      }
-    } else {
-      const text = await response.text().catch(() => "");
-      if (text) {
-        detail = text;
-      }
-    }
-
-    throw new Error(detail);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 export function getMapRecommendations() {
   return request<RecommendationsMapResponse>("/v1/recommendations/map");
 }
@@ -344,18 +295,6 @@ export function signOutPulseSession() {
   });
 }
 
-export function startRedditConnection() {
-  return request<{ authorizeUrl: string }>("/v1/reddit/connect/start", {
-    method: "POST"
-  });
-}
-
-export function startMockRedditConnection() {
-  return request<{ ok: true }>("/v1/reddit/mock-connect", {
-    method: "POST"
-  });
-}
-
 export function startSpotifyConnection() {
   return request<{ authorizeUrl: string }>("/v1/spotify/connect/start", {
     method: "POST"
@@ -376,12 +315,4 @@ export function syncSpotifyTaste() {
   return request<TasteProfileResponse>("/v1/taste/spotify/sync", {
     method: "POST"
   });
-}
-
-export function previewRedditExportTaste(file: File) {
-  return uploadBinary<TasteProfileResponse>("/v1/taste/reddit-export/preview", file);
-}
-
-export function applyRedditExportTaste(file: File) {
-  return uploadBinary<TasteProfileResponse>("/v1/taste/reddit-export/apply", file);
 }

@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.recommendation import FeedbackEvent
 from app.models.user import OAuthConnection, UserAnchorLocation, UserConstraint
-from app.schemas.auth import AuthViewerResponse, RedditConnectStartResponse, SpotifyConnectStartResponse
+from app.schemas.auth import AuthViewerResponse, SpotifyConnectStartResponse
 from app.schemas.common import OkResponse, SupplySyncResponse
 from app.schemas.digest import DigestBatchResponse, DigestPreviewResponse, DigestSendResponse
 from app.schemas.ingestion import CandidateIngestPayload, CandidateIngestResponse
@@ -83,18 +83,17 @@ from app.services.recommendations import (
     refresh_recommendations_for_user,
 )
 from app.services.recommendations import _build_map_context, _user_anchor_resolution
-from app.services.reddit_oauth import build_reddit_authorize_url
-from app.services.seed import bootstrap_user_with_mock_reddit
 from app.services.spotify_oauth import build_spotify_authorize_url, exchange_spotify_code, fetch_spotify_profile
 from app.services.worker_sync import trigger_worker_supply_sync
 from app.taste.errors import InsufficientSignalError, TasteProviderError
 from app.taste.profile_contracts import TasteProfile
 from app.taste.profile_service import apply_taste_profile, record_taste_profile_failure
 from app.taste.providers.manual import ManualThemeProvider
-from app.taste.providers.reddit_export import RedditExportProvider
 from app.taste.providers.spotify import SpotifyProvider
 
 router = APIRouter(prefix="/v1")
+
+REDDIT_RETIRED_MESSAGE = "Reddit personalization has been retired. Use Spotify or direct taste signals instead."
 
 
 def _resolve_web_app_url(settings, request: Request) -> str:
@@ -149,25 +148,12 @@ async def auth_me(
     session: AsyncSession = Depends(get_db),
     identity=Depends(current_identity),
 ) -> AuthViewerResponse:
-    live_connection = await session.scalar(
-        select(OAuthConnection).where(
-            OAuthConnection.user_id == identity.user.id,
-            OAuthConnection.provider == "reddit",
-        )
-    )
-    sample_connection = await session.scalar(
-        select(OAuthConnection).where(
-            OAuthConnection.user_id == identity.user.id,
-            OAuthConnection.provider == "reddit_mock",
-        )
-    )
     spotify_connection = await session.scalar(
         select(OAuthConnection).where(
             OAuthConnection.user_id == identity.user.id,
             OAuthConnection.provider == "spotify",
         )
     )
-    connection_mode = "live" if live_connection else "sample" if sample_connection else "none"
     spotify_health = await get_spotify_taste_health(session, identity.user)
     return AuthViewerResponse(
         userId=identity.user.id,
@@ -176,8 +162,6 @@ async def auth_me(
         isAuthenticated=identity.is_authenticated,
         isDemo=identity.is_demo,
         authMethod=identity.auth_method,
-        redditConnected=connection_mode != "none",
-        redditConnectionMode=connection_mode,
         spotifyConnected=spotify_connection is not None,
         spotifyTasteHealth=spotify_health,
         connectedSources=[spotify_health],
@@ -191,23 +175,11 @@ async def auth_sign_out() -> JSONResponse:
     return response
 
 
-@router.post("/reddit/connect/start", response_model=RedditConnectStartResponse)
+@router.post("/reddit/connect/start")
 async def reddit_connect_start(
     identity=Depends(authenticated_identity),
-) -> RedditConnectStartResponse:
-    settings = get_settings()
-    if not settings.oauth_state_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OAuth state secret is not configured.",
-        )
-
-    state = build_oauth_state(identity.user.email, settings.oauth_state_secret, purpose="reddit-connect")
-    try:
-        authorize_url = build_reddit_authorize_url(state)
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
-    return RedditConnectStartResponse(authorizeUrl=authorize_url)
+):
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail=REDDIT_RETIRED_MESSAGE)
 
 
 @router.get("/reddit/connect/callback")
@@ -218,71 +190,7 @@ async def reddit_connect_callback(
     state: str | None = None,
     session: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
-    if error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
-    if not code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Reddit authorization code.")
-    if not state:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing OAuth state.")
-    if not settings.oauth_state_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OAuth state secret is not configured.",
-        )
-
-    email = parse_oauth_state(state, settings.oauth_state_secret, purpose="reddit-connect")
-    user = await get_or_create_user(session, email=email)
-
-    token_payload = {
-        "access_token": code,
-        "refresh_token": code,
-        "scope": "identity history mysubreddits",
-        "name": "reddit-demo-user",
-    }
-
-    if settings.reddit_client_id and settings.reddit_client_secret:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            token_response = await client.post(
-                "https://www.reddit.com/api/v1/access_token",
-                auth=(settings.reddit_client_id, settings.reddit_client_secret),
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": settings.reddit_redirect_uri,
-                },
-                headers={"User-Agent": "PulseMVP/0.1"},
-            )
-            token_response.raise_for_status()
-            token_payload = token_response.json()
-
-            me_response = await client.get(
-                "https://oauth.reddit.com/api/v1/me",
-                headers={
-                    "Authorization": f"bearer {token_payload['access_token']}",
-                    "User-Agent": "PulseMVP/0.1",
-                },
-            )
-            me_response.raise_for_status()
-            token_payload["name"] = me_response.json().get("name", "reddit-user")
-
-    connection = await session.scalar(
-        select(OAuthConnection).where(
-            OAuthConnection.user_id == user.id,
-            OAuthConnection.provider == "reddit",
-        )
-    )
-    if connection is None:
-        connection = OAuthConnection(user_id=user.id, provider="reddit")
-        session.add(connection)
-
-    connection.provider_user_id = token_payload.get("name")
-    connection.access_token_encrypted = token_payload.get("access_token")
-    connection.refresh_token_encrypted = token_payload.get("refresh_token")
-    connection.scope_csv = token_payload.get("scope")
-    await session.commit()
-    web_app_url = _resolve_web_app_url(settings, request)
-    return RedirectResponse(f"{web_app_url}/?reddit=connected", status_code=status.HTTP_302_FOUND)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail=REDDIT_RETIRED_MESSAGE)
 
 
 @router.post("/spotify/connect/start", response_model=SpotifyConnectStartResponse)
@@ -394,8 +302,7 @@ async def reddit_mock_connect(
     session: AsyncSession = Depends(get_db),
     identity=Depends(authenticated_identity),
 ) -> OkResponse:
-    await bootstrap_user_with_mock_reddit(session, identity.user, create_connection=True)
-    return OkResponse()
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail=REDDIT_RETIRED_MESSAGE)
 
 
 @router.post("/internal/ingest/candidates", response_model=CandidateIngestResponse)
@@ -840,27 +747,9 @@ async def taste_manual_apply(
     return _serialize_taste_profile(applied)
 
 
-def _uploaded_export_filename(request: Request) -> str:
-    return request.headers.get("x-upload-filename") or "reddit-export.zip"
-
-
 @router.post("/taste/reddit-export/preview", response_model=TasteProfileResponse)
 async def taste_reddit_export_preview(request: Request) -> TasteProfileResponse:
-    raw_bytes = await request.body()
-    provider = RedditExportProvider()
-    try:
-        profile = provider.build_profile_from_bytes(raw_bytes, filename=_uploaded_export_filename(request))
-    except InsufficientSignalError as error:
-        empty_profile = TasteProfile(
-            source="reddit_export",
-            source_key=_uploaded_export_filename(request),
-            themes=[],
-            unmatched_activity={"reason": error.message},
-        )
-        return _serialize_taste_profile(empty_profile)
-    except TasteProviderError as error:
-        _raise_taste_provider_http_error(error)
-    return _serialize_taste_profile(profile)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail=REDDIT_RETIRED_MESSAGE)
 
 
 @router.post("/taste/reddit-export/apply", response_model=TasteProfileResponse)
@@ -869,14 +758,7 @@ async def taste_reddit_export_apply(
     session: AsyncSession = Depends(get_db),
     identity=Depends(authenticated_identity),
 ) -> TasteProfileResponse:
-    raw_bytes = await request.body()
-    provider = RedditExportProvider()
-    try:
-        profile = provider.build_profile_from_bytes(raw_bytes, filename=_uploaded_export_filename(request))
-        applied = await apply_taste_profile(session, identity.user, profile)
-    except TasteProviderError as error:
-        _raise_taste_provider_http_error(error)
-    return _serialize_taste_profile(applied)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail=REDDIT_RETIRED_MESSAGE)
 
 
 @router.get("/taste/spotify/preview", response_model=TasteProfileResponse)

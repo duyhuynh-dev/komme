@@ -81,7 +81,7 @@ export function InterestProfilePanel({
 
         {!isLoading && topics.length === 0 ? (
           <div className={`${isRail ? "rounded-[1.35rem] p-4 text-[13px] leading-5" : "rounded-3xl p-5 text-sm leading-6"} border border-dashed border-stroke bg-white/50 text-slate-500`}>
-            Connect Reddit or load the sample profile to see inferred themes like underground dance, indie gigs,
+            Connect Spotify or add direct taste signals to see inferred themes like underground dance, indie gigs,
             gallery nights, and creative meetups.
           </div>
         ) : null}

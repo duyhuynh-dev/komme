@@ -2,6 +2,14 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import Response
 
+from app.api.routes import (
+    REDDIT_RETIRED_MESSAGE,
+    reddit_connect_callback,
+    reddit_connect_start,
+    reddit_mock_connect,
+    taste_reddit_export_apply,
+    taste_reddit_export_preview,
+)
 from app.core.config import Settings
 from app.services.auth import (
     build_oauth_state,
@@ -78,3 +86,20 @@ def test_pulse_session_cookie_stays_lax_for_localhost() -> None:
     set_pulse_session_cookie(response, "user-id-123", settings)
 
     assert "SameSite=lax" in response.headers["set-cookie"]
+
+
+async def test_reddit_product_routes_are_retired() -> None:
+    retired_routes = [
+        reddit_connect_start(),
+        reddit_connect_callback(request=None),
+        reddit_mock_connect(),
+        taste_reddit_export_preview(request=None),
+        taste_reddit_export_apply(request=None),
+    ]
+
+    for route_call in retired_routes:
+        with pytest.raises(HTTPException) as exc_info:
+            await route_call
+
+        assert exc_info.value.status_code == 410
+        assert exc_info.value.detail == REDDIT_RETIRED_MESSAGE

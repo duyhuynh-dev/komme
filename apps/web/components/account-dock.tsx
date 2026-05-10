@@ -7,49 +7,30 @@ import {
   ChevronDown,
   ChevronUp,
   Disc3,
-  Link2,
   LogOut,
   Mail,
-  Upload,
   ShieldCheck,
   X,
 } from "lucide-react";
 import {
-  applyRedditExportTaste,
   applySpotifyTaste,
   consumePulseSessionTokenFromUrl,
   getAuthViewer,
   getSpotifyTastePreview,
-  previewRedditExportTaste,
-  startMockRedditConnection,
-  startRedditConnection,
   startSpotifyConnection,
   syncSpotifyTaste,
 } from "@/lib/api";
 import {
   connectedSourceSetupState,
 } from "@/lib/connected-source-health";
-import type { TasteProfileResponse } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 
-function statusCopy(connectionMode: "none" | "live" | "sample", isSignedIn: boolean) {
-  if (connectionMode === "live") {
-    return {
-      eyebrow: "Live Reddit",
-      detail: "Connected and ready for full personalization.",
-    };
-  }
-  if (connectionMode === "sample") {
-    return {
-      eyebrow: "Sample profile",
-      detail: "Attached while Reddit API approval is pending.",
-    };
-  }
+function statusCopy(isSignedIn: boolean) {
   if (isSignedIn) {
     return {
-      eyebrow: "Identity only",
-      detail: "Add providers whenever you want Pulse to sharpen the map around your tastes.",
+      eyebrow: "Pulse account",
+      detail: "Spotify and direct taste controls can shape the map around your night-out preferences.",
     };
   }
   return {
@@ -67,17 +48,10 @@ export function AccountDock() {
     "Continue with Spotify to jump into Pulse fast, or use a magic link if you prefer email.",
   );
   const [showSwitchForm, setShowSwitchForm] = useState(false);
-  const [isConnectingReddit, setIsConnectingReddit] = useState(false);
-  const [isLoadingSample, setIsLoadingSample] = useState(false);
   const [isConnectingSpotify, setIsConnectingSpotify] = useState(false);
   const [isSyncingSpotify, setIsSyncingSpotify] = useState(false);
-  const [isReadingRedditExport, setIsReadingRedditExport] = useState(false);
-  const [isApplyingRedditExport, setIsApplyingRedditExport] = useState(false);
-  const [redditExportFile, setRedditExportFile] = useState<File | null>(null);
-  const [redditExportPreview, setRedditExportPreview] = useState<TasteProfileResponse | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const redditExportInputRef = useRef<HTMLInputElement | null>(null);
   const supabase = getSupabaseBrowserClient();
 
   const viewerQuery = useQuery({
@@ -86,8 +60,7 @@ export function AccountDock() {
   });
 
   const isSignedIn = Boolean(isAuthenticated && !isLoading);
-  const connectionMode = viewerQuery.data?.redditConnectionMode ?? "none";
-  const status = statusCopy(connectionMode, isSignedIn);
+  const status = statusCopy(isSignedIn);
   const spotifyTasteHealth =
     viewerQuery.data?.connectedSources?.find((source) => source.provider === "spotify") ??
     viewerQuery.data?.spotifyTasteHealth;
@@ -192,45 +165,6 @@ export function AccountDock() {
     setMessage(error ? error.message : `Magic link sent to ${email}. Check your inbox and come right back.`);
   };
 
-  const connectReddit = async () => {
-    if (!isAuthenticated) {
-      setMessage("Sign in first so Pulse can attach the Reddit connection to your account.");
-      return;
-    }
-
-    setIsConnectingReddit(true);
-    try {
-      const response = await startRedditConnection();
-      window.location.assign(response.authorizeUrl);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to start Reddit connection.");
-      setIsConnectingReddit(false);
-    }
-  };
-
-  const connectSampleProfile = async () => {
-    if (!isAuthenticated) {
-      setMessage("Sign in first so Pulse can attach the sample profile to your account.");
-      return;
-    }
-
-    setIsLoadingSample(true);
-    try {
-      await startMockRedditConnection();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["auth-viewer"] }),
-        queryClient.invalidateQueries({ queryKey: ["interests"] }),
-        queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
-        queryClient.invalidateQueries({ queryKey: ["archive"] }),
-      ]);
-      setMessage("Sample Reddit profile attached. Swap to live Reddit whenever approval lands.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to attach the sample profile.");
-    } finally {
-      setIsLoadingSample(false);
-    }
-  };
-
   const connectSpotify = async () => {
     setIsConnectingSpotify(true);
     try {
@@ -275,65 +209,6 @@ export function AccountDock() {
       setMessage(error instanceof Error ? error.message : "Unable to refresh Spotify taste right now.");
     } finally {
       setIsSyncingSpotify(false);
-    }
-  };
-
-  const chooseRedditExport = () => {
-    redditExportInputRef.current?.click();
-  };
-
-  const previewRedditExport = async (file: File) => {
-    setIsReadingRedditExport(true);
-    setRedditExportFile(file);
-    try {
-      const preview = await previewRedditExportTaste(file);
-      setRedditExportPreview(preview);
-      if (preview.themes.length) {
-        setMessage(`Reddit export read successfully. Pulse found ${preview.themes.length} possible themes.`);
-      } else {
-        const reason =
-          typeof preview.unmatchedActivity?.reason === "string"
-            ? preview.unmatchedActivity.reason
-            : "Reddit export did not surface enough cultural taste signal yet.";
-        setMessage(reason);
-      }
-    } catch (error) {
-      setRedditExportPreview(null);
-      setMessage(error instanceof Error ? error.message : "Unable to read the Reddit export right now.");
-    } finally {
-      setIsReadingRedditExport(false);
-    }
-  };
-
-  const onRedditExportPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    await previewRedditExport(file);
-    event.target.value = "";
-  };
-
-  const applyRedditExport = async () => {
-    if (!redditExportFile) {
-      setMessage("Choose a Reddit export file first.");
-      return;
-    }
-
-    setIsApplyingRedditExport(true);
-    try {
-      await applyRedditExportTaste(redditExportFile);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["auth-viewer"] }),
-        queryClient.invalidateQueries({ queryKey: ["interests"] }),
-        queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
-        queryClient.invalidateQueries({ queryKey: ["archive"] }),
-      ]);
-      setMessage("Reddit export applied. Pulse just refreshed the map and interest signals.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to apply the Reddit export right now.");
-    } finally {
-      setIsApplyingRedditExport(false);
     }
   };
 
@@ -402,14 +277,7 @@ export function AccountDock() {
 
           {isSignedIn ? (
             <div className="mt-4 space-y-3">
-              <input
-                ref={redditExportInputRef}
-                type="file"
-                accept=".zip,.json,application/zip,application/json"
-                className="hidden"
-                onChange={(event) => void onRedditExportPicked(event)}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2">
                 {!spotifyConnected ? (
                   <button
                     type="button"
@@ -441,96 +309,6 @@ export function AccountDock() {
                     {spotifyPreviewQuery.isLoading ? "Reading Spotify..." : "Refresh Spotify read"}
                   </button>
                 )}
-
-                {connectionMode !== "live" ? (
-                  <button
-                    type="button"
-                    onClick={() => void connectReddit()}
-                    disabled={isConnectingReddit}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                  >
-                    <Link2 className="h-4 w-4" />
-                    {isConnectingReddit ? "Redirecting..." : connectionMode === "sample" ? "Connect live Reddit" : "Connect Reddit"}
-                  </button>
-                ) : (
-                  <div className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
-                    Live Reddit connected
-                  </div>
-                )}
-
-                {connectionMode === "none" ? (
-                  <button
-                    type="button"
-                    onClick={() => void connectSampleProfile()}
-                    disabled={isLoadingSample}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-stroke bg-white px-4 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-60"
-                  >
-                    <Link2 className="h-4 w-4" />
-                    {isLoadingSample ? "Loading sample..." : "Use sample profile"}
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      <Upload className="h-3.5 w-3.5 text-accent" />
-                      Reddit export
-                    </span>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      Upload your Reddit data export if you want broader cultural signal than Spotify alone can provide.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={chooseRedditExport}
-                    disabled={isReadingRedditExport}
-                    className="inline-flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
-                  >
-                    {isReadingRedditExport ? "Reading..." : "Choose file"}
-                  </button>
-                </div>
-
-                {redditExportFile ? (
-                  <p className="mt-3 text-xs leading-5 text-slate-500">Selected: {redditExportFile.name}</p>
-                ) : null}
-
-                {redditExportPreview ? (
-                  <>
-                    {redditExportPreview.themes.length ? (
-                      <>
-                        <p className="mt-3 text-sm leading-6 text-slate-600">
-                          Pulse found {redditExportPreview.themes.length} possible themes from your Reddit export.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {redditExportPreview.themes.slice(0, 4).map((theme) => (
-                            <span
-                              key={theme.id}
-                              className="rounded-full border border-stroke bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
-                            >
-                              {theme.label} · {theme.confidenceLabel}
-                            </span>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void applyRedditExport()}
-                          disabled={isApplyingRedditExport}
-                          className="mt-4 inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                        >
-                          {isApplyingRedditExport ? "Applying Reddit taste..." : "Use Reddit taste"}
-                        </button>
-                      </>
-                    ) : (
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        {typeof redditExportPreview.unmatchedActivity?.reason === "string"
-                          ? redditExportPreview.unmatchedActivity.reason
-                          : "Pulse could not find enough cultural taste signal in this export yet."}
-                      </p>
-                    )}
-                  </>
-                ) : null}
               </div>
 
               <div className="rounded-[1.15rem] border border-stroke/80 bg-white/80 px-3 py-3">

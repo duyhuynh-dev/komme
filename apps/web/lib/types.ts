@@ -227,8 +227,6 @@ export interface AuthViewer {
   isAuthenticated: boolean;
   isDemo: boolean;
   authMethod: "demo" | "supabase" | "pulse_session" | "email_header";
-  redditConnected: boolean;
-  redditConnectionMode: "none" | "live" | "sample";
   spotifyConnected: boolean;
   spotifyTasteHealth: ConnectedSourceHealth;
   connectedSources: ConnectedSourceHealth[];
@@ -241,13 +239,11 @@ export interface ThemeEvidenceCount {
 
 export interface ThemeEvidenceSnippet {
   type: string;
-  subreddit?: string | null;
   snippet: string;
   permalink?: string | null;
 }
 
 export interface ThemeEvidence {
-  matchedSubreddits: ThemeEvidenceCount[];
   matchedKeywords: ThemeEvidenceCount[];
   topExamples: ThemeEvidenceSnippet[];
   providerNotes: string[];

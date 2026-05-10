@@ -20,15 +20,9 @@ class AuthViewerResponse(BaseModel):
     isAuthenticated: bool
     isDemo: bool
     authMethod: str = "demo"
-    redditConnected: bool
-    redditConnectionMode: str = "none"
     spotifyConnected: bool = False
     spotifyTasteHealth: ConnectedSourceHealth = Field(default_factory=ConnectedSourceHealth)
     connectedSources: list[ConnectedSourceHealth] = Field(default_factory=list)
-
-
-class RedditConnectStartResponse(BaseModel):
-    authorizeUrl: str
 
 
 class SpotifyConnectStartResponse(BaseModel):
