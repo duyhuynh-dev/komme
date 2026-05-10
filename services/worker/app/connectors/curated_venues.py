@@ -49,6 +49,7 @@ MONTH_NAME_TO_NUMBER = {
     "november": 11,
     "december": 12,
 }
+MONTH_ABBREVIATION_TO_NUMBER = {name[:3]: number for name, number in MONTH_NAME_TO_NUMBER.items()}
 PUBLIC_RECORDS_SPACE_PREFIXES = [
     "Sound Room The Atrium Upstairs",
     "The Atrium Upstairs",
@@ -81,6 +82,20 @@ PIONEER_START_PATTERN = re.compile(
 NINETYTWO_Y_DATE_PATTERN = re.compile(
     r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})\s+\|\s+(?P<time>\d{1,2}:\d{2}\s*[APMapm]{2})$"
 )
+DICE_EVENT_LINE_PATTERNS = [
+    re.compile(
+        r"^(?P<title>.+?)(?P<weekday>Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+"
+        r"(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})$"
+    ),
+    re.compile(
+        r"^(?P<title>.+?)(?P<weekday>Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+        r"(?P<day>\d{1,2})\s+(?P<month>[A-Za-z]+)$"
+    ),
+    re.compile(
+        r"^(?P<title>.+?)(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})\s*-\s*"
+        r"(?:(?P<end_month>[A-Za-z]+)\s+)?(?P<end_day>\d{1,2})$"
+    ),
+]
 
 
 @dataclass(frozen=True)
@@ -241,6 +256,73 @@ NUBLU = CuratedVenueSource(
     default_duration_hours=3,
     parser_name="json_ld_events",
 )
+DICE_PUBLIC_RECORDS = CuratedVenueSource(
+    key="dice-public-records",
+    listing_url="https://dice.fm/venue/public-records-w2qg?lng=en-US",
+    venue=PUBLIC_RECORDS.venue,
+    default_category="live music",
+    default_duration_hours=3,
+    parser_name="dice_events",
+)
+DICE_ELSEWHERE = CuratedVenueSource(
+    key="dice-elsewhere",
+    listing_url="https://dice.fm/venue/elsewhere-brooklyn-8p85?lng=en-US",
+    venue=VenueMetadata(
+        venue_name="Elsewhere",
+        neighborhood="Bushwick",
+        address="599 Johnson Ave #1, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        postal_code="11237",
+        latitude=40.7063,
+        longitude=-73.9232,
+    ),
+    default_category="live music",
+    default_duration_hours=4,
+    parser_name="dice_events",
+)
+DICE_KNOCKDOWN_CENTER = CuratedVenueSource(
+    key="dice-knockdown-center",
+    listing_url="https://dice.fm/venue/knockdown-center-e776?lng=en-US",
+    venue=KNOCKDOWN_CENTER.venue,
+    default_category="live music",
+    default_duration_hours=5,
+    parser_name="dice_events",
+)
+DICE_RUINS_AT_KNOCKDOWN = CuratedVenueSource(
+    key="dice-ruins-at-knockdown",
+    listing_url="https://dice.fm/venue/ruins-at-knockdown-center-owog?lng=en-US",
+    venue=VenueMetadata(
+        venue_name="Ruins at Knockdown Center",
+        neighborhood="Maspeth",
+        address="52-19 Flushing Ave, Queens, NY",
+        city="New York City",
+        state="NY",
+        postal_code="11378",
+        latitude=40.7156,
+        longitude=-73.9141,
+    ),
+    default_category="live music",
+    default_duration_hours=5,
+    parser_name="dice_events",
+)
+DICE_MARKET_HOTEL = CuratedVenueSource(
+    key="dice-market-hotel",
+    listing_url="https://dice.fm/venue/market-hotel-kvxl?lng=en-US",
+    venue=VenueMetadata(
+        venue_name="Market Hotel",
+        neighborhood="Bushwick",
+        address="1140 Myrtle Ave, Brooklyn, NY",
+        city="New York City",
+        state="NY",
+        postal_code="11221",
+        latitude=40.6978,
+        longitude=-73.9271,
+    ),
+    default_category="live music",
+    default_duration_hours=3,
+    parser_name="dice_events",
+)
 CURATED_SOURCES = [
     PUBLIC_RECORDS,
     PIONEER_WORKS,
@@ -250,6 +332,11 @@ CURATED_SOURCES = [
     HOUSE_OF_YES,
     KNOCKDOWN_CENTER,
     NUBLU,
+    DICE_PUBLIC_RECORDS,
+    DICE_ELSEWHERE,
+    DICE_KNOCKDOWN_CENTER,
+    DICE_RUINS_AT_KNOCKDOWN,
+    DICE_MARKET_HOTEL,
 ]
 
 
@@ -299,6 +386,10 @@ class CuratedVenueConnector:
 
                 if source.parser_name == "ninetytwo_y":
                     source_candidates.extend(_parse_ninetytwo_y_events(html, source))
+                    continue
+
+                if source.parser_name == "dice_events":
+                    source_candidates.extend(_parse_dice_events(html, source))
 
         return _dedupe_candidates(source_candidates)
 
@@ -490,6 +581,106 @@ def _parse_json_ld_events(html: str, source: CuratedVenueSource) -> list[Candida
     return parsed
 
 
+def _parse_dice_events(html: str, source: CuratedVenueSource) -> list[CandidateEvent]:
+    json_ld_candidates = _parse_json_ld_events(html, source)
+    if json_ld_candidates:
+        return json_ld_candidates
+
+    document = HTMLParser(html)
+    event_links = _dice_event_links(document, source)
+    lines = _calendar_lines(document)
+    parsed: list[CandidateEvent] = []
+    seen: set[str] = set()
+
+    for line in lines:
+        event_line = _parse_dice_event_line(line)
+        if event_line is None:
+            continue
+
+        title, starts_at = event_line
+        if title.lower() in {"all events", "popular events", source.venue.venue_name.lower()}:
+            continue
+
+        ticket_url = event_links.get(_slugify(title), source.listing_url)
+        category = _infer_dice_category(title, source.default_category)
+        candidate = _candidate_event(
+            source_name="curated_venues",
+            source_key=source.key,
+            source_base_url=source.listing_url,
+            venue=source.venue,
+            title=title,
+            summary=f"{category.title()} event at {source.venue.venue_name}, listed on DICE.",
+            category=category,
+            starts_at=starts_at,
+            ends_at=starts_at + timedelta(hours=source.default_duration_hours),
+            ticket_url=ticket_url,
+            min_price=None,
+            max_price=None,
+            source_confidence=0.82 if ticket_url != source.listing_url else 0.76,
+            tags=["dice", source.venue.venue_name, category, source.venue.neighborhood],
+        )
+        if candidate.source_event_key in seen:
+            continue
+        seen.add(candidate.source_event_key)
+        parsed.append(candidate)
+
+    return parsed
+
+
+def _dice_event_links(document: HTMLParser, source: CuratedVenueSource) -> dict[str, str]:
+    event_links: dict[str, str] = {}
+    for anchor in document.css("a"):
+        href = anchor.attributes.get("href", "")
+        if "/event/" not in href and "/partner/tickets/event/" not in href:
+            continue
+
+        text = _normalize_text(anchor.text(separator=" ", strip=True))
+        parsed = _parse_dice_event_line(text)
+        if parsed is None:
+            title = text
+        else:
+            title, _ = parsed
+
+        if not title or title.lower() in {"image", "load more"}:
+            continue
+        event_links[_slugify(title)] = urljoin(source.listing_url, href)
+
+    return event_links
+
+
+def _parse_dice_event_line(line: str) -> tuple[str, datetime] | None:
+    normalized = _normalize_text(line)
+    if not normalized:
+        return None
+
+    for pattern in DICE_EVENT_LINE_PATTERNS:
+        match = pattern.match(normalized)
+        if not match:
+            continue
+
+        month_name = match.group("month").lower()
+        month = MONTH_NAME_TO_NUMBER.get(month_name) or MONTH_ABBREVIATION_TO_NUMBER.get(month_name[:3])
+        if month is None:
+            return None
+
+        title = _normalize_text(match.group("title")).strip("·,-")
+        if not title or len(title) < 3:
+            return None
+
+        return title, _parse_local_datetime(month, int(match.group("day")), "9:00 PM")
+
+    return None
+
+
+def _infer_dice_category(title: str, fallback: str) -> str:
+    lowered = title.lower()
+    if any(term in lowered for term in ("dj", "rave", "techno", "dance", "club", "house", "disco")):
+        return "nightlife"
+    if any(term in lowered for term in ("comedy", "screening", "film", "talk", "market")):
+        return "culture"
+    return fallback
+
+
 def _json_ld_event_payloads(document: HTMLParser) -> list[dict]:
     payloads: list[dict] = []
     for node in document.css('script[type="application/ld+json"]'):
@@ -539,6 +730,15 @@ def _flatten_json_ld_events(value: object) -> list[dict]:
             else:
                 flattened.extend(_flatten_json_ld_events(item))
         return flattened
+
+    embedded_events = value.get("event")
+    if isinstance(embedded_events, list):
+        flattened: list[dict] = []
+        for item in embedded_events:
+            flattened.extend(_flatten_json_ld_events(item))
+        return flattened
+    if isinstance(embedded_events, dict):
+        return _flatten_json_ld_events(embedded_events)
 
     return []
 

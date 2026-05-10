@@ -1,9 +1,11 @@
 from app.connectors.curated_venues import (
     ARTISTS_AND_FLEAS,
     CURATED_SOURCES,
+    DICE_ELSEWHERE,
     NINETYTWO_Y,
     PIONEER_WORKS,
     PUBLIC_RECORDS,
+    _parse_dice_events,
     _parse_json_ld_events,
     _parse_ninetytwo_y_events,
     _parse_pioneer_works_calendar,
@@ -80,6 +82,45 @@ NINETYTWO_Y_HTML = """
 </html>
 """
 
+DICE_VENUE_HTML = """
+<html>
+  <body>
+    <h1>Elsewhere, Brooklyn</h1>
+    <a href="/partner/tickets/event/abcd-tycho-brooklyn-20th-feb-elsewhere-brooklyn-new-york-tickets">
+      Tycho Fri Feb 20
+    </a>
+    <a href="/partner/tickets/event/efgh-dance-system-21st-feb-elsewhere-brooklyn-new-york-tickets">
+      Dance System Sat 21 Feb
+    </a>
+    <p>Elsewhere, Brooklyn New York</p>
+  </body>
+</html>
+"""
+
+DICE_JSON_LD_HTML = """
+<html>
+  <head>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Place",
+        "name": "Elsewhere, Brooklyn",
+        "event": [
+          {
+            "@type": "MusicEvent",
+            "url": "https://dice.fm/event/bbow6x-simula-16th-may-elsewhere-brooklyn-new-york-tickets",
+            "name": "Simula, Lemtom, CitySoul",
+            "startDate": "2026-05-16T22:30:00-04:00",
+            "endDate": "2026-05-17T04:00:00-04:00",
+            "description": "DICE ticketed night at Elsewhere."
+          }
+        ]
+      }
+    </script>
+  </head>
+</html>
+"""
+
 
 class FakeResponse:
     def __init__(self, text: str) -> None:
@@ -98,8 +139,38 @@ class FakeClient:
 def test_curated_sources_cover_more_real_nyc_venues() -> None:
     source_keys = {source.key for source in CURATED_SOURCES}
 
-    assert len(CURATED_SOURCES) >= 8
-    assert {"house-of-yes", "knockdown-center", "nublu"}.issubset(source_keys)
+    assert len(CURATED_SOURCES) >= 13
+    assert {
+        "house-of-yes",
+        "knockdown-center",
+        "nublu",
+        "dice-public-records",
+        "dice-elsewhere",
+        "dice-knockdown-center",
+        "dice-ruins-at-knockdown",
+        "dice-market-hotel",
+    }.issubset(source_keys)
+
+
+def test_parse_dice_events_extracts_ticketed_venue_candidates() -> None:
+    candidates = _parse_dice_events(DICE_VENUE_HTML, DICE_ELSEWHERE)
+
+    assert len(candidates) == 2
+    assert candidates[0].venue_name == "Elsewhere"
+    assert candidates[0].title == "Tycho"
+    assert candidates[0].ticket_url.startswith("https://dice.fm/partner/tickets/event/abcd-tycho")
+    assert candidates[0].source_base_url == DICE_ELSEWHERE.listing_url
+    assert candidates[1].title == "Dance System"
+    assert candidates[1].category == "nightlife"
+
+
+def test_parse_dice_events_prefers_embedded_json_ld_events() -> None:
+    candidates = _parse_dice_events(DICE_JSON_LD_HTML, DICE_ELSEWHERE)
+
+    assert len(candidates) == 1
+    assert candidates[0].title == "Simula, Lemtom, CitySoul"
+    assert candidates[0].starts_at == "2026-05-17T02:30:00+00:00"
+    assert candidates[0].ticket_url == "https://dice.fm/event/bbow6x-simula-16th-may-elsewhere-brooklyn-new-york-tickets"
 
 
 def test_parse_public_records_html_extracts_candidate() -> None:
