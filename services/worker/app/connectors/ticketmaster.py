@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
@@ -21,19 +21,30 @@ TOPIC_HINTS = {
 class TicketmasterConnector:
     source_name = "ticketmaster"
 
+    def skip_reason(self) -> str | None:
+        if not get_settings().ticketmaster_api_key:
+            return "missing_ticketmaster_api_key"
+        return None
+
     async def search(self, query: RetrievalQuery) -> list[CandidateEvent]:
         settings = get_settings()
-        if not settings.ticketmaster_api_key:
+        if self.skip_reason():
             return []
 
+        now = datetime.now(tz=UTC)
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.get(
                 "https://app.ticketmaster.com/discovery/v2/events.json",
                 params={
                     "apikey": settings.ticketmaster_api_key,
                     "keyword": query.query,
-                    "city": "New York",
-                    "size": 10,
+                    "latlong": "40.73061,-73.935242",
+                    "radius": 15,
+                    "unit": "miles",
+                    "size": 50,
+                    "sort": "date,asc",
+                    "startDateTime": _ticketmaster_api_datetime(now),
+                    "endDateTime": _ticketmaster_api_datetime(now + timedelta(days=90)),
                 },
             )
             response.raise_for_status()
@@ -92,6 +103,10 @@ class TicketmasterConnector:
                 )
             )
         return events
+
+
+def _ticketmaster_api_datetime(value: datetime) -> str:
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _coerce_coordinate(value: object) -> float | None:

@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from app.connectors.curated_venues import CuratedVenueConnector
+from app.connectors.nyc_events import NYCEventsConnector
+from app.connectors.seatgeek import SeatGeekConnector
 from app.connectors.ticketmaster import TicketmasterConnector
 from app.core.config import get_settings
 from app.models.contracts import CandidateEvent, RetrievalQuery
@@ -16,6 +18,13 @@ DEFAULT_SUPPLY_QUERIES = [
     RetrievalQuery(query="networking panel nyc", source="ticketmaster", category="community"),
     RetrievalQuery(query="design market brooklyn", source="ticketmaster", category="market"),
     RetrievalQuery(query="vintage pop up nyc", source="ticketmaster", category="shopping"),
+    RetrievalQuery(query="techno brooklyn", source="seatgeek", category="live music"),
+    RetrievalQuery(query="indie live music nyc", source="seatgeek", category="live music"),
+    RetrievalQuery(query="comedy nyc", source="seatgeek", category="comedy"),
+    RetrievalQuery(query="theater nyc", source="seatgeek", category="theater"),
+    RetrievalQuery(query="free parks culture", source="nyc_events", category="community"),
+    RetrievalQuery(query="family parks events", source="nyc_events", category="community"),
+    RetrievalQuery(query="outdoor concert", source="nyc_events", category="live music"),
     RetrievalQuery(query="gallery installation nyc", source="curated_venues", category="culture"),
     RetrievalQuery(query="indie songwriter brooklyn", source="curated_venues", category="live music"),
     RetrievalQuery(query="artist talk brooklyn", source="curated_venues", category="talks"),
@@ -29,6 +38,7 @@ class SupplyCollectionResult:
     candidates: list[CandidateEvent] = field(default_factory=list)
     source_counts: dict[str, int] = field(default_factory=dict)
     rejected_counts: dict[str, int] = field(default_factory=dict)
+    skipped_sources: dict[str, str] = field(default_factory=dict)
     ticket_url_count: int = 0
 
 
@@ -43,6 +53,8 @@ async def collect_supply_candidates() -> list[CandidateEvent]:
 async def collect_supply_candidates_with_diagnostics() -> SupplyCollectionResult:
     connectors = {
         "ticketmaster": TicketmasterConnector(),
+        "seatgeek": SeatGeekConnector(),
+        "nyc_events": NYCEventsConnector(),
         "curated_venues": CuratedVenueConnector(),
     }
     seen_keys: set[str] = set()
@@ -53,8 +65,20 @@ async def collect_supply_candidates_with_diagnostics() -> SupplyCollectionResult
         connector = connectors.get(query.source)
         if connector is None:
             continue
+        skip_reason = _connector_skip_reason(connector)
+        if skip_reason:
+            result.skipped_sources[query.source] = skip_reason
+            continue
 
-        for candidate in await connector.search(query):
+        try:
+            connector_candidates = await connector.search(query)
+        except httpx.HTTPError:
+            result.rejected_counts[f"{query.source}_http_error"] = (
+                result.rejected_counts.get(f"{query.source}_http_error", 0) + 1
+            )
+            continue
+
+        for candidate in connector_candidates:
             rejection_reason = _candidate_rejection_reason(candidate)
             if rejection_reason is not None:
                 result.rejected_counts[rejection_reason] = result.rejected_counts.get(rejection_reason, 0) + 1
@@ -70,6 +94,14 @@ async def collect_supply_candidates_with_diagnostics() -> SupplyCollectionResult
             result.ticket_url_count += int(bool(candidate.ticket_url))
 
     return result
+
+
+def _connector_skip_reason(connector: object) -> str | None:
+    skip_reason = getattr(connector, "skip_reason", None)
+    if not callable(skip_reason):
+        return None
+    reason = skip_reason()
+    return reason if isinstance(reason, str) and reason else None
 
 
 def _dedupe_fingerprint(candidate: CandidateEvent) -> str:
@@ -141,5 +173,6 @@ async def run_daily_supply_sync() -> dict:
     payload["ticket_url_count"] = result.ticket_url_count
     payload["source_counts"] = result.source_counts
     payload["rejected_counts"] = result.rejected_counts
+    payload["skipped_sources"] = result.skipped_sources
     payload["fallback_used"] = False
     return payload

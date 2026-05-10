@@ -509,6 +509,7 @@ export interface SupplySyncResponse {
   occurrencesCreated: number;
   sourceCounts: Record<string, number>;
   rejectedCounts: Record<string, number>;
+  skippedSources: Record<string, string>;
   fallbackUsed: boolean;
   status: string;
 }

@@ -13,7 +13,7 @@ def test_daily_supply_queries_cover_api_and_curated_sources() -> None:
     queries = build_daily_supply_queries()
 
     assert len(queries) >= 4
-    assert {query.source for query in queries} == {"ticketmaster", "curated_venues"}
+    assert {query.source for query in queries} == {"ticketmaster", "seatgeek", "nyc_events", "curated_venues"}
 
 
 @pytest.mark.asyncio
@@ -41,6 +41,14 @@ async def test_collect_supply_candidates_dedupes_by_source_event_key(monkeypatch
     monkeypatch.setattr(
         "app.services.supply_sync.TicketmasterConnector",
         lambda: FakeConnector("ticketmaster"),
+    )
+    monkeypatch.setattr(
+        "app.services.supply_sync.SeatGeekConnector",
+        lambda: FakeConnector("seatgeek"),
+    )
+    monkeypatch.setattr(
+        "app.services.supply_sync.NYCEventsConnector",
+        lambda: FakeConnector("nyc_events"),
     )
     monkeypatch.setattr(
         "app.services.supply_sync.CuratedVenueConnector",
@@ -87,13 +95,46 @@ async def test_collect_supply_candidates_dedupes_by_normalized_event_fingerprint
         lambda: FakeConnector("ticketmaster", "Late Night Warehouse Textures", "ticketmaster-1"),
     )
     monkeypatch.setattr(
+        "app.services.supply_sync.SeatGeekConnector",
+        lambda: FakeConnector("seatgeek", "Late Night Warehouse Textures", "seatgeek-1"),
+    )
+    monkeypatch.setattr(
+        "app.services.supply_sync.NYCEventsConnector",
+        lambda: FakeConnector("nyc_events", "Late Night Warehouse Textures", "nyc-events-1"),
+    )
+    monkeypatch.setattr(
         "app.services.supply_sync.CuratedVenueConnector",
         lambda: FakeConnector("curated_venues", "Late Night Warehouse Textures", "curated-1"),
     )
 
     candidates = await collect_supply_candidates()
     assert len(candidates) == 1
-    assert candidates[0].source_event_key in {"ticketmaster-1", "curated-1"}
+    assert candidates[0].source_event_key in {"ticketmaster-1", "seatgeek-1", "nyc-events-1", "curated-1"}
+
+
+@pytest.mark.asyncio
+async def test_collect_supply_candidates_records_skipped_source_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SkippedConnector:
+        def skip_reason(self) -> str:
+            return "missing_demo_key"
+
+        async def search(self, query: RetrievalQuery) -> list[CandidateEvent]:
+            raise AssertionError("Skipped connectors should not be searched")
+
+    class EmptyConnector:
+        async def search(self, query: RetrievalQuery) -> list[CandidateEvent]:
+            return []
+
+    monkeypatch.setattr("app.services.supply_sync.TicketmasterConnector", SkippedConnector)
+    monkeypatch.setattr("app.services.supply_sync.SeatGeekConnector", EmptyConnector)
+    monkeypatch.setattr("app.services.supply_sync.NYCEventsConnector", EmptyConnector)
+    monkeypatch.setattr("app.services.supply_sync.CuratedVenueConnector", EmptyConnector)
+
+    result = await collect_supply_candidates_with_diagnostics()
+
+    assert result.skipped_sources == {"ticketmaster": "missing_demo_key"}
 
 
 def test_candidate_is_usable_rejects_stale_or_invalid_coordinates() -> None:

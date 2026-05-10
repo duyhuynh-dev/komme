@@ -69,6 +69,10 @@ services:
       INNGEST_APP_ID: ${INNGEST_APP_ID}
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
       TICKETMASTER_API_KEY: ${TICKETMASTER_API_KEY}
+      SEATGEEK_CLIENT_ID: ${SEATGEEK_CLIENT_ID:-}
+      SEATGEEK_CLIENT_SECRET: ${SEATGEEK_CLIENT_SECRET:-}
+      NYC_EVENTS_API_URL: ${NYC_EVENTS_API_URL:-}
+      NYC_EVENTS_API_KEY: ${NYC_EVENTS_API_KEY:-}
       INTERNAL_INGEST_SECRET: ${INTERNAL_INGEST_SECRET}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz')"]

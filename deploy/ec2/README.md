@@ -49,6 +49,8 @@ Important production values:
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_CLIENT_SECRET`
 - `TICKETMASTER_API_KEY` if you want live Ticketmaster ingestion
+- `SEATGEEK_CLIENT_ID` and optional `SEATGEEK_CLIENT_SECRET` if you want SeatGeek ingestion
+- `NYC_EVENTS_API_URL` and optional `NYC_EVENTS_API_KEY` if you want an official NYC events/Open Data feed
 - `GEMINI_API_KEY` if you want live AI-backed worker tasks
 - `INNGEST_SIGNING_KEY` so the worker exposes the Inngest serve route
 

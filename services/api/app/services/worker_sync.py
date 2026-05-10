@@ -33,6 +33,7 @@ async def trigger_worker_supply_sync() -> SupplySyncResponse:
         occurrencesCreated=payload.get("occurrences_created", 0),
         sourceCounts=payload.get("source_counts", {}),
         rejectedCounts=payload.get("rejected_counts", {}),
+        skippedSources=payload.get("skipped_sources", {}),
         fallbackUsed=payload.get("fallback_used", False),
         status=payload.get("status", "synced"),
     )

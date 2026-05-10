@@ -21,6 +21,8 @@ async def test_trigger_worker_supply_sync_posts_to_worker_with_shared_secret(
                 "venues_created": 2,
                 "events_created": 3,
                 "occurrences_created": 4,
+                "source_counts": {"curated_venues": 4},
+                "skipped_sources": {"seatgeek": "missing_seatgeek_client_id"},
                 "status": "synced",
             }
 
@@ -53,3 +55,5 @@ async def test_trigger_worker_supply_sync_posts_to_worker_with_shared_secret(
     assert response.candidateCount == 6
     assert response.accepted == 4
     assert response.eventsCreated == 3
+    assert response.sourceCounts == {"curated_venues": 4}
+    assert response.skippedSources == {"seatgeek": "missing_seatgeek_client_id"}

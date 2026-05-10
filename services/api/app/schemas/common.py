@@ -17,5 +17,6 @@ class SupplySyncResponse(BaseModel):
     occurrencesCreated: int = 0
     sourceCounts: dict[str, int] = Field(default_factory=dict)
     rejectedCounts: dict[str, int] = Field(default_factory=dict)
+    skippedSources: dict[str, str] = Field(default_factory=dict)
     fallbackUsed: bool = False
     status: str = "synced"

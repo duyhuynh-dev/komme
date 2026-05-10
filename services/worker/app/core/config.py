@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     gemini_model: str = "google-gla:gemini-2.5-flash"
     inngest_app_id: str = "pulse-worker"
     ticketmaster_api_key: str = ""
+    seatgeek_client_id: str = ""
+    seatgeek_client_secret: str = ""
+    nyc_events_api_url: str = ""
+    nyc_events_api_key: str = ""
     internal_ingest_secret: str = ""
 
     model_config = SettingsConfigDict(

@@ -1,4 +1,10 @@
-from app.connectors.ticketmaster import _normalize_ticketmaster_datetime
+from datetime import UTC, datetime
+
+from app.connectors.ticketmaster import _normalize_ticketmaster_datetime, _ticketmaster_api_datetime
+
+
+def test_ticketmaster_api_datetime_uses_zulu_format() -> None:
+    assert _ticketmaster_api_datetime(datetime(2026, 6, 25, 23, 30, tzinfo=UTC)) == "2026-06-25T23:30:00Z"
 
 
 def test_normalize_ticketmaster_datetime_prefers_datetime_field() -> None:
