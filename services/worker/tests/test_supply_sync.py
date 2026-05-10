@@ -11,9 +11,16 @@ from app.services.supply_sync import (
 
 def test_daily_supply_queries_cover_api_and_curated_sources() -> None:
     queries = build_daily_supply_queries()
+    query_pairs = {(query.source, query.query) for query in queries}
 
-    assert len(queries) >= 4
+    assert len(queries) >= 25
     assert {query.source for query in queries} == {"ticketmaster", "seatgeek", "nyc_events", "curated_venues"}
+    assert ("ticketmaster", "") in query_pairs
+    assert ("ticketmaster", "concert") in query_pairs
+    assert ("ticketmaster", "comedy nyc") in query_pairs
+    assert ("seatgeek", "") in query_pairs
+    assert ("seatgeek", "new york concert") in query_pairs
+    assert ("seatgeek", "theater nyc") in query_pairs
 
 
 @pytest.mark.asyncio
