@@ -264,8 +264,13 @@ export function PulseShell() {
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       void queryClient.invalidateQueries({ queryKey: ["archive"] });
+      const sourceSummary = Object.entries(data.sourceCounts ?? {})
+        .map(([source, count]) => `${source}: ${count}`)
+        .join(", ");
       setSurfaceStatus(
-        `Synced ${data.candidateCount} candidates and saved ${data.accepted} fresh events into the catalog.`,
+        data.fallbackUsed
+          ? "Supply sync fell back to demo data. Real event sources need attention before this is production-quality."
+          : `Synced ${data.realEventCount || data.candidateCount} real events (${data.ticketUrlCount} with ticket/source links)${sourceSummary ? ` from ${sourceSummary}` : ""}.`,
       );
     },
     onError: (error) => {

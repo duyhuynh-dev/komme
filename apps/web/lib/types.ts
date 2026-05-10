@@ -499,11 +499,16 @@ export interface AnchorSaveResponse {
 export interface SupplySyncResponse {
   ok: boolean;
   candidateCount: number;
+  realEventCount: number;
+  ticketUrlCount: number;
   accepted: number;
   sourcesCreated: number;
   venuesCreated: number;
   eventsCreated: number;
   occurrencesCreated: number;
+  sourceCounts: Record<string, number>;
+  rejectedCounts: Record<string, number>;
+  fallbackUsed: boolean;
   status: string;
 }
 

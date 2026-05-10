@@ -24,10 +24,15 @@ async def trigger_worker_supply_sync() -> SupplySyncResponse:
 
     return SupplySyncResponse(
         candidateCount=payload.get("candidate_count", 0),
+        realEventCount=payload.get("real_event_count", payload.get("candidate_count", 0)),
+        ticketUrlCount=payload.get("ticket_url_count", 0),
         accepted=payload.get("accepted", 0),
         sourcesCreated=payload.get("sources_created", 0),
         venuesCreated=payload.get("venues_created", 0),
         eventsCreated=payload.get("events_created", 0),
         occurrencesCreated=payload.get("occurrences_created", 0),
+        sourceCounts=payload.get("source_counts", {}),
+        rejectedCounts=payload.get("rejected_counts", {}),
+        fallbackUsed=payload.get("fallback_used", False),
         status=payload.get("status", "synced"),
     )

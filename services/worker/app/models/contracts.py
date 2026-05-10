@@ -48,6 +48,8 @@ class CandidateEvent(BaseModel):
     longitude: float
     apple_place_id: str | None = None
     ticket_url: str | None = None
+    source_url: str | None = None
+    source_base_url: str | None = None
     min_price: float | None = None
     max_price: float | None = None
     source_confidence: float = 0.7

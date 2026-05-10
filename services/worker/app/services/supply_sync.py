@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 import httpx
 
@@ -23,18 +24,30 @@ DEFAULT_SUPPLY_QUERIES = [
 SUPPLY_LOOKAHEAD = timedelta(days=90)
 
 
+@dataclass
+class SupplyCollectionResult:
+    candidates: list[CandidateEvent] = field(default_factory=list)
+    source_counts: dict[str, int] = field(default_factory=dict)
+    rejected_counts: dict[str, int] = field(default_factory=dict)
+    ticket_url_count: int = 0
+
+
 def build_daily_supply_queries() -> list[RetrievalQuery]:
     return DEFAULT_SUPPLY_QUERIES.copy()
 
 
 async def collect_supply_candidates() -> list[CandidateEvent]:
+    return (await collect_supply_candidates_with_diagnostics()).candidates
+
+
+async def collect_supply_candidates_with_diagnostics() -> SupplyCollectionResult:
     connectors = {
         "ticketmaster": TicketmasterConnector(),
         "curated_venues": CuratedVenueConnector(),
     }
     seen_keys: set[str] = set()
     seen_fingerprints: set[str] = set()
-    candidates: list[CandidateEvent] = []
+    result = SupplyCollectionResult()
 
     for query in build_daily_supply_queries():
         connector = connectors.get(query.source)
@@ -42,16 +55,21 @@ async def collect_supply_candidates() -> list[CandidateEvent]:
             continue
 
         for candidate in await connector.search(query):
-            if not _candidate_is_usable(candidate):
+            rejection_reason = _candidate_rejection_reason(candidate)
+            if rejection_reason is not None:
+                result.rejected_counts[rejection_reason] = result.rejected_counts.get(rejection_reason, 0) + 1
                 continue
             fingerprint = _dedupe_fingerprint(candidate)
             if candidate.source_event_key in seen_keys or fingerprint in seen_fingerprints:
+                result.rejected_counts["duplicate"] = result.rejected_counts.get("duplicate", 0) + 1
                 continue
             seen_keys.add(candidate.source_event_key)
             seen_fingerprints.add(fingerprint)
-            candidates.append(candidate)
+            result.candidates.append(candidate)
+            result.source_counts[candidate.source] = result.source_counts.get(candidate.source, 0) + 1
+            result.ticket_url_count += int(bool(candidate.ticket_url))
 
-    return candidates
+    return result
 
 
 def _dedupe_fingerprint(candidate: CandidateEvent) -> str:
@@ -67,22 +85,30 @@ def _normalize_fingerprint_text(value: str) -> str:
 
 
 def _candidate_is_usable(candidate: CandidateEvent) -> bool:
+    return _candidate_rejection_reason(candidate) is None
+
+
+def _candidate_rejection_reason(candidate: CandidateEvent) -> str | None:
     try:
         starts_at = datetime.fromisoformat(candidate.starts_at.replace("Z", "+00:00"))
     except ValueError:
-        return False
+        return "invalid_start_time"
 
     if starts_at.tzinfo is None:
         starts_at = starts_at.replace(tzinfo=UTC)
 
     now = datetime.now(tz=UTC)
     if starts_at < now - timedelta(hours=4):
-        return False
+        return "stale"
     if starts_at > now + SUPPLY_LOOKAHEAD:
-        return False
+        return "too_far_future"
     if candidate.latitude == 0.0 or candidate.longitude == 0.0:
-        return False
-    return bool(candidate.title.strip() and candidate.venue_name.strip())
+        return "invalid_coordinates"
+    if not candidate.title.strip() or not candidate.venue_name.strip():
+        return "missing_title_or_venue"
+    if not (candidate.ticket_url or candidate.source_url or candidate.source_base_url):
+        return "missing_source_url"
+    return None
 
 
 async def sync_supply_to_api(candidates: list[CandidateEvent]) -> dict:
@@ -108,7 +134,12 @@ async def sync_supply_to_api(candidates: list[CandidateEvent]) -> dict:
 
 
 async def run_daily_supply_sync() -> dict:
-    candidates = await collect_supply_candidates()
-    payload = await sync_supply_to_api(candidates)
-    payload["candidate_count"] = len(candidates)
+    result = await collect_supply_candidates_with_diagnostics()
+    payload = await sync_supply_to_api(result.candidates)
+    payload["candidate_count"] = len(result.candidates)
+    payload["real_event_count"] = len(result.candidates)
+    payload["ticket_url_count"] = result.ticket_url_count
+    payload["source_counts"] = result.source_counts
+    payload["rejected_counts"] = result.rejected_counts
+    payload["fallback_used"] = False
     return payload

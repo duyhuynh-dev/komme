@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db.base import Base
 from app.models.events import CanonicalEvent, EventOccurrence, EventSource, Venue
 from app.schemas.ingestion import IngestCandidateItem
-from app.services.ingestion import _upsert_occurrence
+from app.services.ingestion import _upsert_occurrence, _upsert_source
 
 
 @pytest.mark.asyncio
@@ -52,6 +52,8 @@ async def test_upsert_occurrence_retires_active_sibling_occurrences() -> None:
 
         item = IngestCandidateItem(
             source="ticketmaster",
+            source_base_url="https://www.ticketmaster.com",
+            source_url="https://www.ticketmaster.com/event/demo",
             source_event_key="ticketmaster:event-1",
             title="Intimate Alt-Pop Performance",
             starts_at="2026-04-28T00:30:00+00:00",
@@ -80,5 +82,37 @@ async def test_upsert_occurrence_retires_active_sibling_occurrences() -> None:
         assert occurrences[0].is_active is False
         assert occurrences[1].starts_at == "2026-04-28T00:30:00+00:00"
         assert occurrences[1].is_active is True
+        assert occurrences[1].metadata_json["sourceUrl"] == "https://www.ticketmaster.com/event/demo"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_upsert_source_tracks_source_base_url() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        item = IngestCandidateItem(
+            source="curated:public-records",
+            source_kind="curated",
+            source_base_url="https://publicrecords.nyc/events",
+            source_event_key="public-records:event-1",
+            title="Ambient Floor",
+            starts_at="2026-06-28T00:30:00+00:00",
+            venue_name="Public Records",
+            address="233 Butler St, Brooklyn, NY",
+            latitude=40.6797,
+            longitude=-73.9868,
+        )
+
+        source, created = await _upsert_source(session, item)
+        await session.commit()
+
+        assert created is True
+        assert source.base_url == "https://publicrecords.nyc/events"
 
     await engine.dispose()

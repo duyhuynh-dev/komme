@@ -22,6 +22,8 @@ class IngestCandidateItem(BaseModel):
     min_price: float | None = None
     max_price: float | None = None
     ticket_url: str | None = None
+    source_url: str | None = None
+    source_base_url: str | None = None
     source_confidence: float = 0.7
     topic_keys: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)

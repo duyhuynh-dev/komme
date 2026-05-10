@@ -33,11 +33,13 @@ async def _upsert_source(session: AsyncSession, item: IngestCandidateItem) -> tu
     source = await session.scalar(select(EventSource).where(EventSource.name == item.source))
     created = source is None
     if source is None:
-        source = EventSource(name=item.source, kind=item.source_kind)
+        source = EventSource(name=item.source, kind=item.source_kind, base_url=item.source_base_url)
         session.add(source)
         await session.flush()
     else:
         source.kind = item.source_kind
+        if item.source_base_url:
+            source.base_url = item.source_base_url
 
     return source, created
 
@@ -119,6 +121,7 @@ async def _upsert_occurrence(
     created = occurrence is None
     metadata = {
         "sourceConfidence": item.source_confidence,
+        "sourceUrl": item.source_url,
         "topicKeys": item.topic_keys,
         "tags": item.tags,
     }

@@ -82,6 +82,8 @@ class TicketmasterConnector:
                     latitude=latitude,
                     longitude=longitude,
                     ticket_url=item.get("url"),
+                    source_url=item.get("url"),
+                    source_base_url="https://www.ticketmaster.com",
                     min_price=(item.get("priceRanges") or [{}])[0].get("min"),
                     max_price=(item.get("priceRanges") or [{}])[0].get("max"),
                     source_confidence=0.92,

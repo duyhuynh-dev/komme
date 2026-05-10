@@ -1,5 +1,6 @@
 from app.connectors.curated_venues import (
     ARTISTS_AND_FLEAS,
+    CURATED_SOURCES,
     NINETYTWO_Y,
     PIONEER_WORKS,
     PUBLIC_RECORDS,
@@ -94,6 +95,13 @@ class FakeClient:
         return FakeResponse(PIONEER_WORKS_DETAIL_HTML)
 
 
+def test_curated_sources_cover_more_real_nyc_venues() -> None:
+    source_keys = {source.key for source in CURATED_SOURCES}
+
+    assert len(CURATED_SOURCES) >= 8
+    assert {"house-of-yes", "knockdown-center", "nublu"}.issubset(source_keys)
+
+
 def test_parse_public_records_html_extracts_candidate() -> None:
     candidates = _parse_public_records_html(PUBLIC_RECORDS_HTML, PUBLIC_RECORDS)
 
@@ -102,6 +110,8 @@ def test_parse_public_records_html_extracts_candidate() -> None:
     assert candidate.venue_name == "Public Records"
     assert candidate.title.startswith("International Anthem presents")
     assert candidate.ticket_url == "https://link.dice.fm/public-records-ambient"
+    assert candidate.source_url == "https://link.dice.fm/public-records-ambient"
+    assert candidate.source_base_url == PUBLIC_RECORDS.listing_url
     assert candidate.category == "live music"
 
 
@@ -129,6 +139,8 @@ def test_parse_json_ld_events_extracts_broader_cultural_candidate() -> None:
     assert candidate.venue_name == "Artists & Fleas Williamsburg"
     assert candidate.category == "market"
     assert candidate.ticket_url == "https://example.com/collector-market"
+    assert candidate.source_url == "https://example.com/collector-market"
+    assert candidate.source_base_url == ARTISTS_AND_FLEAS.listing_url
     assert candidate.min_price == 12
     assert candidate.max_price == 18
     assert "collector_marketplaces" in candidate.topic_keys
