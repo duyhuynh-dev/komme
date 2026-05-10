@@ -352,6 +352,20 @@ export interface RecommendationDebugVenue {
   topDrivers: RecommendationScoreBreakdownItem[];
 }
 
+export interface RecommendationSupplyQualityRollup {
+  sourceName: string;
+  sourceKind: string;
+  recommendationCount: number;
+  eventCount: number;
+  staleVerificationCount: number;
+  weakSourceConfidenceCount: number;
+  missingTicketUrlCount: number;
+  missingSourceUrlCount: number;
+  averageRawSourceConfidence: number;
+  averageEffectiveSourceConfidence: number;
+  topTrustReasons: string[];
+}
+
 export interface RecommendationDebugSummary {
   runId?: string | null;
   generatedAt?: string | null;
@@ -363,6 +377,7 @@ export interface RecommendationDebugSummary {
   activeTopics: string[];
   mutedTopics: string[];
   activeTopicSources: RecommendationTopicSourceSummary[];
+  supplyQualityRollups: RecommendationSupplyQualityRollup[];
   topSaveReasons: RecommendationFeedbackReasonSummary[];
   topConfirmedSaveReasons: RecommendationFeedbackReasonSummary[];
   topDismissReasons: RecommendationFeedbackReasonSummary[];

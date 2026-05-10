@@ -30,6 +30,7 @@ from app.schemas.recommendations import (
     RecommendationMovementCue,
     RecommendationMovementExplanation,
     RecommendationOutcomeAttribution,
+    RecommendationSupplyQualityRollup,
     RecommendationTopicSourceSummary,
     RecommendationRunComparison,
     RecommendationRunComparisonItem,
@@ -3081,6 +3082,101 @@ def _supply_trust_assessment(
     )
 
 
+async def _supply_quality_rollups(
+    session: AsyncSession,
+    run: RecommendationRun,
+) -> list[RecommendationSupplyQualityRollup]:
+    recommendation_rows = (
+        await session.scalars(
+            select(VenueRecommendation)
+            .where(VenueRecommendation.run_id == run.id)
+            .order_by(VenueRecommendation.rank.asc())
+        )
+    ).all()
+    buckets: dict[str, dict] = {}
+
+    for recommendation in recommendation_rows:
+        occurrence = await session.get(EventOccurrence, recommendation.event_occurrence_id)
+        event = await session.get(CanonicalEvent, occurrence.event_id if occurrence else None)
+        source = await session.get(EventSource, event.source_id if event else None)
+        if not occurrence or not event or not source:
+            continue
+
+        metadata = occurrence.metadata_json or {}
+        raw_confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
+        assessment = _supply_trust_assessment(occurrence, raw_confidence, source)
+        source_name = _present_source_name(source.name)
+        bucket_key = f"{source.kind}:{source_name}"
+        bucket = buckets.setdefault(
+            bucket_key,
+            {
+                "sourceName": source_name,
+                "sourceKind": source.kind,
+                "recommendationCount": 0,
+                "eventIds": set(),
+                "staleVerificationCount": 0,
+                "weakSourceConfidenceCount": 0,
+                "missingTicketUrlCount": 0,
+                "missingSourceUrlCount": 0,
+                "rawConfidenceSum": 0.0,
+                "effectiveConfidenceSum": 0.0,
+                "trustReasonCounts": {},
+            },
+        )
+        bucket["recommendationCount"] += 1
+        bucket["eventIds"].add(occurrence.id)
+        bucket["rawConfidenceSum"] += assessment.raw_confidence
+        bucket["effectiveConfidenceSum"] += assessment.effective_confidence
+
+        if "Stale verification" in assessment.labels:
+            bucket["staleVerificationCount"] += 1
+        if "Weak source confidence" in assessment.labels:
+            bucket["weakSourceConfidenceCount"] += 1
+        if not occurrence.ticket_url:
+            bucket["missingTicketUrlCount"] += 1
+        if not (metadata.get("sourceUrl") or metadata.get("url") or source.base_url):
+            bucket["missingSourceUrlCount"] += 1
+
+        for label in assessment.labels:
+            bucket["trustReasonCounts"][label] = bucket["trustReasonCounts"].get(label, 0) + 1
+
+    rollups: list[RecommendationSupplyQualityRollup] = []
+    for bucket in buckets.values():
+        count = max(1, bucket["recommendationCount"])
+        top_reasons = [
+            label
+            for label, _ in sorted(
+                bucket["trustReasonCounts"].items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:4]
+        ]
+        rollups.append(
+            RecommendationSupplyQualityRollup(
+                sourceName=bucket["sourceName"],
+                sourceKind=bucket["sourceKind"],
+                recommendationCount=bucket["recommendationCount"],
+                eventCount=len(bucket["eventIds"]),
+                staleVerificationCount=bucket["staleVerificationCount"],
+                weakSourceConfidenceCount=bucket["weakSourceConfidenceCount"],
+                missingTicketUrlCount=bucket["missingTicketUrlCount"],
+                missingSourceUrlCount=bucket["missingSourceUrlCount"],
+                averageRawSourceConfidence=round(bucket["rawConfidenceSum"] / count, 3),
+                averageEffectiveSourceConfidence=round(bucket["effectiveConfidenceSum"] / count, 3),
+                topTrustReasons=top_reasons,
+            )
+        )
+
+    rollups.sort(
+        key=lambda item: (
+            -item.staleVerificationCount,
+            -item.weakSourceConfidenceCount,
+            -item.missingTicketUrlCount,
+            item.sourceName,
+        )
+    )
+    return rollups
+
+
 def _build_provenance(source: EventSource, occurrence: EventOccurrence) -> RecommendationProvenance:
     metadata = occurrence.metadata_json or {}
     raw_confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
@@ -3246,6 +3342,7 @@ async def get_recommendation_debug_summary(
     )
     _, items, _ = await _cards_for_run(session, run)
     positive_drivers, negative_drivers = _driver_summaries(items)
+    supply_quality_rollups = await _supply_quality_rollups(session, run)
 
     return RecommendationDebugSummary(
         runId=run.id,
@@ -3268,6 +3365,7 @@ async def get_recommendation_debug_summary(
             _latest_profile_runs_by_provider(profile_runs),
             connected_providers,
         ),
+        supplyQualityRollups=supply_quality_rollups,
         topSaveReasons=_feedback_reason_summaries(feedback_signals, action="save"),
         topConfirmedSaveReasons=_confirmed_save_reason_summaries(feedback_signals),
         topDismissReasons=_feedback_reason_summaries(feedback_signals, action="dismiss"),

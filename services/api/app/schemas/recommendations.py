@@ -246,6 +246,20 @@ class RecommendationTopicSourceSummary(BaseModel):
     debugReason: str | None = None
 
 
+class RecommendationSupplyQualityRollup(BaseModel):
+    sourceName: str
+    sourceKind: str
+    recommendationCount: int = 0
+    eventCount: int = 0
+    staleVerificationCount: int = 0
+    weakSourceConfidenceCount: int = 0
+    missingTicketUrlCount: int = 0
+    missingSourceUrlCount: int = 0
+    averageRawSourceConfidence: float = 0.0
+    averageEffectiveSourceConfidence: float = 0.0
+    topTrustReasons: list[str] = Field(default_factory=list)
+
+
 class RecommendationMovementCue(BaseModel):
     key: str
     label: str
@@ -281,6 +295,7 @@ class RecommendationDebugSummary(BaseModel):
     activeTopics: list[str] = Field(default_factory=list)
     mutedTopics: list[str] = Field(default_factory=list)
     activeTopicSources: list[RecommendationTopicSourceSummary] = Field(default_factory=list)
+    supplyQualityRollups: list[RecommendationSupplyQualityRollup] = Field(default_factory=list)
     topSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topConfirmedSaveReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)
     topDismissReasons: list[RecommendationFeedbackReasonSummary] = Field(default_factory=list)

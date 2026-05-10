@@ -6,6 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { getEventPlanSessionDebug, getRecommendationDebugSummary, getRecommendationRunComparison } from "@/lib/api";
 import { movementExplanationSourceLabel, movementExplanationTone } from "@/lib/recommendation-movement";
 import { outcomeAttributionSourceLabel, outcomeAttributionTone } from "@/lib/outcome-attribution";
+import {
+  supplyQualityConfidenceDelta,
+  supplyQualityIssueCount,
+  supplyQualityTone,
+} from "@/lib/supply-quality";
 import type {
   PlannerSessionDebugItem,
   RecommendationDebugSummary,
@@ -15,6 +20,7 @@ import type {
   RecommendationRunComparison,
   RecommendationRunComparisonItem,
   RecommendationScoreBreakdownItem,
+  RecommendationSupplyQualityRollup,
 } from "@/lib/types";
 import { formatTimestamp } from "@/lib/utils";
 
@@ -78,6 +84,45 @@ function FeedbackReasonChip({ item }: { item: RecommendationFeedbackReasonSummar
       <p className="mt-2 text-sm text-slate-600">
         Weighted strength {item.weightedStrength.toFixed(3)}
       </p>
+    </div>
+  );
+}
+
+function SupplyQualityCard({ rollup }: { rollup: RecommendationSupplyQualityRollup }) {
+  const issueCount = supplyQualityIssueCount(rollup);
+  const confidenceDelta = supplyQualityConfidenceDelta(rollup);
+
+  return (
+    <div className={["rounded-[1.25rem] border px-4 py-3", supplyQualityTone(rollup)].join(" ")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{rollup.sourceName}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{rollup.sourceKind}</p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+          {issueCount} issues
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 sm:grid-cols-4">
+        <span>{rollup.recommendationCount} recs</span>
+        <span>{rollup.staleVerificationCount} stale</span>
+        <span>{rollup.weakSourceConfidenceCount} weak</span>
+        <span>{rollup.missingTicketUrlCount + rollup.missingSourceUrlCount} missing URLs</span>
+      </div>
+      <p className="mt-3 text-sm text-slate-700">
+        Confidence {Math.round(rollup.averageRawSourceConfidence * 100)}% raw to{" "}
+        {Math.round(rollup.averageEffectiveSourceConfidence * 100)}% effective
+        {confidenceDelta < 0 ? ` (${confidenceDelta.toFixed(3)})` : ""}
+      </p>
+      {rollup.topTrustReasons.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {rollup.topTrustReasons.map((reason) => (
+            <span key={`${rollup.sourceName}-${reason}`} className="rounded-full border border-stroke/80 bg-white px-3 py-1 text-xs text-slate-600">
+              {reason}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -465,6 +510,21 @@ export function RecommendationOpsPageContent() {
                   </div>
                 </div>
               </div>
+            </SectionShell>
+
+            <SectionShell
+              title="Supply quality"
+              subtitle="Source-level trust rollups for the current recommendation run."
+            >
+              {debugSummary.supplyQualityRollups.length ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {debugSummary.supplyQualityRollups.map((rollup) => (
+                    <SupplyQualityCard key={`${rollup.sourceKind}-${rollup.sourceName}`} rollup={rollup} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No source-level supply quality issues are visible in this run.</p>
+              )}
             </SectionShell>
 
             <SectionShell title="Driver summary" subtitle="Aggregated across the current shortlist.">

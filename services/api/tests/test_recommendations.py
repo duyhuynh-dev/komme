@@ -43,6 +43,7 @@ from app.services.recommendations import (
     _personalization_provenance,
     _score_breakdown_items,
     _score_summary,
+    _supply_quality_rollups,
     _supply_trust_assessment,
     _unpack_reason_payload,
 )
@@ -267,6 +268,120 @@ def test_debug_top_drivers_keeps_supply_trust_visible() -> None:
         "budget_fit",
         "supply_trust",
     ]
+
+
+@pytest.mark.asyncio
+async def test_supply_quality_rollups_count_stale_weak_and_missing_urls() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        user = User(email="supply-rollups@example.com")
+        source = EventSource(name="small_feed", kind="aggregator", base_url=None)
+        venue = Venue(
+            name="Public Records",
+            neighborhood="Gowanus",
+            address="233 Butler St, Brooklyn, NY",
+            city="Brooklyn",
+            state="NY",
+            latitude=40.6787,
+            longitude=-73.9831,
+        )
+        second_venue = Venue(
+            name="Elsewhere",
+            neighborhood="Bushwick",
+            address="599 Johnson Ave, Brooklyn, NY",
+            city="Brooklyn",
+            state="NY",
+            latitude=40.7082,
+            longitude=-73.9232,
+        )
+        session.add_all([user, source, venue, second_venue])
+        await session.flush()
+
+        stale_event = CanonicalEvent(
+            source_id=source.id,
+            source_event_key="small-feed:event-1",
+            title="Late Night Warehouse Set",
+            category="live music",
+            summary="All-night lineup",
+        )
+        weak_event = CanonicalEvent(
+            source_id=source.id,
+            source_event_key="small-feed:event-2",
+            title="Gallery Afterparty",
+            category="culture",
+            summary="Late gallery gathering",
+        )
+        session.add_all([stale_event, weak_event])
+        await session.flush()
+
+        stale_occurrence = EventOccurrence(
+            event_id=stale_event.id,
+            venue_id=venue.id,
+            starts_at="2026-04-28T01:00:00+00:00",
+            ticket_url="https://example.com/tickets",
+            metadata_json={"sourceConfidence": 0.9, "sourceUrl": "https://example.com/event-1"},
+            updated_at=datetime.now(tz=UTC) - timedelta(days=5),
+        )
+        weak_occurrence = EventOccurrence(
+            event_id=weak_event.id,
+            venue_id=second_venue.id,
+            starts_at="2026-04-29T01:00:00+00:00",
+            ticket_url=None,
+            metadata_json={"sourceConfidence": 0.66},
+            updated_at=datetime.now(tz=UTC) - timedelta(hours=2),
+        )
+        run = RecommendationRun(user_id=user.id, provider="catalog", model_name="test", viewport_json={})
+        session.add_all([stale_occurrence, weak_occurrence, run])
+        await session.flush()
+        session.add_all(
+            [
+                VenueRecommendation(
+                    run_id=run.id,
+                    venue_id=second_venue.id,
+                    event_occurrence_id=stale_occurrence.id,
+                    rank=1,
+                    score=0.8,
+                    score_band="high",
+                    reasons_json=[],
+                    travel_json=[],
+                ),
+                VenueRecommendation(
+                    run_id=run.id,
+                    venue_id=venue.id,
+                    event_occurrence_id=weak_occurrence.id,
+                    rank=2,
+                    score=0.7,
+                    score_band="medium",
+                    reasons_json=[],
+                    travel_json=[],
+                ),
+            ]
+        )
+        await session.flush()
+
+        rollups = await _supply_quality_rollups(session, run)
+
+        assert len(rollups) == 1
+        rollup = rollups[0]
+        assert rollup.sourceName == "Small Feed"
+        assert rollup.sourceKind == "aggregator"
+        assert rollup.recommendationCount == 2
+        assert rollup.eventCount == 2
+        assert rollup.staleVerificationCount == 1
+        assert rollup.weakSourceConfidenceCount == 1
+        assert rollup.missingTicketUrlCount == 1
+        assert rollup.missingSourceUrlCount == 1
+        assert rollup.averageRawSourceConfidence == 0.78
+        assert rollup.averageEffectiveSourceConfidence < rollup.averageRawSourceConfidence
+        assert "Stale verification" in rollup.topTrustReasons
+        assert "Missing ticket/source URL" in rollup.topTrustReasons
+
+    await engine.dispose()
 
 
 def test_personalization_provenance_identifies_source_contributors() -> None:
