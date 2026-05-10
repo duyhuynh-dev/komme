@@ -383,8 +383,6 @@ export function TonightPlannerPanel({
               </article>
             );
           })}
-
-          {panelState.planningNote ? <p className="px-2 text-xs uppercase tracking-[0.18em] text-slate-400">{panelState.planningNote}</p> : null}
         </div>
       ) : null}
     </section>
