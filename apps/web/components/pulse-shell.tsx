@@ -452,7 +452,7 @@ export function PulseShell() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
             <InterestProfilePanel
               topics={interestsQuery.data?.topics ?? []}
               isLoading={interestsQuery.isLoading}
@@ -521,7 +521,7 @@ export function PulseShell() {
               }}
             />
 
-            <div className="min-h-[22rem] flex-1">
+            <div className="min-h-[22rem] shrink-0 xl:flex-1">
               <RecommendationDrawer
                 loading={mapQuery.isLoading}
                 cards={mapQuery.data?.cards ?? {}}

@@ -77,7 +77,7 @@ export function TonightPlannerPanel({
   );
 
   return (
-    <section className="rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
+    <section className="shrink-0 rounded-[2rem] border border-stroke/80 bg-card/80 p-4 shadow-float backdrop-blur">
       <div className="px-2 pb-3">
         <div className="flex flex-wrap items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-slate-500">
           <Sparkles className="h-4 w-4 text-accent" />
