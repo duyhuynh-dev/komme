@@ -80,8 +80,8 @@ export function RecommendationDrawer({
           ].join(" ")}
           aria-expanded={isRail ? isExpanded : undefined}
         >
-          <h2 className={`${isRail ? "text-lg" : "text-2xl"} font-semibold`}>Top spots this week</h2>
-          <p className={`${isRail ? "mt-1 text-[13px] leading-5" : "mt-1 text-sm"} text-slate-500`}>
+          <h2 className={`${isRail ? "text-base" : "text-2xl"} font-semibold`}>Top spots this week</h2>
+          <p className={`${isRail ? "mt-0.5 text-xs leading-5" : "mt-1 text-sm"} text-slate-500`}>
             Choose a card to focus the map and compare this week&apos;s strongest venue fits.
           </p>
         </button>
@@ -89,13 +89,13 @@ export function RecommendationDrawer({
 
       <div className={["min-h-0 pr-1", isRail ? "flex-1 space-y-2.5 overflow-y-auto" : "space-y-4"].join(" ")}>
         {loading ? (
-          <div className={`${isRail ? "rounded-[1.35rem] p-4 text-[13px]" : "rounded-3xl p-5 text-sm"} border border-stroke bg-white/70 text-slate-500`}>
+          <div className={`${isRail ? "rounded-[1.25rem] p-3 text-xs" : "rounded-3xl p-5 text-sm"} border border-stroke bg-white/70 text-slate-500`}>
             Loading your current venue shortlist...
           </div>
         ) : null}
 
         {!loading && !orderedCards.length ? (
-          <div className={`${isRail ? "rounded-[1.35rem] p-4 text-[13px]" : "rounded-3xl p-5 text-sm"} border border-dashed border-stroke bg-white/70 text-slate-500`}>
+          <div className={`${isRail ? "rounded-[1.25rem] p-3 text-xs" : "rounded-3xl p-5 text-sm"} border border-dashed border-stroke bg-white/70 text-slate-500`}>
             No saved recommendation run yet. Use Sync supply to pull in fresh events, then refresh picks to populate this drawer.
           </div>
         ) : null}
@@ -130,22 +130,22 @@ export function RecommendationDrawer({
               }}
               className={[
                 "w-full border text-left transition",
-                isRail ? "rounded-[1.35rem] p-3" : "rounded-[1.75rem] p-4",
+                isRail ? "rounded-[1.25rem] p-3" : "rounded-[1.75rem] p-4",
                 selected ? "border-accent bg-accentSoft/60" : "border-stroke bg-white/80 hover:bg-white"
               ].join(" ")}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className={`${isRail ? "text-[11px] tracking-[0.2em]" : "text-xs tracking-[0.22em]"} uppercase text-slate-500`}>{card.neighborhood}</p>
-                  <h3 className={`${isRail ? "mt-1.5 text-base" : "mt-2 text-lg"} font-semibold text-slate-900`}>{card.venueName}</h3>
-                  <p className={`${isRail ? "mt-0.5 text-[13px]" : "mt-1 text-sm"} text-slate-600`}>{card.eventTitle}</p>
+                  <h3 className={`${isRail ? "mt-1 text-[15px]" : "mt-2 text-lg"} font-semibold text-slate-900`}>{card.venueName}</h3>
+                  <p className={`${isRail ? "mt-0.5 text-xs" : "mt-1 text-sm"} text-slate-600`}>{card.eventTitle}</p>
                 </div>
                 <span className={`${isRail ? "px-2.5 py-0.5 text-[10px] tracking-[0.18em]" : "px-3 py-1 text-xs tracking-[0.2em]"} rounded-full bg-white font-semibold uppercase text-accent`}>
                   {card.scoreBand}
                 </span>
               </div>
 
-              <div className={`${isRail ? "mt-3 gap-2.5 text-[13px]" : "mt-4 gap-3 text-sm"} flex flex-wrap items-center text-slate-600`}>
+              <div className={`${isRail ? "mt-2.5 gap-2 text-xs" : "mt-4 gap-3 text-sm"} flex flex-wrap items-center text-slate-600`}>
                 <span>{formatEventStart(card.startsAt, timezone)}</span>
                 <span>{card.priceLabel}</span>
                 <span className="inline-flex items-center gap-1">
