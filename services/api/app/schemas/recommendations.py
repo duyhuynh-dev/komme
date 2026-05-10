@@ -25,6 +25,7 @@ class RecommendationProvenance(BaseModel):
     sourceConfidenceLabel: str
     sourceBaseUrl: str | None = None
     hasTicketUrl: bool = False
+    trustReasons: list[str] = Field(default_factory=list)
 
 
 class RecommendationScoreBreakdownItem(BaseModel):

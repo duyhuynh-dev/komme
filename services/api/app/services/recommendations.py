@@ -177,6 +177,17 @@ class CandidateScoreComponents:
     source_weight_labels: list[str] = field(default_factory=list)
     stale_provider_adjustment: float = 0.0
     stale_provider_labels: list[str] = field(default_factory=list)
+    supply_trust_adjustment: float = 0.0
+    supply_trust_labels: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SupplyTrustAssessment:
+    raw_confidence: float
+    effective_confidence: float
+    confidence_adjustment: float
+    labels: list[str] = field(default_factory=list)
+    debug_reasons: list[str] = field(default_factory=list)
 
 
 async def _latest_run(session: AsyncSession, user_id: str) -> RecommendationRun | None:
@@ -1455,6 +1466,8 @@ def _candidate_score(
     category: str = "",
     tags: list[str] | None = None,
     stale_provider_keys: set[str] | None = None,
+    raw_source_confidence: float | None = None,
+    supply_trust_labels: list[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile]]:
     score, matched_topics, muted_topics, _ = _candidate_score_with_components(
         topic_keys,
@@ -1465,6 +1478,8 @@ def _candidate_score(
         category=category,
         tags=tags,
         stale_provider_keys=stale_provider_keys,
+        raw_source_confidence=raw_source_confidence,
+        supply_trust_labels=supply_trust_labels,
     )
     return score, matched_topics, muted_topics
 
@@ -1479,8 +1494,11 @@ def _candidate_score_with_components(
     category: str = "",
     tags: list[str] | None = None,
     stale_provider_keys: set[str] | None = None,
+    raw_source_confidence: float | None = None,
+    supply_trust_labels: list[str] | None = None,
 ) -> tuple[float, list[UserInterestProfile], list[UserInterestProfile], CandidateScoreComponents]:
     stale_provider_keys = stale_provider_keys or set()
+    raw_source_confidence = source_confidence if raw_source_confidence is None else raw_source_confidence
     unweighted_interest_fit, _, _, _ = _interest_fit(
         topic_keys,
         profiles_by_key,
@@ -1552,6 +1570,8 @@ def _candidate_score_with_components(
             if stale_topics
             else 0.0,
             stale_provider_labels=sorted({topic.label for topic in stale_topics}),
+            supply_trust_adjustment=round((source_confidence - raw_source_confidence) * 0.05, 3),
+            supply_trust_labels=supply_trust_labels or [],
         ),
     )
 
@@ -1634,6 +1654,20 @@ def _score_breakdown_items(
             "summaryLabel": "source trust",
         },
     ]
+
+    if components.supply_trust_labels:
+        items.append(
+            {
+                "key": "supply_trust",
+                "label": "Supply freshness",
+                "impactLabel": _impact_label(components.supply_trust_adjustment),
+                "detail": "Event supply trust adjusted confidence: "
+                f"{_join_labels(components.supply_trust_labels)}.",
+                "contribution": components.supply_trust_adjustment,
+                "direction": "negative" if components.supply_trust_adjustment < 0 else "positive",
+                "summaryLabel": "supply trust",
+            }
+        )
 
     if components.weighted_category >= 0.015:
         items.append(
@@ -2094,6 +2128,14 @@ def _driver_summaries(
         key=lambda summary: summary.averageContribution,
     )
     return positive[:4], negative[:4]
+
+
+def _debug_top_drivers(score_breakdown: list[RecommendationScoreBreakdownItem]) -> list[RecommendationScoreBreakdownItem]:
+    top_drivers = list(score_breakdown[:3])
+    for factor in score_breakdown:
+        if factor.key == "supply_trust" and factor not in top_drivers:
+            top_drivers.append(factor)
+    return top_drivers[:5]
 
 
 def _feedback_reason_summaries(
@@ -2764,13 +2806,16 @@ async def refresh_recommendations_for_user(
         event = await session.get(CanonicalEvent, occurrence.event_id)
         if not venue or not event:
             continue
+        source = await session.get(EventSource, event.source_id)
         if venue.city not in {"New York City", "New York", "Brooklyn", "Queens", "Bronx", "Staten Island"}:
             continue
 
         travel = estimate_travel_bands(origin_latitude, origin_longitude, venue.latitude, venue.longitude)
         metadata = occurrence.metadata_json or {}
         topic_keys = metadata.get("topicKeys") or _derive_topic_keys(event, metadata.get("tags", []))
-        source_confidence = metadata.get("sourceConfidence", 0.75)
+        raw_source_confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
+        supply_trust = _supply_trust_assessment(occurrence, raw_source_confidence, source)
+        source_confidence = supply_trust.effective_confidence
         budget_fit = _budget_fit(constraints, occurrence)
         transit_minutes = _transit_minutes(travel)
         score, matched_topics, muted_topics, score_components = _candidate_score_with_components(
@@ -2782,6 +2827,8 @@ async def refresh_recommendations_for_user(
             category=event.category,
             tags=metadata.get("tags", []),
             stale_provider_keys=stale_provider_keys,
+            raw_source_confidence=raw_source_confidence,
+            supply_trust_labels=supply_trust.labels,
         )
         feedback_adjustment, feedback_reason = _feedback_adjustment(
             topic_keys=topic_keys,
@@ -2978,16 +3025,74 @@ def _build_freshness(occurrence: EventOccurrence) -> RecommendationFreshness:
     )
 
 
+def _supply_trust_assessment(
+    occurrence: EventOccurrence,
+    raw_confidence: float,
+    source: EventSource | None = None,
+    *,
+    now: datetime | None = None,
+) -> SupplyTrustAssessment:
+    now = now or datetime.now(tz=UTC)
+    metadata = occurrence.metadata_json or {}
+    confidence_penalty = 0.0
+    labels: list[str] = []
+    debug_reasons: list[str] = []
+
+    verified_at = occurrence.updated_at
+    if verified_at is None:
+        confidence_penalty += 0.06
+        labels.append("Verification missing")
+        debug_reasons.append("missing updated_at")
+    else:
+        verification_age = now - _timestamp_utc(verified_at)
+        if verification_age <= timedelta(days=1):
+            labels.append("Recently verified")
+            debug_reasons.append("verified within 24h")
+        elif verification_age > timedelta(days=7):
+            confidence_penalty += 0.22
+            labels.append("Stale verification")
+            debug_reasons.append("last verified over 7d ago")
+        elif verification_age > timedelta(days=3):
+            confidence_penalty += 0.16
+            labels.append("Stale verification")
+            debug_reasons.append("last verified over 3d ago")
+        else:
+            labels.append("Checked this week")
+            debug_reasons.append("verified within 3d")
+
+    if raw_confidence < 0.72:
+        confidence_penalty += 0.06
+        labels.append("Weak source confidence")
+        debug_reasons.append(f"raw source confidence {raw_confidence:.2f}")
+
+    has_source_url = bool(metadata.get("sourceUrl") or metadata.get("url") or (source.base_url if source else None))
+    if not occurrence.ticket_url and not has_source_url:
+        confidence_penalty += 0.07
+        labels.append("Missing ticket/source URL")
+        debug_reasons.append("no ticket_url or source URL")
+
+    effective_confidence = max(0.2, min(0.99, raw_confidence - confidence_penalty))
+    return SupplyTrustAssessment(
+        raw_confidence=round(raw_confidence, 3),
+        effective_confidence=round(effective_confidence, 3),
+        confidence_adjustment=round(effective_confidence - raw_confidence, 3),
+        labels=_dedupe_preserve_order(labels),
+        debug_reasons=debug_reasons,
+    )
+
+
 def _build_provenance(source: EventSource, occurrence: EventOccurrence) -> RecommendationProvenance:
     metadata = occurrence.metadata_json or {}
-    confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
+    raw_confidence = float(metadata.get("sourceConfidence", 0.75) or 0.75)
+    supply_trust = _supply_trust_assessment(occurrence, raw_confidence, source)
     return RecommendationProvenance(
         sourceName=_present_source_name(source.name),
         sourceKind=source.kind,
-        sourceConfidence=round(confidence, 2),
-        sourceConfidenceLabel=_source_confidence_label(confidence, source.kind),
+        sourceConfidence=round(supply_trust.effective_confidence, 2),
+        sourceConfidenceLabel=_source_confidence_label(supply_trust.effective_confidence, source.kind),
         sourceBaseUrl=source.base_url,
         hasTicketUrl=bool(occurrence.ticket_url),
+        trustReasons=supply_trust.labels,
     )
 
 
@@ -2997,6 +3102,14 @@ def _present_source_name(name: str) -> str:
     if name == "curated_venues":
         return "Curated venue calendars"
     return name.replace("_", " ").title()
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped
 
 
 def _source_confidence_label(confidence: float, source_kind: str) -> str:
@@ -3009,7 +3122,9 @@ def _source_confidence_label(confidence: float, source_kind: str) -> str:
     return "Emerging signal"
 
 
-def _freshness_label(updated_at: datetime) -> str:
+def _freshness_label(updated_at: datetime | None) -> str:
+    if updated_at is None:
+        return "Verification missing"
     age = datetime.now(tz=UTC) - _timestamp_utc(updated_at)
     if age <= timedelta(hours=6):
         return "Verified recently"
@@ -3017,7 +3132,7 @@ def _freshness_label(updated_at: datetime) -> str:
         return "Checked today"
     if age <= timedelta(days=3):
         return "Checked this week"
-    return "Needs refresh soon"
+    return "Stale verification"
 
 
 def _iso_or_none(value: datetime | None) -> str | None:
@@ -3167,7 +3282,7 @@ async def get_recommendation_debug_summary(
                 score=item.score,
                 scoreBand=item.scoreBand,
                 scoreSummary=item.scoreSummary,
-                topDrivers=item.scoreBreakdown[:3],
+                topDrivers=_debug_top_drivers(item.scoreBreakdown),
             )
             for index, item in enumerate(items)
         ],

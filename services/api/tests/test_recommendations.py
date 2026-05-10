@@ -28,10 +28,13 @@ from app.schemas.recommendations import (
 from app.services.recommendations import (
     AnchorResolution,
     CandidateScoreComponents,
+    _build_freshness,
+    _build_provenance,
     _compare_shortlists,
     _comparison_summary_sentence,
     _context_hash,
     _deletable_run_ids,
+    _debug_top_drivers,
     _driver_summaries,
     _feedback_adjustment,
     _feedback_signals,
@@ -40,6 +43,7 @@ from app.services.recommendations import (
     _personalization_provenance,
     _score_breakdown_items,
     _score_summary,
+    _supply_trust_assessment,
     _unpack_reason_payload,
 )
 
@@ -116,6 +120,153 @@ def test_pack_and_unpack_reason_payload_preserves_explainability_metadata() -> N
     assert unpacked_breakdown[0].impactLabel == "driving this pick"
     assert unpacked_provenance[0].sourceProvider == "spotify"
     assert unpacked_provenance[0].influence == "supporting"
+
+
+def _supply_occurrence(
+    *,
+    ticket_url: str | None,
+    source_confidence: float,
+    updated_at: datetime | None,
+    metadata: dict | None = None,
+) -> EventOccurrence:
+    occurrence = EventOccurrence(
+        event_id="event-1",
+        venue_id="venue-1",
+        starts_at="2026-04-25T01:00:00+00:00",
+        ticket_url=ticket_url,
+        metadata_json={"sourceConfidence": source_confidence, **(metadata or {})},
+    )
+    occurrence.created_at = datetime(2026, 4, 20, 12, 0, tzinfo=UTC)
+    occurrence.updated_at = updated_at
+    return occurrence
+
+
+def test_stale_event_trust_label_and_confidence_penalty() -> None:
+    occurrence = _supply_occurrence(
+        ticket_url="https://example.com/tickets",
+        source_confidence=0.9,
+        updated_at=datetime(2026, 4, 20, 12, 0, tzinfo=UTC),
+    )
+
+    freshness = _build_freshness(occurrence)
+    assessment = _supply_trust_assessment(
+        occurrence,
+        0.9,
+        now=datetime(2026, 4, 25, 12, 0, tzinfo=UTC),
+    )
+
+    assert freshness.freshnessLabel == "Stale verification"
+    assert "Stale verification" in assessment.labels
+    assert assessment.effective_confidence < assessment.raw_confidence
+
+
+def test_weak_source_confidence_explanation_in_provenance() -> None:
+    source = EventSource(kind="aggregator", name="small_feed", base_url="https://example.com")
+    occurrence = _supply_occurrence(
+        ticket_url="https://example.com/tickets",
+        source_confidence=0.66,
+        updated_at=datetime.now(tz=UTC),
+    )
+
+    provenance = _build_provenance(source, occurrence)
+
+    assert provenance.sourceConfidence < 0.66
+    assert provenance.sourceConfidenceLabel == "Emerging signal"
+    assert "Weak source confidence" in provenance.trustReasons
+    assert "Recently verified" in provenance.trustReasons
+
+
+def test_missing_ticket_and_source_url_reduces_supply_trust() -> None:
+    source = EventSource(kind="aggregator", name="unknown_feed", base_url=None)
+    occurrence = _supply_occurrence(
+        ticket_url=None,
+        source_confidence=0.82,
+        updated_at=datetime(2026, 4, 25, 10, 0, tzinfo=UTC),
+    )
+
+    assessment = _supply_trust_assessment(
+        occurrence,
+        0.82,
+        source,
+        now=datetime(2026, 4, 25, 12, 0, tzinfo=UTC),
+    )
+
+    assert "Missing ticket/source URL" in assessment.labels
+    assert assessment.effective_confidence < 0.82
+
+
+def test_supply_trust_penalty_is_visible_in_score_breakdown() -> None:
+    assessment_labels = ["Stale verification", "Missing ticket/source URL"]
+    items = _score_breakdown_items(
+        components=CandidateScoreComponents(
+            interest_fit=0.82,
+            category_fit=0.45,
+            distance_fit=0.95,
+            budget_fit=0.92,
+            source_confidence=0.66,
+            transit_minutes=18,
+            weighted_interest=0.525,
+            weighted_category=0.068,
+            weighted_distance=0.105,
+            weighted_budget=0.092,
+            weighted_source=0.033,
+            supply_trust_adjustment=-0.012,
+            supply_trust_labels=assessment_labels,
+        ),
+        matched_labels=["Underground dance"],
+        muted_labels=[],
+        feedback_adjustment=0.0,
+        feedback_reason=None,
+    )
+
+    supply_item = next(item for item in items if item["key"] == "supply_trust")
+    assert supply_item["direction"] == "negative"
+    assert supply_item["contribution"] == -0.012
+    assert "Stale verification" in supply_item["detail"]
+    assert "Missing ticket/source URL" in supply_item["detail"]
+
+
+def test_debug_top_drivers_keeps_supply_trust_visible() -> None:
+    factors = [
+        RecommendationScoreBreakdownItem(
+            key="profile_fit",
+            label="Profile fit",
+            impactLabel="driving this pick",
+            detail="Matched Underground dance.",
+            contribution=0.52,
+        ),
+        RecommendationScoreBreakdownItem(
+            key="travel_fit",
+            label="Travel fit",
+            impactLabel="helping",
+            detail="Close enough by transit.",
+            contribution=0.1,
+        ),
+        RecommendationScoreBreakdownItem(
+            key="budget_fit",
+            label="Budget fit",
+            impactLabel="helping",
+            detail="Comfortably inside budget.",
+            contribution=0.09,
+        ),
+        RecommendationScoreBreakdownItem(
+            key="supply_trust",
+            label="Supply freshness",
+            impactLabel="small drag",
+            detail="Event supply trust adjusted confidence: Stale verification.",
+            contribution=-0.012,
+            direction="negative",
+        ),
+    ]
+
+    top_drivers = _debug_top_drivers(factors)
+
+    assert [factor.key for factor in top_drivers] == [
+        "profile_fit",
+        "travel_fit",
+        "budget_fit",
+        "supply_trust",
+    ]
 
 
 def test_personalization_provenance_identifies_source_contributors() -> None:
