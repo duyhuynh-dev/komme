@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  applyManualTaste,
   sendDigestPreview,
   getAuthViewer,
   getEmailPreferences,
   getInterests,
   getMapRecommendations,
   getRecommendationRunComparison,
+  getTasteThemes,
   patchInterests,
   refreshRecommendations,
   submitEventPlanInteractions,
@@ -22,6 +24,7 @@ import { useAuth } from "@/components/auth-provider";
 import { AccountDock } from "@/components/account-dock";
 import { FeedbackReasonModal } from "@/components/feedback-reason-modal";
 import { InterestProfilePanel } from "@/components/interest-profile-panel";
+import { PulseConciergePanel } from "@/components/pulse-concierge-panel";
 import { RailModal } from "@/components/rail-modal";
 import { RecommendationDrawer } from "@/components/recommendation-drawer";
 import { PulseMap } from "@/components/pulse-map";
@@ -64,6 +67,10 @@ export function PulseShell() {
     queryKey: ["recommendation-run-comparison", identityKey],
     queryFn: getRecommendationRunComparison,
   });
+  const tasteThemesQuery = useQuery({
+    queryKey: ["taste-themes"],
+    queryFn: getTasteThemes,
+  });
 
   const applyPlannerActionResponse = (update: PlannerSessionRouteUpdate | null | undefined) => {
     if (!update) {
@@ -86,6 +93,46 @@ export function PulseShell() {
   const interestsQuery = useQuery({
     queryKey: ["interests", identityKey],
     queryFn: getInterests
+  });
+
+  const conciergeMutation = useMutation({
+    mutationFn: async ({
+      prompt,
+      themeIds,
+      labels,
+    }: {
+      prompt: string;
+      themeIds: string[];
+      labels: string[];
+    }) => {
+      await applyManualTaste(themeIds);
+      await refreshRecommendations();
+      return { prompt, labels };
+    },
+    onMutate: ({ labels }) => {
+      setSurfaceStatus(
+        labels.length
+          ? `Concierge is steering Pulse toward ${labels.slice(0, 3).join(", ")}...`
+          : "Concierge is updating the map around your requested night...",
+      );
+    },
+    onSuccess: async ({ labels }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["interests"] }),
+        queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
+        queryClient.invalidateQueries({ queryKey: ["archive"] }),
+        queryClient.invalidateQueries({ queryKey: ["recommendation-run-comparison"] }),
+      ]);
+      setSelectedVenueId(null);
+      setSurfaceStatus(
+        labels.length
+          ? `Planned around ${labels.slice(0, 3).join(", ")}. The map and planner just rebuilt.`
+          : "Pulse rebuilt the map and planner around your request.",
+      );
+    },
+    onError: (error) => {
+      setSurfaceStatus(error instanceof Error ? error.message : "Unable to plan around that request right now.");
+    },
   });
 
   const toggleTopicMutation = useMutation({
@@ -402,6 +449,13 @@ export function PulseShell() {
             </div>
           </div>
         </header>
+
+        <PulseConciergePanel
+          themes={tasteThemesQuery.data?.items ?? []}
+          isLoading={tasteThemesQuery.isLoading}
+          isSubmitting={conciergeMutation.isPending}
+          onSubmit={(payload) => conciergeMutation.mutate(payload)}
+        />
 
         <section className="relative z-0 grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.58fr)_minmax(23rem,0.82fr)]">
           <div className="flex min-h-[58vh] min-w-0 flex-col overflow-hidden rounded-[2rem] border border-stroke/80 bg-card/80 shadow-float">

@@ -15,6 +15,7 @@ import type {
   RecommendationsMapResponse,
   SupplySyncResponse,
   TasteProfileResponse,
+  ThemeCatalogItem,
   TonightPlannerStop,
   UserConstraint
 } from "@/lib/types";
@@ -298,6 +299,17 @@ export function signOutPulseSession() {
 export function startSpotifyConnection() {
   return request<{ authorizeUrl: string }>("/v1/spotify/connect/start", {
     method: "POST"
+  });
+}
+
+export function getTasteThemes() {
+  return request<{ items: ThemeCatalogItem[] }>("/v1/taste/themes");
+}
+
+export function applyManualTaste(selectedThemeIds: string[]) {
+  return request<TasteProfileResponse>("/v1/taste/manual/apply", {
+    method: "POST",
+    body: JSON.stringify({ selectedThemeIds }),
   });
 }
 

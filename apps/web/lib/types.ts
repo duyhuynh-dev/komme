@@ -220,6 +220,12 @@ export interface ConnectedSourceHealth {
   debugReason?: string | null;
 }
 
+export interface ThemeCatalogItem {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface AuthViewer {
   userId: string;
   email: string;
