@@ -40,12 +40,12 @@ const steps = [
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f8f3ea] text-slate-950">
+    <main className="landing-page min-h-screen overflow-hidden bg-[#f8f3ea] text-slate-950">
       <section className="relative isolate px-5 py-5 sm:px-8 lg:px-10">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_12%,rgba(15,118,110,0.16),transparent_28%),radial-gradient(circle_at_86%_8%,rgba(245,158,11,0.15),transparent_24%),linear-gradient(180deg,#fffdf8_0%,#f1e7d9_100%)]" />
-        <div className="mx-auto flex max-w-7xl items-center justify-between rounded-full border border-stroke/80 bg-white/65 px-4 py-3 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="landing-ambient absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_12%,rgba(15,118,110,0.16),transparent_28%),radial-gradient(circle_at_86%_8%,rgba(245,158,11,0.15),transparent_24%),linear-gradient(180deg,#fffdf8_0%,#f1e7d9_100%)]" />
+        <div className="landing-reveal mx-auto flex max-w-7xl items-center justify-between rounded-full border border-stroke/80 bg-white/65 px-4 py-3 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur">
           <Link href="/landing" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-950">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
+            <span className="landing-pulse-mark flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
               <Sparkles className="h-4 w-4" />
             </span>
             Pulse
@@ -63,7 +63,7 @@ export default function LandingPage() {
           </nav>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-canvas"
+            className="landing-button inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-canvas"
           >
             Open app
             <ArrowRight className="h-4 w-4" />
@@ -72,43 +72,43 @@ export default function LandingPage() {
 
         <div className="mx-auto grid max-w-7xl gap-10 pb-16 pt-16 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:pb-24 lg:pt-24">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/70 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-teal-800">
+            <div className="landing-reveal [animation-delay:120ms] inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/70 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-teal-800">
               <ShieldCheck className="h-3.5 w-3.5" />
               NYC event planner
             </div>
-            <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-slate-950 sm:text-6xl lg:text-7xl">
+            <h1 className="landing-reveal mt-6 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-slate-950 [animation-delay:210ms] sm:text-6xl lg:text-7xl">
               Plan the night. Not another list.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
+            <p className="landing-reveal mt-6 max-w-2xl text-lg leading-8 text-slate-600 [animation-delay:300ms] sm:text-xl">
               Pulse turns real NYC events into a personal map, then builds a simple route you can actually use tonight.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="landing-reveal mt-8 flex flex-col gap-3 [animation-delay:390ms] sm:flex-row">
               <Link
                 href="/"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5"
+                className="landing-button inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5"
               >
                 Open Pulse
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
                 href="#how"
-                className="inline-flex items-center justify-center rounded-full border border-stroke bg-white/75 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-white"
+                className="landing-button inline-flex items-center justify-center rounded-full border border-stroke bg-white/75 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-white"
               >
                 See how it works
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap gap-2">
+            <div className="landing-reveal mt-8 flex flex-wrap gap-2 [animation-delay:480ms]">
               {proofPoints.map((point) => (
-                <span key={point} className="rounded-full border border-stroke/80 bg-white/65 px-3 py-1.5 text-xs font-medium text-slate-600">
+                <span key={point} className="landing-proof-pill rounded-full border border-stroke/80 bg-white/65 px-3 py-1.5 text-xs font-medium text-slate-600">
                   {point}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="relative">
-            <div className="absolute -inset-8 -z-10 rounded-[3rem] bg-gradient-to-br from-teal-200/35 via-white/10 to-amber-200/45 blur-2xl" />
-            <div className="rounded-[2rem] border border-stroke/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(15,23,42,0.16)] backdrop-blur">
+          <div className="landing-reveal relative [animation-delay:320ms]">
+            <div className="landing-orb absolute -inset-8 -z-10 rounded-[3rem] bg-gradient-to-br from-teal-200/35 via-white/10 to-amber-200/45 blur-2xl" />
+            <div className="landing-float rounded-[2rem] border border-stroke/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(15,23,42,0.16)] backdrop-blur">
               <div className="rounded-[1.5rem] border border-stroke bg-[#fbf8f1] p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -119,7 +119,7 @@ export default function LandingPage() {
                     Live
                   </span>
                 </div>
-                <div className="mt-5 space-y-3">
+                <div className="landing-plan-stack mt-5 space-y-3">
                   <PlanRow time="7:30" role="Pregame" title="Low-key listening room" meta="13 min transit" />
                   <PlanRow time="9:00" role="Main" title="Dance floor pick" meta="Ticket/source ready" active />
                   <PlanRow time="11:15" role="Late option" title="Backup nearby" meta="Short hop" />
@@ -147,7 +147,7 @@ export default function LandingPage() {
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
-                <article key={feature.title} className="rounded-[1.6rem] border border-stroke/80 bg-white/72 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
+                <article key={feature.title} className="landing-hover-card rounded-[1.6rem] border border-stroke/80 bg-white/72 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
                   <Icon className="h-5 w-5 text-accent" />
                   <h3 className="mt-5 text-xl font-semibold tracking-[-0.035em] text-slate-950">{feature.title}</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{feature.body}</p>
@@ -166,7 +166,7 @@ export default function LandingPage() {
           </div>
           <div className="grid gap-3">
             {steps.map((step, index) => (
-              <div key={step} className="flex gap-4 rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4">
+              <div key={step} className="landing-step-row flex gap-4 rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-950">
                   {index + 1}
                 </span>
@@ -191,7 +191,7 @@ export default function LandingPage() {
           </div>
           <Link
             href="/"
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+            className="landing-button inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
           >
             Enter Pulse
             <ArrowRight className="h-4 w-4" />
@@ -216,7 +216,7 @@ function PlanRow({
   active?: boolean;
 }) {
   return (
-    <div className={["rounded-[1.15rem] border p-3", active ? "border-teal-200 bg-teal-50" : "border-stroke bg-white/75"].join(" ")}>
+    <div className={["landing-plan-row rounded-[1.15rem] border p-3", active ? "border-teal-200 bg-teal-50" : "border-stroke bg-white/75"].join(" ")}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-semibold text-slate-950">{time}</span>
         <span className="rounded-full border border-stroke/70 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -231,7 +231,7 @@ function PlanRow({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.2rem] border border-stroke/80 bg-white/75 p-3">
+    <div className="landing-metric rounded-[1.2rem] border border-stroke/80 bg-white/75 p-3">
       <p className="text-2xl font-semibold tracking-[-0.05em] text-slate-950">{value}</p>
       <p className="mt-1 text-xs font-medium text-slate-500">{label}</p>
     </div>

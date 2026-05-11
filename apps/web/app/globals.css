@@ -108,3 +108,162 @@ body {
 .maplibregl-ctrl-bottom-right {
   margin: 0 1rem 1rem 0 !important;
 }
+
+.landing-ambient {
+  background-size: 120% 120%;
+  animation: landing-ambient-drift 18s ease-in-out infinite alternate;
+}
+
+.landing-reveal {
+  animation: landing-rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-float {
+  animation: landing-float 7s ease-in-out infinite;
+}
+
+.landing-orb {
+  animation: landing-orb 9s ease-in-out infinite alternate;
+}
+
+.landing-pulse-mark {
+  animation: landing-pulse 2.8s ease-in-out infinite;
+}
+
+.landing-button {
+  will-change: transform;
+}
+
+.landing-button:hover {
+  transform: translateY(-2px);
+}
+
+.landing-proof-pill {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.landing-proof-pill:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 118, 110, 0.34);
+  background-color: rgba(255, 255, 255, 0.88);
+}
+
+.landing-hover-card,
+.landing-step-row,
+.landing-metric,
+.landing-plan-row {
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.landing-hover-card:hover,
+.landing-step-row:hover,
+.landing-metric:hover,
+.landing-plan-row:hover {
+  transform: translateY(-4px);
+  border-color: rgba(15, 118, 110, 0.28);
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.1);
+}
+
+.landing-plan-stack .landing-plan-row {
+  animation: landing-plan-in 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-plan-stack .landing-plan-row:nth-child(1) {
+  animation-delay: 520ms;
+}
+
+.landing-plan-stack .landing-plan-row:nth-child(2) {
+  animation-delay: 660ms;
+}
+
+.landing-plan-stack .landing-plan-row:nth-child(3) {
+  animation-delay: 800ms;
+}
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-plan-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.4deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(0.4deg);
+  }
+}
+
+@keyframes landing-orb {
+  from {
+    transform: translate3d(-10px, 8px, 0) scale(0.98);
+    opacity: 0.72;
+  }
+  to {
+    transform: translate3d(12px, -10px, 0) scale(1.05);
+    opacity: 0.95;
+  }
+}
+
+@keyframes landing-ambient-drift {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 42%;
+  }
+}
+
+@keyframes landing-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.26);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(15, 118, 110, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-ambient,
+  .landing-reveal,
+  .landing-float,
+  .landing-orb,
+  .landing-pulse-mark,
+  .landing-plan-stack .landing-plan-row {
+    animation: none;
+  }
+
+  .landing-button:hover,
+  .landing-proof-pill:hover,
+  .landing-hover-card:hover,
+  .landing-step-row:hover,
+  .landing-metric:hover,
+  .landing-plan-row:hover {
+    transform: none;
+  }
+}
