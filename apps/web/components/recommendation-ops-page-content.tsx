@@ -412,7 +412,7 @@ export function RecommendationOpsPageContent() {
               Use this page to inspect the current run, compare it against the previous shortlist, and see what is driving ranking movement.
             </p>
           </div>
-          <Link href="/" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700">
+          <Link href="/app" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700">
             Back to map
           </Link>
         </div>

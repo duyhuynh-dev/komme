@@ -1,6 +1,2 @@
-import { PulseShell } from "@/components/pulse-shell";
-
-export default function HomePage() {
-  return <PulseShell />;
-}
-
+export { metadata } from "@/app/landing/page";
+export { default } from "@/app/landing/page";

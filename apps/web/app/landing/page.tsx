@@ -67,7 +67,7 @@ export default function LandingPage() {
       <section className="relative isolate px-5 py-5 sm:px-8 lg:px-10">
         <div className="landing-ambient absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_12%,rgba(15,118,110,0.16),transparent_28%),radial-gradient(circle_at_86%_8%,rgba(245,158,11,0.15),transparent_24%),linear-gradient(180deg,#fffdf8_0%,#f1e7d9_100%)]" />
         <div className="landing-reveal mx-auto flex max-w-7xl items-center justify-between rounded-full border border-stroke/80 bg-white/65 px-4 py-3 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur">
-          <Link href="/landing" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-950">
+          <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-950">
             <span className="landing-pulse-mark flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
               <Sparkles className="h-4 w-4" />
             </span>
@@ -85,7 +85,7 @@ export default function LandingPage() {
             </a>
           </nav>
           <Link
-            href="/"
+            href="/app"
             className="landing-button inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-canvas"
           >
             Try it out
@@ -107,7 +107,7 @@ export default function LandingPage() {
             </p>
             <div className="landing-reveal mt-8 flex flex-col gap-3 [animation-delay:390ms] sm:flex-row">
               <Link
-                href="/"
+                href="/app"
                 className="landing-button inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5"
               >
                 Try Komme
@@ -252,13 +252,13 @@ export default function LandingPage() {
       <footer className="px-5 pb-8 pt-6 sm:px-8 lg:px-10">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 border-t border-stroke/80 pt-6 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link href="/landing" className="font-semibold text-slate-900">
+            <Link href="/" className="font-semibold text-slate-900">
               Komme
             </Link>
             <p className="mt-1 text-xs leading-5">NYC event discovery, personalization, and night planning.</p>
           </div>
           <div className="flex flex-wrap gap-4 text-xs font-medium">
-            <Link href="/" className="transition hover:text-slate-900">
+            <Link href="/app" className="transition hover:text-slate-900">
               Try it out
             </Link>
             <span>Privacy: connected signals stay user-controlled.</span>

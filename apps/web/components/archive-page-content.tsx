@@ -162,7 +162,7 @@ export function ArchivePageContent() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Archive</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight">Weekly venue picks</h1>
           </div>
-          <Link href="/" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700">
+          <Link href="/app" className="rounded-full border border-stroke px-4 py-2 text-sm text-slate-700">
             Back to map
           </Link>
         </div>
