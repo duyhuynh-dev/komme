@@ -186,6 +186,43 @@ body {
   animation-delay: 800ms;
 }
 
+.landing-title-slot {
+  display: block;
+  min-height: 2.1rem;
+  position: relative;
+}
+
+.landing-title-cycle {
+  display: inline-grid;
+  overflow: hidden;
+  position: relative;
+  vertical-align: top;
+}
+
+.landing-title-cycle > span {
+  animation: landing-title-cycle 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(0.9em);
+  white-space: nowrap;
+}
+
+.landing-title-cycle > span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.landing-title-cycle > span:nth-child(2) {
+  animation-delay: 3s;
+}
+
+.landing-title-cycle > span:nth-child(3) {
+  animation-delay: 6s;
+}
+
+.landing-title-cycle > span:nth-child(4) {
+  animation-delay: 9s;
+}
+
 @keyframes landing-rise {
   from {
     opacity: 0;
@@ -194,6 +231,26 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes landing-title-cycle {
+  0% {
+    opacity: 0;
+    transform: translateY(0.9em);
+    filter: blur(4px);
+  }
+  6%,
+  22% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  28%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.9em);
+    filter: blur(4px);
   }
 }
 
@@ -254,8 +311,19 @@ body {
   .landing-float,
   .landing-orb,
   .landing-pulse-mark,
+  .landing-title-cycle > span,
   .landing-plan-stack .landing-plan-row {
     animation: none;
+  }
+
+  .landing-title-cycle > span {
+    display: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .landing-title-cycle > span:first-child {
+    display: inline;
   }
 
   .landing-button:hover,

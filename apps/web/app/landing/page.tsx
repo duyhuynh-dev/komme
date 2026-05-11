@@ -38,6 +38,8 @@ const steps = [
   "Open a clean route, swap weak stops, and jump to the source link.",
 ];
 
+const planTitles = ["Brooklyn after dark", "Jazz then drinks", "Cheap dance night", "Date night in LES"];
+
 export default function LandingPage() {
   return (
     <main className="landing-page min-h-screen overflow-hidden bg-[#f8f3ea] text-slate-950">
@@ -113,7 +115,14 @@ export default function LandingPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Tonight plan</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">Brooklyn after dark</h2>
+                    <h2 className="landing-title-slot mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <span className="sr-only">Brooklyn after dark</span>
+                      <span aria-hidden="true" className="landing-title-cycle">
+                        {planTitles.map((title) => (
+                          <span key={title}>{title}</span>
+                        ))}
+                      </span>
+                    </h2>
                   </div>
                   <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-teal-800">
                     Live
