@@ -88,7 +88,7 @@ export default function LandingPage() {
             href="/"
             className="landing-button inline-flex items-center gap-2 rounded-full border border-stroke bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-canvas"
           >
-            Open app
+            Try it out
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -222,7 +222,7 @@ export default function LandingPage() {
 
       <section id="trust" className="px-5 py-12 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-7xl rounded-[2rem] border border-stroke/80 bg-white/70 p-6 shadow-[0_18px_52px_rgba(15,23,42,0.08)] md:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
             <div className="max-w-2xl">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 <ShieldCheck className="h-4 w-4 text-accent" />
@@ -233,13 +233,6 @@ export default function LandingPage() {
                 Pulse is designed to show where events came from, why they ranked, and how your actions change the next run.
               </p>
             </div>
-            <Link
-              href="/"
-              className="landing-button inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
-            >
-              Enter Pulse
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </div>
           <div className="mt-7 grid gap-3 md:grid-cols-3">
             {trustSignals.map((item) => {
@@ -266,7 +259,7 @@ export default function LandingPage() {
           </div>
           <div className="flex flex-wrap gap-4 text-xs font-medium">
             <Link href="/" className="transition hover:text-slate-900">
-              Open app
+              Try it out
             </Link>
             <span>Privacy: connected signals stay user-controlled.</span>
             <span>Copyright © 2026 Duy Huynh.</span>
