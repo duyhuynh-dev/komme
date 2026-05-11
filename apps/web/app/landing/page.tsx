@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowRight, Eye, Map, RefreshCw, Route, ShieldCheck, Sparkles, Ticket } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Pulse | Plan better nights in NYC",
-  description: "Pulse turns real NYC event supply into a personal map and a simple night plan.",
+  title: "Komme | Plan better nights in NYC",
+  description: "Komme turns real NYC event supply into a personal map and a simple night plan.",
 };
 
 const proofPoints = [
@@ -18,7 +18,7 @@ const features = [
   {
     icon: Ticket,
     title: "Real events first",
-    body: "Pulse pulls from ticketing and venue sources, then keeps provenance visible so the shortlist feels trustworthy.",
+    body: "Komme pulls from ticketing and venue sources, then keeps provenance visible so the shortlist feels trustworthy.",
     label: "Supply",
   },
   {
@@ -37,7 +37,7 @@ const features = [
 
 const steps = [
   "Choose a vibe or connect Spotify.",
-  "Pulse ranks real NYC options around your context.",
+  "Komme ranks real NYC options around your context.",
   "Open a clean route, swap weak stops, and jump to the source link.",
 ];
 
@@ -71,7 +71,7 @@ export default function LandingPage() {
             <span className="landing-pulse-mark flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
               <Sparkles className="h-4 w-4" />
             </span>
-            Pulse
+            Komme
           </Link>
           <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
             <a href="#product" className="transition hover:text-slate-950">
@@ -103,14 +103,14 @@ export default function LandingPage() {
               Plan the night. Not another list.
             </h1>
             <p className="landing-reveal mt-6 max-w-2xl text-lg leading-8 text-slate-600 [animation-delay:300ms] sm:text-xl">
-              Pulse turns real NYC events into a personal map, then builds a simple route you can actually use tonight.
+              Komme turns real NYC events into a personal map, then builds a simple route you can actually use tonight.
             </p>
             <div className="landing-reveal mt-8 flex flex-col gap-3 [animation-delay:390ms] sm:flex-row">
               <Link
                 href="/"
                 className="landing-button inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5"
               >
-                Open Pulse
+                Try Komme
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
@@ -175,7 +175,7 @@ export default function LandingPage() {
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-slate-600 md:justify-self-end">
-              Pulse keeps the experience focused: one map, one shortlist, one route, and enough context to trust the pick.
+              Komme keeps the experience focused: one map, one shortlist, one route, and enough context to trust the pick.
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -230,7 +230,7 @@ export default function LandingPage() {
               </div>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-slate-950">Useful recommendations need receipts.</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Pulse is designed to show where events came from, why they ranked, and how your actions change the next run.
+                Komme is designed to show where events came from, why they ranked, and how your actions change the next run.
               </p>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-5 border-t border-stroke/80 pt-6 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
           <div>
             <Link href="/landing" className="font-semibold text-slate-900">
-              Pulse
+              Komme
             </Link>
             <p className="mt-1 text-xs leading-5">NYC event discovery, personalization, and night planning.</p>
           </div>

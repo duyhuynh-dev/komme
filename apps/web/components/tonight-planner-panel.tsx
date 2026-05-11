@@ -97,7 +97,7 @@ export function TonightPlannerPanel({
         </div>
         <h2 className="mt-1.5 text-lg font-semibold text-slate-900">{panelState.headline}</h2>
         <p className="mt-1 text-[13px] leading-5 text-slate-500">
-          {loading ? "Pulse is sequencing the live shortlist into a workable night..." : panelState.summary}
+          {loading ? "Komme is sequencing the live shortlist into a workable night..." : panelState.summary}
         </p>
         {panelState.executionNote ? (
           <div
@@ -162,7 +162,7 @@ export function TonightPlannerPanel({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-800">Live reroute</p>
                 <p className="mt-1 text-sm leading-6 text-amber-900">
                   {panelState.rerouteNote ??
-                    "Pulse is checking the current shortlist for the cleanest next move tonight."}
+                    "Komme is checking the current shortlist for the cleanest next move tonight."}
                 </p>
               </div>
               {panelState.rerouteOption ? (

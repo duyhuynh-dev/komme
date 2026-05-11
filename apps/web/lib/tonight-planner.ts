@@ -78,7 +78,7 @@ export function buildTonightPlannerPanelState(
       headline: "Build a night from the shortlist",
       summary:
         planner?.summary ??
-        "Pulse will sketch a 2-3 stop route once tonight has enough viable options in the current shortlist.",
+        "Komme will sketch a 2-3 stop route once tonight has enough viable options in the current shortlist.",
       planningNote: planner?.planningNote ?? null,
       executionStatus: planner?.executionStatus ?? "idle",
       executionNote: planner?.executionNote ?? null,
@@ -114,7 +114,7 @@ export function buildTonightPlannerPanelState(
     headline: stopCountLabel,
     summary:
       planner.summary ??
-      "Pulse turned the current shortlist into a lightweight plan for tonight.",
+      "Komme turned the current shortlist into a lightweight plan for tonight.",
     planningNote: planner.planningNote ?? null,
     executionStatus: planner.executionStatus,
     executionNote: planner.executionNote ?? null,
@@ -169,7 +169,7 @@ export function plannerOutcomePrompt(
   if (outcomeStatus !== "pending" && outcomeNote) {
     return outcomeNote;
   }
-  return `Let Pulse know whether ${activeTargetVenueName} actually made tonight's plan.`;
+  return `Let Komme know whether ${activeTargetVenueName} actually made tonight's plan.`;
 }
 
 export function plannerRerouteButtonLabel(option: TonightPlannerRerouteOption | null): string {

@@ -4,7 +4,7 @@ import "@/app/globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "Pulse",
+  title: "Komme",
   description: "Map-first personalized event discovery for NYC."
 };
 

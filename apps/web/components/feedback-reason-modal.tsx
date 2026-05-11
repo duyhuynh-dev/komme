@@ -83,7 +83,7 @@ export function FeedbackReasonModal({
         <div>
           <p className="text-sm leading-6 text-slate-600">{prompt}</p>
           <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">
-            Pick up to {MAX_REASON_SELECTIONS}. This helps Pulse sharpen future ranking.
+            Pick up to {MAX_REASON_SELECTIONS}. This helps Komme sharpen future ranking.
           </p>
         </div>
 

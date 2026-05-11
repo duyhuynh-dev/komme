@@ -435,7 +435,7 @@ export function RecommendationOpsPageContent() {
 
             <SectionShell
               title="Run summary"
-              subtitle={debugSummary.summary ?? "Pulse has not generated a summary for this run yet."}
+              subtitle={debugSummary.summary ?? "Komme has not generated a summary for this run yet."}
             >
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
                 <div className="rounded-[1.25rem] border border-stroke/80 bg-canvas px-4 py-4">
@@ -569,7 +569,7 @@ export function RecommendationOpsPageContent() {
                       <FeedbackReasonChip key={`confirmed-${item.key}`} item={item} />
                     ))
                   ) : (
-                    <p className="text-sm text-slate-500">Pulse has not validated any save patterns yet.</p>
+                    <p className="text-sm text-slate-500">Komme has not validated any save patterns yet.</p>
                   )}
                 </div>
                 <div className="space-y-4">
@@ -642,7 +642,7 @@ export function RecommendationOpsPageContent() {
 
             <SectionShell
               title="Run comparison"
-              subtitle={comparison.summary ?? "Pulse needs more ranking history before the comparison becomes interesting."}
+              subtitle={comparison.summary ?? "Komme needs more ranking history before the comparison becomes interesting."}
             >
               <div className="grid gap-4 xl:grid-cols-2">
                 <ComparisonTable title="New entrants" items={comparison.newEntrants} emptyLabel="No new venues entered this run." />

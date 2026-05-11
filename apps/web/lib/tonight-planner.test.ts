@@ -231,7 +231,7 @@ test("buildTonightPlannerPanelState returns the empty planner copy when no viabl
   const planner: TonightPlannerResponse = {
     status: "empty",
     title: "Tonight planner",
-    summary: "Pulse needs more tonight options before it can sketch a route.",
+    summary: "Komme needs more tonight options before it can sketch a route.",
     planningNote: "Refresh after new events land.",
     executionStatus: "idle",
     executionNote: null,
@@ -249,7 +249,7 @@ test("buildTonightPlannerPanelState returns the empty planner copy when no viabl
 
   assert.equal(state.mode, "empty");
   assert.equal(state.headline, "Build a night from the shortlist");
-  assert.equal(state.summary, "Pulse needs more tonight options before it can sketch a route.");
+  assert.equal(state.summary, "Komme needs more tonight options before it can sketch a route.");
 });
 
 test("plannerSupportLabel surfaces swap counts before the confidence note", () => {
@@ -316,7 +316,7 @@ test("planner action labels reflect active planner execution state", () => {
 test("plannerOutcomePrompt guides pending and completed planner outcomes", () => {
   assert.equal(
     plannerOutcomePrompt("Elsewhere", "pending", null),
-    "Let Pulse know whether Elsewhere actually made tonight's plan.",
+    "Let Komme know whether Elsewhere actually made tonight's plan.",
   );
   assert.equal(
     plannerOutcomePrompt("Elsewhere", "attended", "Elsewhere is confirmed as part of tonight's plan."),

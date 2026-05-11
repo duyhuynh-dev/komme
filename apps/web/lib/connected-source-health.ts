@@ -54,7 +54,7 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
       influenceLabel,
       detail:
         health.healthReason ??
-        "Pulse suppressed stale Spotify taste so old listening data does not quietly shape recommendations. Retry sync to refresh it.",
+        "Komme suppressed stale Spotify taste so old listening data does not quietly shape recommendations. Retry sync to refresh it.",
       tone: "warning",
       action: "sync",
     };
@@ -78,7 +78,7 @@ export function connectedSourceSetupState(health?: ConnectedSourceHealth | null)
       influenceLabel,
       detail:
         health.healthReason ??
-        "Spotify is connected, but Pulse has not synced listening taste into recommendations yet.",
+        "Spotify is connected, but Komme has not synced listening taste into recommendations yet.",
       tone: "neutral",
       action: "sync",
     };

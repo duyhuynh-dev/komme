@@ -26,7 +26,7 @@ import { useAuth } from "@/components/auth-provider";
 function statusCopy(isSignedIn: boolean) {
   if (isSignedIn) {
     return {
-      eyebrow: "Pulse account",
+      eyebrow: "Komme account",
       detail: "Taste controls shape your map.",
     };
   }
@@ -261,7 +261,7 @@ export function AccountDock() {
               </div>
             ) : (
               <p className="text-sm leading-6 text-slate-600">
-                Pulse auth is not configured in this environment yet.
+                Komme auth is not configured in this environment yet.
               </p>
             )}
           </div>
@@ -322,7 +322,7 @@ export function AccountDock() {
                 </div>
                 {spotifyConnected && !isSignedIn ? (
                   <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-                    Allow cookies for Pulse, then reconnect Spotify.
+                    Allow cookies for Komme, then reconnect Spotify.
                   </div>
                 ) : null}
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs font-medium text-slate-600">

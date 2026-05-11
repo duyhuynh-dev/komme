@@ -119,7 +119,7 @@ export function DigestSettingsCard({ compact = false }: { compact?: boolean }) {
             <span className="block text-sm font-medium text-slate-800">Email weekly shortlist</span>
             {!compact ? (
               <span className="mt-1 block text-xs leading-5 text-slate-500">
-                Pulse checks the schedule every 15 minutes, then sends the latest completed recommendation run when your window opens.
+                Komme checks the schedule every 15 minutes, then sends the latest completed recommendation run when your window opens.
               </span>
             ) : null}
           </span>

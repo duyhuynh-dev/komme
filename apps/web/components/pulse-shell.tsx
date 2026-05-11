@@ -112,7 +112,7 @@ export function PulseShell() {
     onMutate: ({ labels }) => {
       setSurfaceStatus(
         labels.length
-          ? `Concierge is steering Pulse toward ${labels.slice(0, 3).join(", ")}...`
+          ? `Concierge is steering Komme toward ${labels.slice(0, 3).join(", ")}...`
           : "Concierge is updating the map around your requested night...",
       );
     },
@@ -127,7 +127,7 @@ export function PulseShell() {
       setSurfaceStatus(
         labels.length
           ? `Planned around ${labels.slice(0, 3).join(", ")}. The map and planner just rebuilt.`
-          : "Pulse rebuilt the map and planner around your request.",
+          : "Komme rebuilt the map and planner around your request.",
       );
     },
     onError: (error) => {
@@ -158,8 +158,8 @@ export function PulseShell() {
       setPendingFeedback(null);
       setSurfaceStatus(
         variables.action === "save"
-          ? "Saved. Pulse will use that feedback to sharpen future venue picks."
-          : "Hidden. Pulse will treat that signal as a stronger negative next run."
+          ? "Saved. Komme will use that feedback to sharpen future venue picks."
+          : "Hidden. Komme will treat that signal as a stronger negative next run."
       );
       void queryClient.invalidateQueries({ queryKey: ["map-recommendations"] });
       void queryClient.invalidateQueries({ queryKey: ["archive"] });
@@ -252,7 +252,7 @@ export function PulseShell() {
         queryClient.invalidateQueries({ queryKey: ["map-recommendations"] }),
         queryClient.invalidateQueries({ queryKey: ["archive"] }),
       ]);
-      setSurfaceStatus("Shortlist refreshed. Pulse just re-ranked the map around your current profile.");
+      setSurfaceStatus("Shortlist refreshed. Komme just re-ranked the map around your current profile.");
     },
     onError: (error) => {
       setSurfaceStatus(error instanceof Error ? error.message : "Unable to re-rank the shortlist right now.");
@@ -423,7 +423,7 @@ export function PulseShell() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-600">
-                <span className="text-lg font-semibold text-slate-900">Pulse</span>
+                <span className="text-lg font-semibold text-slate-900">Komme</span>
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
                 <span>{locationSummary}</span>
                 {radiusSummary ? (
@@ -561,7 +561,7 @@ export function PulseShell() {
                   action: "planner_swap",
                   eventPlanSessionId: eventPlan?.sessionId,
                   metadata: { venueId: option.venueId, venueName: option.venueName, sourceKind: option.sourceKind },
-                  successMessage: `Pulse rerouted tonight toward ${option.venueName}.`,
+                  successMessage: `Komme rerouted tonight toward ${option.venueName}.`,
                 });
               }}
               onMarkOutcome={(action) => {

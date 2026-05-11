@@ -64,17 +64,17 @@ export function PulseConciergePanel({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-white/75 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-900">
               <Sparkles className="h-3 w-3" />
-              Pulse Concierge
+              Komme Concierge
             </span>
             <span className="rounded-full border border-stroke/70 bg-white/65 px-2.5 py-1 text-[11px] font-medium text-slate-600">
               Steers map + planner
             </span>
           </div>
           <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-slate-950 md:text-2xl">
-            Tell Pulse the night you want.
+            Tell Komme the night you want.
           </h2>
           <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-600">
-            Type a vibe. Pulse re-ranks the map and planner.
+            Type a vibe. Komme re-ranks the map and planner.
           </p>
 
           <div className="mt-3 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_auto]">

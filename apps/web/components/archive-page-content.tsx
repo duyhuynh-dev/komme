@@ -110,7 +110,7 @@ function snapshotSubtitle(snapshot: ArchiveSnapshot, timezone: string) {
   if (generated) {
     return `Generated on ${generated}.`;
   }
-  return "Saved from an earlier Pulse run.";
+  return "Saved from an earlier Komme run.";
 }
 
 export function ArchivePageContent() {

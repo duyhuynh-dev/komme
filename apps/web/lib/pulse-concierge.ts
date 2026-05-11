@@ -81,7 +81,7 @@ export function parseConciergeIntent(
     return {
       selectedThemeIds,
       matchedLabels,
-      summary: `Pulse will steer this run toward ${matchedLabels.slice(0, 3).join(", ")}.`,
+      summary: `Komme will steer this run toward ${matchedLabels.slice(0, 3).join(", ")}.`,
       confidence: normalizedText ? "clear" : "guided",
     };
   }
@@ -89,7 +89,7 @@ export function parseConciergeIntent(
   return {
     selectedThemeIds: [],
     matchedLabels: [],
-    summary: "Tell Pulse the vibe first, or pick one of the quick intents.",
+    summary: "Tell Komme the vibe first, or pick one of the quick intents.",
     confidence: "fallback",
   };
 }
