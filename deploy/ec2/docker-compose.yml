@@ -7,7 +7,9 @@ services:
       - "443:443"
     environment:
       API_DOMAIN: ${API_DOMAIN}
+      API_DOMAIN_ALIASES: ${API_DOMAIN_ALIASES:-}
       WORKER_DOMAIN: ${WORKER_DOMAIN}
+      WORKER_DOMAIN_ALIASES: ${WORKER_DOMAIN_ALIASES:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

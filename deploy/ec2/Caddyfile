@@ -1,9 +1,9 @@
-{$API_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy api:8000
+{$API_DOMAIN} {$API_DOMAIN_ALIASES:} {
+	encode zstd gzip
+	reverse_proxy api:8000
 }
 
-{$WORKER_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy worker:8001
+{$WORKER_DOMAIN} {$WORKER_DOMAIN_ALIASES:} {
+	encode zstd gzip
+	reverse_proxy worker:8001
 }

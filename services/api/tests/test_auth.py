@@ -65,8 +65,8 @@ def test_pulse_session_round_trip_returns_user_id() -> None:
 def test_pulse_session_cookie_uses_none_for_cross_origin_https() -> None:
     response = Response()
     settings = Settings(
-        web_app_url="https://pulse-app.duckdns.org",
-        api_base_url="https://pulse-api.duckdns.org",
+        web_app_url="https://komme.xyz",
+        api_base_url="https://api.komme.xyz",
         oauth_state_secret=TEST_SECRET,
     )
 

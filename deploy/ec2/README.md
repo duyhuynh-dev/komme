@@ -1,6 +1,6 @@
-# Pulse EC2 Deployment
+# Komme EC2 Deployment
 
-This deploy target runs the backend Pulse stack on a single EC2 instance with Docker Compose:
+This deploy target runs the backend Komme stack on a single EC2 instance with Docker Compose:
 
 - `api` on `https://$API_DOMAIN`
 - `worker` on `https://$WORKER_DOMAIN`
@@ -23,7 +23,9 @@ Use an Ubuntu 24.04 or similar Linux host with:
 - ports `80` and `443` open in the security group
 - your DNS records pointing to the instance:
   - `$API_DOMAIN`
+  - optional `$API_DOMAIN_ALIASES`
   - `$WORKER_DOMAIN`
+  - optional `$WORKER_DOMAIN_ALIASES`
 
 ## 2. Create the EC2 env file
 
@@ -60,12 +62,18 @@ Spotify OAuth redirect in production should be:
 https://$API_DOMAIN/v1/spotify/connect/callback
 ```
 
-Your frontend origin in production should be the Vercel custom domain, for example:
+For Komme production, use:
 
 ```text
-WEB_APP_URL=https://pulse-app.duckdns.org
-WEB_ALLOWED_ORIGINS=https://pulse-app.duckdns.org
+API_DOMAIN=api.komme.xyz
+API_DOMAIN_ALIASES=pulse-api.duckdns.org
+WORKER_DOMAIN=worker.komme.xyz
+WORKER_DOMAIN_ALIASES=pulse-worker.duckdns.org
+WEB_APP_URL=https://komme.xyz
+WEB_ALLOWED_ORIGINS=https://komme.xyz,https://www.komme.xyz,https://pulse-app.duckdns.org
 ```
+
+Keep the DuckDNS aliases only during migration. Once OAuth, Vercel, Inngest, and smoke tests are stable on `komme.xyz`, you can remove the alias values.
 
 ## 3. Build and boot the stack
 
@@ -124,7 +132,7 @@ Create a Vercel project from this repo using:
 Recommended production custom domain:
 
 ```text
-https://pulse-app.duckdns.org
+https://komme.xyz
 ```
 
 Recommended Vercel environment variables:
@@ -135,11 +143,31 @@ NEXT_PUBLIC_SUPABASE_URL=<your supabase url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<your supabase anon key>
 ```
 
-In DuckDNS:
+In DNS:
 
-- point `pulse-app.duckdns.org` at `76.76.21.21` for Vercel
-- point `pulse-api.duckdns.org` at your EC2 public or elastic IP
-- point `pulse-worker.duckdns.org` at your EC2 public or elastic IP
+- point `komme.xyz` at Vercel using the records Vercel provides
+- point `www.komme.xyz` at Vercel using the records Vercel provides
+- point `api.komme.xyz` at your EC2 elastic/public IP
+- point `worker.komme.xyz` at your EC2 elastic/public IP
+- optionally keep `pulse-api.duckdns.org` and `pulse-worker.duckdns.org` pointed at EC2 during migration
+
+In Vercel, set:
+
+```text
+NEXT_PUBLIC_API_URL=https://api.komme.xyz
+```
+
+In Spotify developer settings, add the exact redirect URI:
+
+```text
+https://api.komme.xyz/v1/spotify/connect/callback
+```
+
+In Inngest Cloud, use:
+
+```text
+https://worker.komme.xyz/api/inngest
+```
 
 ## 7. Smoke tests
 

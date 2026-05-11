@@ -11,10 +11,10 @@ REPO_ROOT = CONFIG_PATH.parents[4] if len(CONFIG_PATH.parents) > 4 else SERVICE_
 
 
 class Settings(BaseSettings):
-    app_name: str = "Pulse API"
+    app_name: str = "Komme API"
     env: Literal["development", "staging", "production"] = "development"
     database_url: str = "sqlite+aiosqlite:///./pulse.db"
-    default_user_email: str = "beta@pulse.local"
+    default_user_email: str = "beta@komme.local"
     api_base_url: str = "http://localhost:8000"
     worker_base_url: str = "http://localhost:8001"
     web_app_url: str = "http://localhost:3000"
@@ -25,12 +25,12 @@ class Settings(BaseSettings):
     oauth_state_secret: str = ""
     internal_ingest_secret: str = ""
     resend_api_key: str = ""
-    digest_from_email: str = "Pulse <onboarding@resend.dev>"
+    digest_from_email: str = "Komme <onboarding@resend.dev>"
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
     reddit_redirect_uri: str = "http://localhost:8000/v1/reddit/connect/callback"
-    reddit_public_user_agent: str = "Pulse/0.1 (by /u/duyhuynh-dev)"
+    reddit_public_user_agent: str = "Komme/0.1 (by /u/duyhuynh-dev)"
     reddit_public_cache_dir: str = str(SERVICE_ROOT / ".cache" / "reddit-public")
     reddit_public_cache_ttl_hours: int = 24
     reddit_public_timeout_seconds: float = 15.0
