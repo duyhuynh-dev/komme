@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, CalendarCheck, Map, Route, ShieldCheck, Sparkles, Ticket } from "lucide-react";
+import { ArrowRight, Eye, Map, RefreshCw, Route, ShieldCheck, Sparkles, Ticket } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Pulse | Plan better nights in NYC",
@@ -19,16 +19,19 @@ const features = [
     icon: Ticket,
     title: "Real events first",
     body: "Pulse pulls from ticketing and venue sources, then keeps provenance visible so the shortlist feels trustworthy.",
+    label: "Supply",
   },
   {
     icon: Map,
     title: "A map that adapts",
     body: "Your location, budget, feedback, and taste signals shape what rises instead of handing you a generic list.",
+    label: "Personalization",
   },
   {
     icon: Route,
     title: "A plan, not a pile",
     body: "The planner sequences a workable night from the shortlist with timing, neighborhood fit, and backups.",
+    label: "Planner",
   },
 ];
 
@@ -39,6 +42,24 @@ const steps = [
 ];
 
 const planTitles = ["Brooklyn after dark", "Jazz then drinks", "Cheap dance night", "Date night in LES"];
+
+const trustSignals = [
+  {
+    icon: Eye,
+    title: "Sources stay visible",
+    body: "Cards keep ticket/source links and trust context close to the decision.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Feedback changes the map",
+    body: "Saves, hides, visits, and planner outcomes feed future recommendations.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Taste is controllable",
+    body: "Spotify and manual signals can shape ranking without hiding why.",
+  },
+];
 
 export default function LandingPage() {
   return (
@@ -146,18 +167,28 @@ export default function LandingPage() {
 
       <section id="product" className="px-5 py-12 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-7xl">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Product</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-4xl">
-              Built for the moment when you actually decide where to go.
-            </h2>
+          <div className="grid gap-5 md:grid-cols-[0.9fr_1.1fr] md:items-end">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Product</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-4xl">
+                Built for the moment when you actually decide where to go.
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm leading-6 text-slate-600 md:justify-self-end">
+              Pulse keeps the experience focused: one map, one shortlist, one route, and enough context to trust the pick.
+            </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
                 <article key={feature.title} className="landing-hover-card rounded-[1.6rem] border border-stroke/80 bg-white/72 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
-                  <Icon className="h-5 w-5 text-accent" />
+                  <div className="flex items-center justify-between gap-3">
+                    <Icon className="h-5 w-5 text-accent" />
+                    <span className="rounded-full border border-stroke/80 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {feature.label}
+                    </span>
+                  </div>
                   <h3 className="mt-5 text-xl font-semibold tracking-[-0.035em] text-slate-950">{feature.title}</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{feature.body}</p>
                 </article>
@@ -172,6 +203,9 @@ export default function LandingPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-200">How it works</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Three moves. One usable plan.</h2>
+            <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4 text-xs font-medium uppercase tracking-[0.18em] text-slate-300">
+              Vibe / Map / Route
+            </div>
           </div>
           <div className="grid gap-3">
             {steps.map((step, index) => (
@@ -187,26 +221,58 @@ export default function LandingPage() {
       </section>
 
       <section id="trust" className="px-5 py-12 sm:px-8 lg:px-10">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 rounded-[2rem] border border-stroke/80 bg-white/70 p-6 md:flex-row md:items-center md:justify-between md:p-8">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              <CalendarCheck className="h-4 w-4 text-accent" />
-              Deployment ready
+        <div className="mx-auto max-w-7xl rounded-[2rem] border border-stroke/80 bg-white/70 p-6 shadow-[0_18px_52px_rgba(15,23,42,0.08)] md:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                <ShieldCheck className="h-4 w-4 text-accent" />
+                Trust layer
+              </div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-slate-950">Useful recommendations need receipts.</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Pulse is designed to show where events came from, why they ranked, and how your actions change the next run.
+              </p>
             </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-slate-950">Launch with the app you already tested.</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              The landing page is separate from the live map, so OAuth and the existing app route stay stable while you test the new entry point.
-            </p>
+            <Link
+              href="/"
+              className="landing-button inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+            >
+              Enter Pulse
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-          <Link
-            href="/"
-            className="landing-button inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
-          >
-            Enter Pulse
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="mt-7 grid gap-3 md:grid-cols-3">
+            {trustSignals.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="landing-hover-card rounded-[1.35rem] border border-stroke/80 bg-[#fbf8f1] p-4">
+                  <Icon className="h-4 w-4 text-accent" />
+                  <h3 className="mt-4 text-sm font-semibold text-slate-950">{item.title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">{item.body}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
+
+      <footer className="px-5 pb-8 pt-6 sm:px-8 lg:px-10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 border-t border-stroke/80 pt-6 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Link href="/landing" className="font-semibold text-slate-900">
+              Pulse
+            </Link>
+            <p className="mt-1 text-xs leading-5">NYC event discovery, personalization, and night planning.</p>
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs font-medium">
+            <Link href="/" className="transition hover:text-slate-900">
+              Open app
+            </Link>
+            <span>Privacy: connected signals stay user-controlled.</span>
+            <span>Copyright © 2026 Duy Huynh.</span>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
