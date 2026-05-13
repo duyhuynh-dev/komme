@@ -30,6 +30,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       DEFAULT_USER_EMAIL: ${DEFAULT_USER_EMAIL}
       API_BASE_URL: https://${API_DOMAIN}
+      API_ALLOWED_HOSTS: ${API_DOMAIN},${API_DOMAIN_ALIASES:-},127.0.0.1,localhost,api
       WORKER_BASE_URL: http://worker:8001
       WEB_APP_URL: ${WEB_APP_URL}
       WEB_ALLOWED_ORIGINS: ${WEB_ALLOWED_ORIGINS}
@@ -66,6 +67,7 @@ services:
     environment:
       ENV: production
       API_BASE_URL: http://api:8000
+      WORKER_ALLOWED_HOSTS: ${WORKER_DOMAIN},${WORKER_DOMAIN_ALIASES:-},127.0.0.1,localhost,worker
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL}
       INNGEST_APP_ID: ${INNGEST_APP_ID}

@@ -4,14 +4,43 @@ from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 import inngest.fast_api
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.jobs.workflows import daily_supply_ingestion, inngest_client, reddit_profile_sync, weekly_recommendations
 from app.core.config import get_settings
 from app.services.digest_sync import trigger_scheduled_digest_delivery
 from app.services.supply_sync import run_daily_supply_sync
 
-app = FastAPI(title="Pulse Worker", version="0.1.0")
+settings = get_settings()
+openapi_url = None if settings.env == "production" else "/openapi.json"
+docs_url = None if settings.env == "production" else "/docs"
+redoc_url = None if settings.env == "production" else "/redoc"
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
+)
 logger = logging.getLogger("pulse-worker")
+
+if settings.env == "production":
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
+
+
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+    if settings.env == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=add_security_headers)
 
 if os.getenv("INNGEST_SIGNING_KEY"):
     inngest.fast_api.serve(

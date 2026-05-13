@@ -1,9 +1,28 @@
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+}
+
 {$API_DOMAIN} {$API_DOMAIN_ALIASES:} {
+	import security_headers
+	request_body {
+		max_size 10MB
+	}
 	encode zstd gzip
 	reverse_proxy api:8000
 }
 
 {$WORKER_DOMAIN} {$WORKER_DOMAIN_ALIASES:} {
+	import security_headers
+	request_body {
+		max_size 10MB
+	}
 	encode zstd gzip
 	reverse_proxy worker:8001
 }

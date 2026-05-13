@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./pulse.db"
     default_user_email: str = "beta@komme.local"
     api_base_url: str = "http://localhost:8000"
+    api_allowed_hosts: str = ""
     worker_base_url: str = "http://localhost:8001"
     web_app_url: str = "http://localhost:3000"
     web_allowed_origins: str = ""
@@ -73,6 +74,20 @@ class Settings(BaseSettings):
                 origins.add(_replace_hostname(parsed, host))
 
         return sorted(origins)
+
+    @property
+    def trusted_hosts(self) -> list[str]:
+        hosts = {"127.0.0.1", "localhost", "testserver"}
+
+        for url in (self.api_base_url, self.worker_base_url):
+            parsed = urlsplit(url)
+            if parsed.hostname:
+                hosts.add(parsed.hostname)
+
+        if self.api_allowed_hosts:
+            hosts.update(host.strip() for host in self.api_allowed_hosts.split(",") if host.strip())
+
+        return sorted(hosts)
 
 
 def _normalize_origin(origin: str) -> str:

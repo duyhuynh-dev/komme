@@ -25,3 +25,21 @@ def test_allowed_web_origins_include_komme_domain_aliases() -> None:
         "https://pulse-app.duckdns.org",
         "https://www.komme.xyz",
     ]
+
+
+def test_trusted_hosts_include_api_aliases_and_internal_health_hosts() -> None:
+    settings = Settings(
+        api_base_url="https://api.komme.xyz",
+        worker_base_url="http://worker:8001",
+        api_allowed_hosts="pulse-api.duckdns.org,api",
+    )
+
+    assert settings.trusted_hosts == [
+        "127.0.0.1",
+        "api",
+        "api.komme.xyz",
+        "localhost",
+        "pulse-api.duckdns.org",
+        "testserver",
+        "worker",
+    ]

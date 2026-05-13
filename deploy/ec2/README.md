@@ -94,6 +94,23 @@ docker compose --env-file deploy/ec2/.env.ec2 -f deploy/ec2/docker-compose.yml l
 
 The compose stack now includes healthchecks for `web`, `api`, and `worker`, and waits for them before Caddy proxies traffic.
 
+## Security hardening
+
+The EC2 stack terminates TLS with Caddy and applies baseline production hardening:
+
+- automatic HTTP to HTTPS redirects
+- Let's Encrypt certificate management
+- HSTS on API and worker domains
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- strict referrer policy
+- restrictive browser permissions policy
+- 10 MB public request body cap at Caddy
+- production FastAPI docs/OpenAPI disabled
+- trusted host checks for API and worker domains plus local health checks
+
+Keep `API_DOMAIN_ALIASES` and `WORKER_DOMAIN_ALIASES` only while migration/fallback domains are still needed. Removing old aliases later reduces public surface area.
+
 ## 4. Health checks
 
 After boot, verify:
